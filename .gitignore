@@ -12,3 +12,5 @@ coverage/
 
 # Runtime media store for the local-disk stub (see apps/api/src/modules/media.ts).
 apps/api/.data/
+
+.audit/

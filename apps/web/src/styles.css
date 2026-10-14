@@ -47,11 +47,14 @@ body {
   overflow-x: hidden;
 }
 
-/* ---- Atmospheric backdrop: drifting colour field + grain ---- */
+/* ---- Atmospheric backdrop: drifting colour field + grain ----
+   These are decorative layers. They are positioned, so they must sit at a
+   NEGATIVE z-index: main content is static and paints before positioned
+   siblings, so a non-negative z-index here would cover every screen. */
 .atmosphere {
   position: fixed;
   inset: 0;
-  z-index: 0;
+  z-index: -2;
   pointer-events: none;
   overflow: hidden;
   background: var(--void);
@@ -108,7 +111,7 @@ body {
 .grain {
   position: fixed;
   inset: 0;
-  z-index: 1;
+  z-index: -1;
   pointer-events: none;
   opacity: var(--grain-opacity);
   mix-blend-mode: overlay;
