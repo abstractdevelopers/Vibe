@@ -35,13 +35,15 @@ export function HomeScreen({ me, refreshKey, onChanged, onCreate }: Props) {
     setItems(null);
     setError(null);
     try {
-      const result = await api<{ items: FeedItem[]; nextCursor: string | null }>("/v1/feed?limit=20");
+      const result = await api<{ items: FeedItem[]; nextCursor: string | null }>(
+        `/v1/feed?limit=20${tab === "following" ? "&tab=following" : ""}`,
+      );
       setItems(result.items);
       setCursor(result.nextCursor);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Could not load the feed");
     }
-  }, []);
+  }, [tab]);
 
   useEffect(() => {
     void load();
@@ -50,7 +52,7 @@ export function HomeScreen({ me, refreshKey, onChanged, onCreate }: Props) {
   async function loadMore() {
     if (!cursor) return;
     const result = await api<{ items: FeedItem[]; nextCursor: string | null }>(
-      `/v1/feed?limit=20&cursor=${encodeURIComponent(cursor)}`,
+      `/v1/feed?limit=20${tab === "following" ? "&tab=following" : ""}&cursor=${encodeURIComponent(cursor)}`,
     );
     setItems((prev) => [...(prev ?? []), ...result.items]);
     setCursor(result.nextCursor);

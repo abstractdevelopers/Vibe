@@ -48,22 +48,7 @@ interface PostRow {
 }
 
 /** Audience + block + mute filtering. This is the only place feed visibility is decided. */
-async function visiblePosts(
-  db: Db,
-  viewerId: string,
-  opts: { limit: number; cursor?: { createdAt: string; id: string } | null; authorId?: string },
-): Promise<PostRow[]> {
-  return queryMany<PostRow>(
-    db,
-    `SELECT p.id, p.author_id, p.circle_id, p.type, p.audience, p.body, p.status,
-            p.is_sponsored, p.created_at, p.metadata,
-            u.handle, u.display_name, u.avatar_url,
-            (SELECT count(*) FROM reactions r WHERE r.post_id = p.id) AS reaction_count,
-            (SELECT count(*) FROM comments c WHERE c.post_id = p.id AND c.deleted_at IS NULL) AS comment_count,
-            EXISTS(SELECT 1 FROM reactions r WHERE r.post_id = p.id AND r.user_id = $1) AS viewer_reacted
-       FROM posts p JOIN users u ON u.id = p.author_id
-      WHERE p.status = 'published'
-        AND ($4::uuid IS NULL OR p.author_id = $4)
+const VISIBILITY = `
         AND NOT EXISTS (
           SELECT 1 FROM blocks b
            WHERE (b.blocker_id = p.author_id AND b.blocked_id = $1)
@@ -78,12 +63,154 @@ async function visiblePosts(
                  WHERE f.follower_id = $1 AND f.followee_id = p.author_id AND f.state = 'accepted'))
           OR (p.audience = 'circle' AND p.circle_id IN (
                 SELECT circle_id FROM circle_members WHERE user_id = $1))
-        )
+        )`;
+
+/** Newest-first feed: the Following tab and profile post lists. */
+async function recentPosts(
+  db: Db,
+  viewerId: string,
+  opts: {
+    limit: number;
+    cursor?: { createdAt: string; id: string } | null;
+    authorId?: string;
+    followingOnly?: boolean;
+  },
+): Promise<PostRow[]> {
+  return queryMany<PostRow>(
+    db,
+    `SELECT p.id, p.author_id, p.circle_id, p.type, p.audience, p.body, p.status,
+            p.is_sponsored, p.created_at, p.metadata,
+            u.handle, u.display_name, u.avatar_url,
+            (SELECT count(*) FROM reactions r WHERE r.post_id = p.id) AS reaction_count,
+            (SELECT count(*) FROM comments c WHERE c.post_id = p.id AND c.deleted_at IS NULL) AS comment_count,
+            EXISTS(SELECT 1 FROM reactions r WHERE r.post_id = p.id AND r.user_id = $1) AS viewer_reacted
+       FROM posts p JOIN users u ON u.id = p.author_id
+      WHERE p.status = 'published'
+        AND ($4::uuid IS NULL OR p.author_id = $4)
+        ${VISIBILITY}
+        AND ($6::boolean IS NOT TRUE OR (
+              p.author_id = $1
+              OR EXISTS (SELECT 1 FROM follows f
+                          WHERE f.follower_id = $1 AND f.followee_id = p.author_id AND f.state = 'accepted')
+              OR (p.circle_id IS NOT NULL AND EXISTS (
+                    SELECT 1 FROM circle_members cm WHERE cm.user_id = $1 AND cm.circle_id = p.circle_id))
+            ))
         AND ($2::timestamptz IS NULL OR (p.created_at, p.id) < ($2::timestamptz, $3::uuid))
       ORDER BY p.created_at DESC, p.id DESC
       LIMIT $5`,
-    [viewerId, opts.cursor?.createdAt ?? null, opts.cursor?.id ?? null, opts.authorId ?? null, opts.limit],
+    [
+      viewerId,
+      opts.cursor?.createdAt ?? null,
+      opts.cursor?.id ?? null,
+      opts.authorId ?? null,
+      opts.limit,
+      opts.followingOnly ?? false,
+    ],
   );
+}
+
+/**
+ * The For You ranking, expressed in SQL so it stays consistent with the cursor.
+ *
+ * The spec's baseline is recency + relationship + topic affinity + meaningful
+ * engagement + content quality/safety, and it forbids optimising for outrage or
+ * time-on-app. Every component is a plain additive term with a stated weight;
+ * there is no hidden boost and no paid override of relevance. A post with open
+ * abuse reports is demoted below clean content.
+ *
+ * Freshness is measured from `asOf`, a timestamp frozen by the first page and
+ * carried in the cursor. Using now() would make every page's scores drift
+ * between requests and break keyset pagination (the same post could appear on
+ * two pages). Freezing the clock keeps the ranking stable across a session.
+ */
+async function rankedPosts(
+  db: Db,
+  viewerId: string,
+  opts: { limit: number; asOf: Date; cursor?: { score: number; createdAt: string; id: string } | null },
+): Promise<Array<PostRow & { rank: number }>> {
+  return queryMany<PostRow & { rank: number }>(
+    db,
+    `WITH viewer AS (
+       SELECT interests FROM users WHERE id = $1
+     ),
+     scored AS (
+       SELECT p.id, p.author_id, p.circle_id, p.type, p.audience, p.body, p.status,
+              p.is_sponsored, p.created_at, p.metadata,
+              u.handle, u.display_name, u.avatar_url,
+              (SELECT count(*) FROM reactions r WHERE r.post_id = p.id) AS reaction_count,
+              (SELECT count(*) FROM comments c WHERE c.post_id = p.id AND c.deleted_at IS NULL) AS comment_count,
+              EXISTS(SELECT 1 FROM reactions r WHERE r.post_id = p.id AND r.user_id = $1) AS viewer_reacted,
+              (
+                -- Relationship: people you follow, and posts in your Circles.
+                (CASE WHEN EXISTS (SELECT 1 FROM follows f
+                                    WHERE f.follower_id = $1 AND f.followee_id = p.author_id AND f.state = 'accepted')
+                      THEN 30 ELSE 0 END)
+              + (CASE WHEN p.circle_id IS NOT NULL AND EXISTS (
+                          SELECT 1 FROM circle_members cm WHERE cm.user_id = $1 AND cm.circle_id = p.circle_id)
+                      THEN 12 ELSE 0 END)
+                -- Topic affinity: shared interests with the author, or a post that
+                -- mentions something the viewer cares about.
+              + (CASE WHEN EXISTS (SELECT 1 FROM viewer v
+                                    WHERE u.interests && v.interests
+                                      AND array_length(u.interests, 1) > 0)
+                      THEN 18 ELSE 0 END)
+              + (CASE WHEN EXISTS (SELECT 1 FROM viewer v, unnest(v.interests) AS i
+                                    WHERE position(lower(i) in lower(coalesce(p.body, ''))) > 0)
+                      THEN 8 ELSE 0 END)
+                -- Meaningful engagement, with diminishing returns so one viral
+                -- post cannot dominate the page.
+              + 14 * (ln(1 + (SELECT count(*) FROM reactions r WHERE r.post_id = p.id)
+                          + 2 * (SELECT count(*) FROM comments c WHERE c.post_id = p.id AND c.deleted_at IS NULL))
+                      / ln(1 + 20))
+                -- Freshness, halving every five days, from the frozen clock.
+              + 16 * power(0.5, GREATEST(0, EXTRACT(EPOCH FROM ($6::timestamptz - p.created_at)) / 86400) / 5)
+                -- Quality/safety: demote a post with open reports. Safety beats
+                -- relevance, so this term can pull a post below the fold.
+              - (CASE WHEN (SELECT count(*) FROM reports rp
+                             WHERE rp.target_type = 'post' AND rp.target_id = p.id
+                               AND rp.status IN ('open', 'triaged')) >= 3
+                      THEN 40 ELSE 0 END)
+              - (CASE WHEN (SELECT count(*) FROM reports rp
+                             WHERE rp.target_type = 'post' AND rp.target_id = p.id
+                               AND rp.status IN ('open', 'triaged')) >= 1
+                      THEN 10 ELSE 0 END)
+              ) AS rank
+         FROM posts p JOIN users u ON u.id = p.author_id
+        WHERE p.status = 'published'
+          AND p.created_at > $6::timestamptz - interval '30 days'
+          ${VISIBILITY}
+     )
+     SELECT * FROM scored
+      WHERE ($2::double precision IS NULL
+             OR (rank, created_at, id) < ($2::double precision, $3::timestamptz, $4::uuid))
+      ORDER BY rank DESC, created_at DESC, id DESC
+      LIMIT $5`,
+    [
+      viewerId,
+      opts.cursor?.score ?? null,
+      opts.cursor?.createdAt ?? null,
+      opts.cursor?.id ?? null,
+      opts.limit,
+      opts.asOf.toISOString(),
+    ],
+  );
+}
+
+/**
+ * Diversify a ranked page: at most two posts per author in a row, and no more
+ * than three per author per page, so one prolific account cannot fill the feed.
+ * Order is otherwise preserved.
+ */
+function diversify<T extends { author_id: string }>(items: T[], perPage = 3): T[] {
+  const counts = new Map<string, number>();
+  const kept: T[] = [];
+  for (const item of items) {
+    const used = counts.get(item.author_id) ?? 0;
+    if (used >= perPage) continue;
+    counts.set(item.author_id, used + 1);
+    kept.push(item);
+  }
+  return kept;
 }
 
 async function attachActivities(db: Db, posts: PostRow[], viewerId: string) {
@@ -143,18 +270,45 @@ export function feedRoutes(ctx: AppContext) {
   return async function register(app: FastifyInstance): Promise<void> {
     app.get("/v1/feed", async (req) => {
       const user = await requireUser(ctx, req);
-      const query = req.query as { cursor?: string; limit?: string };
+      const query = req.query as { cursor?: string; limit?: string; tab?: string };
       const limit = Math.min(Number(query.limit ?? 20) || 20, 50);
+
+      // "Following" is a strict chronological stream from people you follow and
+      // the Circles you belong to. "For You" is the ranked baseline. They are
+      // genuinely different feeds, not the same query with a different label.
+      if (query.tab === "following") {
+        const rows = await recentPosts(ctx.pool, user.id, { limit: limit + 1, followingOnly: true });
+        const hasMore = rows.length > limit;
+        const page = rows.slice(0, limit);
+        const last = page[page.length - 1];
+        return {
+          items: await attachActivities(ctx.pool, page, user.id),
+          nextCursor: hasMore && last ? encodeCursor(last.created_at, last.id) : null,
+        };
+      }
+
       const cursor = query.cursor ? decodeCursor(query.cursor) : null;
-      // Fetch one extra row to know whether a next page exists.
-      const rows = await visiblePosts(ctx.pool, user.id, { limit: limit + 1, cursor });
-      const hasMore = rows.length > limit;
-      const page = rows.slice(0, limit);
+      // The clock is frozen on the first page and carried in the cursor, so the
+      // score of a given post does not drift between page requests.
+      const asOf = cursor?.asOf ? new Date(cursor.asOf) : new Date();
+      // Fetch extra rows so diversification can drop repeats without shortening
+      // the page, and still know whether a next page exists.
+      const rows = await rankedPosts(ctx.pool, user.id, {
+        limit: limit + 6,
+        asOf,
+        cursor:
+          cursor && cursor.score !== undefined
+            ? { score: cursor.score, createdAt: cursor.createdAt, id: cursor.id }
+            : null,
+      });
+      const kept = diversify(rows).slice(0, limit + 1);
+      const hasMore = kept.length > limit;
+      const page = kept.slice(0, limit);
       const items = await attachActivities(ctx.pool, page, user.id);
-      const last = page[page.length - 1];
+      const last = page[page.length - 1] as (PostRow & { rank: number }) | undefined;
       return {
         items,
-        nextCursor: hasMore && last ? encodeCursor(last.created_at, last.id) : null,
+        nextCursor: hasMore && last ? encodeCursor(last.created_at, last.id, last.rank, asOf.toISOString()) : null,
       };
     });
 
@@ -163,7 +317,7 @@ export function feedRoutes(ctx: AppContext) {
       const { id } = req.params as { id: string };
       const query = req.query as { cursor?: string; limit?: string };
       const limit = Math.min(Number(query.limit ?? 20) || 20, 50);
-      const rows = await visiblePosts(ctx.pool, user.id, {
+      const rows = await recentPosts(ctx.pool, user.id, {
         limit: limit + 1,
         cursor: query.cursor ? decodeCursor(query.cursor) : null,
         authorId: id,
@@ -335,14 +489,26 @@ export function feedRoutes(ctx: AppContext) {
   };
 }
 
-export function encodeCursor(createdAt: Date | string, id: string): string {
+export function encodeCursor(createdAt: Date | string, id: string, score?: number, asOf?: string): string {
   const iso = typeof createdAt === "string" ? createdAt : createdAt.toISOString();
-  return Buffer.from(`${iso}|${id}`).toString("base64url");
+  const raw = score === undefined ? `${iso}|${id}` : `${score}|${iso}|${id}|${asOf ?? ""}`;
+  return Buffer.from(raw).toString("base64url");
 }
 
-export function decodeCursor(cursor: string): { createdAt: string; id: string } {
+export function decodeCursor(cursor: string): { createdAt: string; id: string; score?: number; asOf?: string } {
   const decoded = Buffer.from(cursor, "base64url").toString("utf8");
-  const [createdAt, id] = decoded.split("|");
-  if (!createdAt || !id) throw ApiError.badRequest("Malformed cursor");
-  return { createdAt, id };
+  const parts = decoded.split("|");
+  if (parts.length === 2) {
+    const [createdAt, id] = parts;
+    if (!createdAt || !id) throw ApiError.badRequest("Malformed cursor");
+    return { createdAt, id };
+  }
+  if (parts.length === 4) {
+    const [score, createdAt, id, asOf] = parts;
+    if (!score || !createdAt || !id || Number.isNaN(Number(score))) {
+      throw ApiError.badRequest("Malformed cursor");
+    }
+    return { score: Number(score), createdAt, id, asOf: asOf || undefined };
+  }
+  throw ApiError.badRequest("Malformed cursor");
 }
