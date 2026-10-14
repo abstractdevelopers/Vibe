@@ -14,7 +14,9 @@ export type Route =
   | { name: "expense"; expenseId: string }
   | { name: "edit-profile" }
   | { name: "settings" }
-  | { name: "place"; placeId: string };
+  | { name: "place"; placeId: string }
+  | { name: "messages" }
+  | { name: "conversation"; conversationId: string };
 
 export interface Navigation {
   route: Route;

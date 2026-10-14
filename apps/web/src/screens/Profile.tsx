@@ -4,6 +4,7 @@ import type { FeedItem, Me, PublicProfile } from "../types";
 import {
   ArrowLeftIcon,
   AtIcon,
+  ChatIcon,
   CheckIcon,
   HeartIcon,
   ShareIcon,
@@ -75,6 +76,18 @@ export function ProfileScreen({ userId, me, onChanged }: Props) {
     }
   }
 
+  async function message() {
+    setBusy(true);
+    try {
+      const result = await api<{ id: string }>("/v1/conversations", { body: { userId } });
+      nav.push({ name: "conversation", conversationId: result.id });
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Could not start a conversation");
+    } finally {
+      setBusy(false);
+    }
+  }
+
   return (
     <div>
       <button className="btn ghost" onClick={() => nav.back()} style={{ paddingLeft: 0, marginBottom: "var(--space-3)" }}>
@@ -114,9 +127,12 @@ export function ProfileScreen({ userId, me, onChanged }: Props) {
             </div>
 
             {!isSelf && (
-              <div className="row" style={{ gap: "var(--space-2)" }}>
+              <div className="row" style={{ gap: "var(--space-2)", flexWrap: "wrap" }}>
                 <button className="btn primary grow" onClick={() => void follow()} disabled={busy}>
                   <UsersIcon width={18} height={18} /> Follow
+                </button>
+                <button className="btn" onClick={() => void message()} disabled={busy}>
+                  <ChatIcon width={18} height={18} /> Message
                 </button>
                 <button className="btn" onClick={() => void block()} disabled={busy}>
                   <ShieldIcon width={18} height={18} /> Block

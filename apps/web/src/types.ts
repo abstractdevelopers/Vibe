@@ -152,3 +152,45 @@ export interface PublicProfile extends PublicUser {
   profileAudience: string;
   followerCount: number;
 }
+
+export interface ConversationSummary {
+  id: string;
+  kind: "direct" | "group";
+  title: string | null;
+  memberCount: number;
+  unreadCount: number;
+  lastMessageAt: string;
+  lastReadAt: string | null;
+  lastMessage: {
+    body: string | null;
+    mediaUrls: string[];
+    createdAt: string;
+    senderHandle: string | null;
+    senderName: string | null;
+  } | null;
+  participants: PublicUser[];
+}
+
+export interface Message {
+  id: string;
+  clientId: string | null;
+  senderId: string;
+  body: string | null;
+  mediaUrls: string[];
+  deleted: boolean;
+  editedAt: string | null;
+  createdAt: string;
+  author: PublicUser;
+}
+
+export interface ConversationDetail {
+  conversation: {
+    id: string;
+    kind: "direct" | "group";
+    title: string | null;
+    createdBy: string;
+    createdAt: string;
+    lastMessageAt: string;
+  };
+  members: Array<PublicUser & { lastReadAt: string | null }>;
+}

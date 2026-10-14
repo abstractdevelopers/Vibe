@@ -49,7 +49,8 @@ export async function resetDb(pool: pg.Pool): Promise<void> {
              expenses, expense_participants, expense_events, payment_reports,
              provider_webhook_events, idempotency_keys, reports, moderation_cases,
              moderation_actions, audit_events, notifications, sessions, follows,
-             blocks, mutes, comments, reactions, circle_members, circle_invites
+             blocks, mutes, comments, reactions, circle_members, circle_invites,
+             conversations, conversation_members, messages
     RESTART IDENTITY CASCADE
   `);
 }

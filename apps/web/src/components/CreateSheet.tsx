@@ -189,7 +189,7 @@ function PostForm({
         void submit();
       }}
     >
-      {!mediaOnly && (
+      {!mediaOnly ? (
         <>
           <label htmlFor="postBody">Message</label>
           <textarea
@@ -199,6 +199,21 @@ function PostForm({
             autoFocus
             required={media.images.length === 0}
           />
+        </>
+      ) : (
+        <>
+          <label htmlFor="postCaption">Caption</label>
+          <textarea
+            id="postCaption"
+            value={body}
+            onChange={(e) => setBody(e.target.value)}
+            autoFocus
+            placeholder="Say something about this photo…"
+            maxLength={2200}
+          />
+          <p className="meta" style={{ marginTop: "-6px" }}>
+            Optional. A caption shows with your photo in the feed.
+          </p>
         </>
       )}
 

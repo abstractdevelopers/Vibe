@@ -12,8 +12,11 @@ import { ExpenseDetailScreen } from "./screens/ExpenseDetail";
 import { EditProfileScreen } from "./screens/EditProfile";
 import { SettingsScreen } from "./screens/Settings";
 import { PlaceDetailScreen } from "./screens/PlaceDetail";
+import { MessagesScreen } from "./screens/Messages";
+import { ConversationScreen } from "./screens/Conversation";
 import { CreateSheet } from "./components/CreateSheet";
 import {
+  ChatIcon,
   CirclesIcon,
   CompassIcon,
   EditIcon,
@@ -55,7 +58,8 @@ export function App() {
       const result = await api<Me>("/v1/me");
       setMe(result);
       const counts = await api<{ unread: number }>("/v1/notifications/unread-count");
-      setUnread(counts.unread);
+      const msgs = await api<{ unread: number }>("/v1/messaging/unread-count");
+      setUnread(counts.unread + msgs.unread);
     } catch {
       setToken(null);
       setMe(null);
@@ -71,8 +75,11 @@ export function App() {
   // A committed change elsewhere refreshes what this client is looking at.
   useRealtime(() => {
     setRefreshKey((k) => k + 1);
-    void api<{ unread: number }>("/v1/notifications/unread-count")
-      .then((counts) => setUnread(counts.unread))
+    void Promise.all([
+      api<{ unread: number }>("/v1/notifications/unread-count"),
+      api<{ unread: number }>("/v1/messaging/unread-count"),
+    ])
+      .then(([n, m]) => setUnread(n.unread + m.unread))
       .catch(() => undefined);
   });
 
@@ -121,6 +128,9 @@ export function App() {
                 <InboxIcon width={20} height={20} />
                 {unread > 0 && <span className="badge">{unread > 99 ? "99+" : unread}</span>}
               </button>
+              <button className="icon-button" aria-label="Messages" onClick={() => push({ name: "messages" })}>
+                <ChatIcon width={20} height={20} />
+              </button>
               <AccountMenu me={me} onMeChanged={loadMe} onOpenProfile={() => push({ name: "profile", userId: me.id })} />
             </div>
           </header>
@@ -154,6 +164,10 @@ export function App() {
             )}
             {route.name === "settings" && <SettingsScreen me={me} onBack={back} onMeChanged={loadMe} />}
             {route.name === "place" && <PlaceDetailScreen placeId={route.placeId} onBack={back} />}
+            {route.name === "messages" && <MessagesScreen me={me} refreshKey={refreshKey} />}
+            {route.name === "conversation" && (
+              <ConversationScreen conversationId={route.conversationId} me={me} onChanged={bump} />
+            )}
           </main>
 
           <nav className="bottom-nav" aria-label="Primary">

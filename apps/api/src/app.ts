@@ -15,6 +15,7 @@ import { notificationsRoutes } from "./modules/notifications.js";
 import { paymentsRoutes } from "./modules/payments.js";
 import { mediaRoutes } from "./modules/media.js";
 import { discoveryRoutes } from "./modules/discovery.js";
+import { messagingRoutes } from "./modules/messaging.js";
 import { resolveSession } from "./auth.js";
 import { bearerToken } from "./auth.js";
 import { circleIdsFor } from "./modules/access.js";
@@ -58,6 +59,7 @@ export async function buildApp(ctx: AppContext): Promise<FastifyInstance> {
   await app.register(paymentsRoutes(ctx));
   await app.register(mediaRoutes(ctx));
   await app.register(discoveryRoutes(ctx));
+  await app.register(messagingRoutes(ctx));
 
   // Realtime: chat/poll/plan updates for the circles the user belongs to.
   app.get("/v1/realtime", { websocket: true }, async (socket, req) => {

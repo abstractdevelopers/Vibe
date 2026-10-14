@@ -51,6 +51,7 @@ import {
   Timer,
   TrendingUp,
   Trophy,
+  Trash2,
   Upload,
   User,
   Pencil,
@@ -123,4 +124,5 @@ export const EditIcon = icon(Pencil);
 export const TicketIcon = icon(Ticket);
 export const TrendingFlameIcon = icon(Flame);
 export const NearbyIcon = icon(Navigation);
+export const TrashIcon = icon(Trash2);
 
