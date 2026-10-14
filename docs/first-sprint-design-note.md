@@ -42,6 +42,7 @@ responsive React client for shareable pages and merchant/admin tools.
 | POST | `/v1/auth/login` | |
 | POST | `/v1/auth/logout` | revokes the session |
 | GET | `/v1/me` | profile + privacy |
+| PATCH | `/v1/me` | display name, handle, bio, avatar, city/area, interests |
 | PATCH | `/v1/me/privacy` | granular privacy flags |
 
 **Permissions.** Self only. No contacts or location requested at sign-up.
@@ -183,6 +184,56 @@ audit log.
 
 **Test coverage.** `tests/authorization.test.ts` (report, non-admin 403, action
 removes post, audit entry written).
+
+## Module: Media
+
+**Boundary.** `modules/media.ts` accepts an image data URL, decodes it, and
+validates the magic bytes before writing. It rejects anything that is not a real
+image (a `text/html` payload dressed as a data URL fails), so the store can
+never serve a script. Files are served from `GET /v1/media/<id>`.
+
+**Storage.** `DiskMediaStore` writes to a local directory — a stub, so the
+project needs no new dependency and no bucket credentials. Swapping in object
+storage means implementing the same `MediaStore` interface; call sites do not
+change.
+
+**Posts.** `createPostSchema` accepts media as an absolute `http(s)` URL or our
+own `/v1/media/<id>` path, and nothing else. A post therefore cannot smuggle in
+a `javascript:` URL. Media is stored in `posts.metadata.mediaUrls` and returned
+on every feed item.
+
+**API.** `POST /v1/media`, `GET /v1/media/:id`.
+
+**Test coverage.** `tests/discovery-media.test.ts` (store and serve, reject a
+non-image, require auth, media round-trips through the feed, reject an
+executable URL).
+
+## Module: Discovery (Explore)
+
+**Schema.** `places` (migration `0002_discovery.sql`), plus `city`/`area`
+columns on `users` and `plans` and supporting indexes.
+
+**Location rule.** Location is a city and area label a person types — never a
+device fix. There is no `navigator.geolocation` call and no coordinate column
+anywhere in the schema. This keeps the slice inside the spec's location
+constraints while still ranking by place.
+
+**Ranking.** `modules/discovery.ts` scores places and discoverable plans with
+explainable weights: area match, interest affinity, relationship (a followed
+organizer or a joined Circle), recency, and verification. Every result returns
+the `reasons` that produced its score, so the UI never shows a ranked item
+without saying why.
+
+**Sources.** Places are seeded as clearly-labelled sample data (`isSample`),
+not fabricated third-party listings. Discoverable plans surface as events with
+their organizer.
+
+**API.** `GET /v1/explore` (query, city, category, kind, limit), plus
+`GET /v1/places/:id` and the existing `GET /v1/search/users`.
+
+**Test coverage.** `tests/discovery-media.test.ts` (same-area interest match
+outranks an unrelated place, city filter, a discoverable plan surfaces as an
+event, a non-discoverable plan does not).
 
 ## Module: Payments boundary
 

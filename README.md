@@ -55,11 +55,18 @@ truncates tables between tests, so point `DATABASE_URL` at a scratch database.
 ## What works today
 
 - **Identity** — email + password sign-up, scrypt hashing, bearer sessions,
-  granular privacy settings.
+  editable profile (name, handle, bio, interests, city/area) and granular
+  privacy settings.
 - **Circles** — membership with owner/admin/moderator/member roles, expiring
   and usage-capped invites, leave and ownership rules.
-- **Feed** — posts, comments, reactions, cursor pagination, server-side
-  audience authorization, block and mute.
+- **Feed** — a flat editorial stream of posts with text, polls and images,
+  comments, reactions, cursor pagination, server-side audience authorization,
+  block and mute.
+- **Media** — image upload with magic-byte validation, served locally from
+  `/v1/media/<id>` (a stub store; swap in object storage later).
+- **Discovery (Explore)** — explainable ranking over places and discoverable
+  plans by area, interests and relationships, plus people search. Every result
+  says why it ranked.
 - **Polls** — one vote per user enforced in the database, a poll state machine,
   and realtime result updates.
 - **Plans** — RSVP states including waitlisting, with notifications.
@@ -73,6 +80,8 @@ truncates tables between tests, so point `DATABASE_URL` at a scratch database.
 ## Design constraints honoured
 
 - No custody: Vibe holds no funds, no stored-value balance, no P2P transfer.
+- No device location: place discovery uses a city and area label the user types;
+  there is no geolocation call and no coordinate column.
 - Money is integer minor units; no floating-point arithmetic.
 - Reported payments never become verified without a trustworthy confirmation.
 - Private content is authorized on the server, never by client filtering.

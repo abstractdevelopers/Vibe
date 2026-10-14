@@ -31,12 +31,17 @@ spec places this in a later phase or explicitly out of V1.
   backed by `/v1/notifications`).
 - Shared Money as a contextual area from a Circle and the profile — **Built**
   as the expense breakdown; the label is "Shared money", never "Wallet".
-- Home feed sections: For You / Following, Nearby opt-in — **Built** as
-  filters; Nearby is off and does not request location.
-- Feed item types: text, poll — **Built**. Image/video/carousel, debate, quiz,
-  event, product/offer, shared memory — **Deferred** (Phase 4/3).
-- Explore tabs and filters — **Partial**: the screen exists with categories;
-  the backend has no discovery module yet, so it is presentational.
+- Home feed sections: For You / Following — **Built** as filters. Nearby is
+  not surfaced: it would need location permission, which the spec keeps out of
+  this slice, so no control is shown rather than a dead one.
+- Feed item types: text, poll, image — **Built**. Video/carousel, debate, quiz,
+  event, product/offer, shared memory — **Deferred** (Phase 3/4).
+- Explore tabs and filters — **Built** on a real discovery module
+  (`modules/discovery.ts`): explainable ranking over places and discoverable
+  plans, plus people search. Every ranked result carries its `reasons`.
+- Media — **Built** as a local-disk stub (`modules/media.ts`): image upload with
+  magic-byte validation, served from `/v1/media/<id>`, referenced by posts. A
+  CDN/object-storage pipeline is **Deferred**.
 - Circle surface (overview, timeline, members, plans, shared money, settings) —
   **Built** except chat timeline and moderation settings, which are **Deferred**.
 
@@ -52,10 +57,14 @@ spec places this in a later phase or explicitly out of V1.
 - 8-point spacing, 14–20px card radius, 12–16px button radius, 44px targets —
   **Built**.
 - Skeletons, empty states with a next action, retry/offline — **Built** for
-  skeletons and empty states; an explicit offline indicator is **Deferred**.
+  skeletons, a shared `EmptyState`, and inline retry; an explicit offline
+  indicator is **Deferred**.
 - Light and dark themes, remembered — **Built**.
 - Subtle motion 120–220ms honouring reduced motion — **Built**.
 - Icons: a consistent professional set (Lucide), not emoji. **Built**.
+- Feed presentation: a flat editorial stream rather than a stack of uniform
+  cards; cards are reserved for self-contained objects (profiles, Circles,
+  plans, expenses). **Built**.
 
 ## §4 Core mechanics
 
@@ -99,9 +108,10 @@ spec places this in a later phase or explicitly out of V1.
 ## §6 Architecture
 
 Modular monolith with clear module boundaries, PostgreSQL source of truth,
-Redis for ephemeral use, typed Fastify API — **Built**. Search is not yet
-implemented beyond user lookup. Queue, CDN/media pipeline, observability stack
-— **Deferred**.
+Redis for ephemeral use, typed Fastify API — **Built**. Discovery and media are
+new modules with the same boundary discipline. Search is implemented for people
+(`/v1/search/users`) and discovery (`/v1/explore`); full-text post search is
+**Deferred**. Queue, CDN/media pipeline, observability stack — **Deferred**.
 
 ## §7 API contracts
 
@@ -143,9 +153,25 @@ pipeline with retention policy — **Deferred**.
 
 ## §12 Phased delivery
 
-Phase 1 (social MVP) and Phase 2 (utility MVP) are the focus and are largely
-**Built**. Phase 3 (commerce and advertising) is a **Stub** pending provider
-approval. Phases 4 and 5 (IRL, Vibe Pass, AI) are **Deferred**.
+The spec lays out five phases. This is where each stands; nothing beyond Phase 2
+is claimed as built.
+
+- **Phase 1 — social MVP.** Profiles, follow/block/mute, Circles, feed, polls,
+  comments, reactions, realtime. **Built** and covered by tests.
+- **Phase 2 — utility MVP.** Plans and RSVPs, shared expenses with exact splits
+  and an auditable reported-vs-verified ledger, notifications, Explore
+  discovery, media. **Built** and covered by tests.
+- **Phase 3 — commerce and advertising.** The order/checkout state machine and
+  the webhook inbox exist as a signature-verified **Stub**; the feed renders a
+  labelled Sponsored placement with report controls as a **Stub**. No provider
+  calls, no ad delivery or campaign system. Gated on provider approval.
+- **Phase 4 — IRL and events.** Check-in QR, reservations, shared memory
+  capture, video/carousel and event feed items — **Deferred**. The plan screen
+  states plainly that a plan is not a reservation.
+- **Phase 5 — Vibe Pass and AI.** Vibe Pass, IRL perks, and AI assistance that
+  drafts plans — **Deferred**.
+
+The first-sprint vertical slice is Phase 1 + Phase 2, working end to end.
 
 ## §13 Definition of done
 
