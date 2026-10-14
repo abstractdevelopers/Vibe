@@ -8,6 +8,24 @@
   box-sizing: border-box;
 }
 
+/*
+ * Reset the interactive elements that are used as layout wrappers (a whole
+ * Circle row, a feed author name, an inline link) rather than styled buttons.
+ * Without this, any <button> without a .btn class renders with the user agent's
+ * default black text, which is invisible on the dark canvas. Components that
+ * want a filled button still opt in through .btn, which overrides these.
+ */
+button {
+  font: inherit;
+  color: inherit;
+  letter-spacing: inherit;
+  background: none;
+  border: none;
+  padding: 0;
+  margin: 0;
+  text-align: inherit;
+}
+
 html,
 body {
   margin: 0;

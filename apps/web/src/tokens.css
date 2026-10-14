@@ -38,7 +38,7 @@
   --text: #f8f7fc;
   --text-secondary: #c6c8d6;
   --text-muted: #8a8d9f;
-  --text-faint: #5f6274;
+  --text-faint: #82869a;
 
   --border: rgba(255, 255, 255, 0.08);
   --border-strong: rgba(255, 255, 255, 0.14);
@@ -132,8 +132,8 @@
 
   --text: #17181f;
   --text-secondary: #3d3f4d;
-  --text-muted: #6b6d7c;
-  --text-faint: #9a9cab;
+  --text-muted: #666878;
+  --text-faint: #63656f;
 
   --border: rgba(23, 24, 31, 0.1);
   --border-strong: rgba(23, 24, 31, 0.18);
