@@ -84,8 +84,8 @@ export function PlaceDetailScreen({ placeId, onBack }: { placeId: string; onBack
           </div>
 
           <p className="meta" style={{ marginTop: "var(--space-4)" }}>
-            Vibe shows places by city and area only. There is no checkout here — provider-backed
-            purchases are not enabled in this version.
+            Vibe shows places by city and area only. There is no checkout here — purchases happen at
+            a verified shop's storefront, where the payment provider collects the money.
           </p>
         </>
       )}

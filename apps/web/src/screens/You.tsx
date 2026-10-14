@@ -250,8 +250,8 @@ export function YouScreen({ me, onMeChanged }: Props) {
           <span className="section-title">Payments</span>
         </div>
         <p className="muted" style={{ margin: 0 }}>
-          Vibe tracks and coordinates shared expenses. It does not hold your money, and
-          provider-backed purchases are not enabled in this version.
+          Vibe tracks and coordinates shared expenses, and connects you to shops. It never holds your
+          money: payments are collected by the payment provider.
         </p>
       </div>
 

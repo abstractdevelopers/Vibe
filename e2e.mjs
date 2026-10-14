@@ -150,6 +150,7 @@ t = await bodyText();
 check("Settings opens with privacy controls", /Privacy|Discoverable|Read receipts/i.test(t), t.replace(/\n/g, " ").slice(0, 60));
 check("Settings shows notification controls", /Notifications|Circle invites|Quiet hours/i.test(t), t.replace(/\n/g, " ").slice(0, 60));
 check("Settings shows data & account controls", /Your data|Download my data|Delete my account/i.test(t), t.replace(/\n/g, " ").slice(0, 60));
+check("Settings payment copy reflects provider-collected money", /never holds your money/i.test(t) && !/not enabled in this version/i.test(t), t.replace(/\n/g, " ").slice(0, 80));
 const before = await ev(`document.documentElement.dataset.theme`);
 await clickText("Toggle light / dark", false); await sleep(800);
 const after = await ev(`document.documentElement.dataset.theme`);

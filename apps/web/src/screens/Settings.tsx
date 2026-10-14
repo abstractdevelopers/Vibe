@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { api, ApiError, setToken } from "../api";
 import type { Me } from "../types";
+import { useNav } from "../nav";
 import {
   ArrowLeftIcon,
   BellIcon,
@@ -8,6 +9,7 @@ import {
   GlobeIcon,
   LogOutIcon,
   MoonIcon,
+  ReceiptIcon,
   ShieldIcon,
   TrashIcon,
   WalletIcon,
@@ -45,6 +47,7 @@ const NOTIFICATION_LABELS: Array<{ key: string; label: string; hint: string }> =
  * lives here and in the top-bar menu so it is never more than one tap away.
  */
 export function SettingsScreen({ me, onBack, onMeChanged }: Props) {
+  const nav = useNav();
   const [privacy, setPrivacy] = useState(me.privacy);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<{ tone: "ok" | "bad"; text: string } | null>(null);
@@ -228,10 +231,14 @@ export function SettingsScreen({ me, onBack, onMeChanged }: Props) {
           <WalletIcon width={18} height={18} style={{ color: "var(--violet-soft)" }} />
           <span className="section-title">Payments</span>
         </div>
-        <p className="muted" style={{ margin: 0 }}>
-          Vibe tracks and coordinates shared expenses. It does not hold your money, and provider-backed
-          purchases are not enabled in this version.
+        <p className="muted" style={{ marginTop: 0 }}>
+          Vibe coordinates shared expenses and connects you to shops. It never holds your money:
+          payments are collected by the payment provider, and an order is only marked paid once the
+          provider confirms it.
         </p>
+        <button className="btn block" onClick={() => nav.push({ name: "orders" })}>
+          <ReceiptIcon width={18} height={18} /> Order history
+        </button>
       </div>
 
       <div className="card" style={{ marginBottom: "var(--space-3)" }}>
