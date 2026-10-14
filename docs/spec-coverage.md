@@ -13,7 +13,7 @@ spec places this in a later phase or explicitly out of V1.
 
 | Principle | Status |
 | --- | --- |
-| Social utility before monetization | Built — no ads or checkout in the slice |
+| Social utility before monetization | Built — the social slice stands alone; commerce and campaigns are additive and labelled, never a prerequisite |
 | Participation over passive scrolling | Built — posts carry poll/plan/split activities |
 | One connected journey | Partial — discover → interact → coordinate → settle is closed; "remember" is deferred |
 | Fast and resilient | Built — optimistic reactions, server confirmation for money |
@@ -34,8 +34,11 @@ spec places this in a later phase or explicitly out of V1.
 - Home feed sections: For You / Following — **Built** as filters. Nearby is
   not surfaced: it would need location permission, which the spec keeps out of
   this slice, so no control is shown rather than a dead one.
-- Feed item types: text, poll, image — **Built**. Video/carousel, debate, quiz,
-  event, product/offer, shared memory — **Deferred** (Phase 3/4).
+- Feed item types: text, poll, image — **Built**. Sponsored cards carry an
+  advertiser identity, a "Sponsored" label and report controls — **Built**.
+  Video/carousel, debate, quiz, event and shared-memory cards — **Deferred**
+  (Phase 3/4); product/offer cards are surfaced through Explore's Shops and the
+  storefront rather than as a feed card type.
 - Explore tabs and filters — **Built** on a real discovery module
   (`modules/discovery.ts`): explainable ranking over places and discoverable
   plans, plus people search. Every ranked result carries its `reasons`.
