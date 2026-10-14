@@ -16,6 +16,7 @@ import { EmptyState } from "../components/EmptyState";
 import { useNav } from "../nav";
 import { ReportSheet } from "../components/ReportSheet";
 import { GiftSheet } from "../components/GiftSheet";
+import { Avatar } from "../components/Avatar";
 
 export type CreateMode = "post" | "poll" | "plan" | "expense" | "media";
 
@@ -91,17 +92,13 @@ export function HomeScreen({ me, refreshKey, onChanged, onCreate }: Props) {
             {firstName}
           </h1>
         </div>
-        <span className="avatar" aria-hidden="true">
-          {me.displayName.slice(0, 1).toUpperCase()}
-        </span>
+        <Avatar name={me.displayName} url={me.avatarUrl} />
       </div>
 
       {/* One composer. It opens the same create sheet as the centre action, so
           there is a single creation flow rather than two competing ones. */}
       <div className="composer">
-        <span className="avatar sm" aria-hidden="true">
-          {me.displayName.slice(0, 1).toUpperCase()}
-        </span>
+        <Avatar name={me.displayName} url={me.avatarUrl} size="sm" />
         <button className="composer-prompt" onClick={() => onCreate("post")}>
           What&rsquo;s happening, {firstName}?
         </button>
@@ -225,12 +222,11 @@ function FeedCard({
 
       <div className="post-head">
         <button
-          className="avatar sm"
+          className="avatar-button"
           aria-label={`View ${item.author.displayName}'s profile`}
           onClick={() => nav.push({ name: "profile", userId: item.author.id })}
-          style={{ border: "none", cursor: "pointer" }}
         >
-          {item.author.displayName.slice(0, 1).toUpperCase()}
+          <Avatar name={item.author.displayName} url={item.author.avatarUrl} size="sm" />
         </button>
         <div className="grow">
           <button

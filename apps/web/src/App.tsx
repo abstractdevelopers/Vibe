@@ -29,6 +29,7 @@ import {
 } from "./components/Icons";
 import { NavContext, useNav, type Route } from "./nav";
 import { useRealtime } from "./realtime";
+import { Avatar } from "./components/Avatar";
 import type { Me } from "./types";
 
 export type Tab = "home" | "circles" | "explore" | "you";
@@ -281,13 +282,13 @@ function AccountMenu({
   return (
     <div ref={ref} style={{ position: "relative" }}>
       <button
-        className="avatar sm"
+        className="avatar-button"
         aria-haspopup="menu"
         aria-expanded={open}
         aria-label="Account menu"
         onClick={() => setOpen((v) => !v)}
       >
-        {me.displayName.slice(0, 1).toUpperCase()}
+        <Avatar name={me.displayName} url={me.avatarUrl} size="sm" />
       </button>
       {open && (
         <div className="menu" role="menu">

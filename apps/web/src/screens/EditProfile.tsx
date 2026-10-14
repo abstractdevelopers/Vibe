@@ -1,7 +1,8 @@
 import { useState } from "react";
 import { api, ApiError } from "../api";
 import type { Me } from "../types";
-import { ArrowLeftIcon, CheckIcon, ImageIcon } from "../components/Icons";
+import { ArrowLeftIcon, CheckIcon, CloseIcon, ImageIcon, UploadIcon } from "../components/Icons";
+import { useImageUpload, uploadImageFile } from "../media";
 
 interface Props {
   me: Me;
@@ -29,9 +30,11 @@ export function EditProfileScreen({ me, onBack, onSaved }: Props) {
   const [handle, setHandle] = useState(me.handle);
   const [bio, setBio] = useState(me.bio ?? "");
   const [interests, setInterests] = useState<string[]>(me.interests ?? []);
+  const [avatarUrl, setAvatarUrl] = useState<string | null>(me.avatarUrl);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState(false);
+  const media = useImageUpload();
 
   function toggleInterest(topic: string) {
     setInterests((prev) => (prev.includes(topic) ? prev.filter((t) => t !== topic) : [...prev, topic]));
@@ -49,6 +52,7 @@ export function EditProfileScreen({ me, onBack, onSaved }: Props) {
           handle: handle.trim(),
           bio: bio.trim() ? bio.trim() : null,
           interests,
+          avatarUrl,
         },
       });
       setDone(true);
@@ -78,13 +82,45 @@ export function EditProfileScreen({ me, onBack, onSaved }: Props) {
       <div className="card">
         <div className="row" style={{ gap: "var(--space-4)", marginBottom: "var(--space-4)" }}>
           <span className="avatar" style={{ width: 64, height: 64, fontSize: 24 }} aria-hidden="true">
-            {displayName.slice(0, 1).toUpperCase() || "?"}
+            {avatarUrl ? (
+              <img src={avatarUrl} alt="" />
+            ) : (
+              displayName.slice(0, 1).toUpperCase() || "?"
+            )}
           </span>
           <div className="grow">
-            <p className="meta" style={{ margin: 0 }}>
-              Your avatar is generated from your name. Photo upload for avatars arrives with the media
-              pipeline; you can already add photos to posts.
+            <div className="row" style={{ gap: "var(--space-2)", flexWrap: "wrap" }}>
+              <label className="btn" style={{ marginBottom: 0, cursor: media.busy ? "wait" : "pointer" }}>
+                <UploadIcon width={16} height={16} />
+                {media.busy ? "Uploading…" : avatarUrl ? "Change photo" : "Upload photo"}
+                <input
+                  type="file"
+                  accept="image/*"
+                  hidden
+                  disabled={media.busy}
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    e.target.value = "";
+                    if (!file) return;
+                    media.setError(null);
+                    void uploadImageFile(file)
+                      .then(setAvatarUrl)
+                      .catch((err: unknown) =>
+                        media.setError(err instanceof ApiError ? err.message : "Could not upload that photo"),
+                      );
+                  }}
+                />
+              </label>
+              {avatarUrl && (
+                <button className="btn ghost" onClick={() => setAvatarUrl(null)}>
+                  <CloseIcon width={16} height={16} /> Remove
+                </button>
+              )}
+            </div>
+            <p className="meta" style={{ margin: "var(--space-2) 0 0" }}>
+              A square photo works best. It is resized on your device before upload.
             </p>
+            {media.error && <p className="meta" style={{ color: "var(--danger)", margin: 0 }}>{media.error}</p>}
           </div>
         </div>
 

@@ -46,7 +46,16 @@ const profileSchema = z.object({
     .regex(/^[a-zA-Z0-9_]+$/, "Handle may contain letters, digits and underscore only")
     .optional(),
   bio: z.string().max(280).nullable().optional(),
-  avatarUrl: z.string().url().max(1000).nullable().optional(),
+  // Avatars go through the same media boundary as post photos, so this accepts
+  // either an absolute http(s) URL or one of our own /v1/media/<id> paths.
+  avatarUrl: z
+    .string()
+    .max(1000)
+    .refine((v) => /^https?:\/\//.test(v) || /^\/v1\/media\/[A-Za-z0-9._-]+$/.test(v), {
+      message: "Avatar must be an https URL or a Vibe media path",
+    })
+    .nullable()
+    .optional(),
   interests: z.array(z.string().min(1).max(40)).max(20).optional(),
   city: z.string().max(80).nullable().optional(),
   area: z.string().max(80).nullable().optional(),

@@ -648,6 +648,28 @@ select {
   background: linear-gradient(140deg, var(--coral), var(--orange));
 }
 
+.avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: inherit;
+  display: block;
+}
+
+/* A button that wraps an avatar (e.g. to open a profile) without its own chrome. */
+.avatar-button {
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  border-radius: var(--radius-pill);
+  line-height: 0;
+}
+.avatar-button:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+
 /* ============================================================
    Tags & chips
    ============================================================ */

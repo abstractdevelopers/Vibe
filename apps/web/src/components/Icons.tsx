@@ -59,6 +59,7 @@ import {
   Flame,
   Gift,
   Navigation,
+  Download,
   UserCheck,
   Users,
   Vote,
@@ -127,4 +128,5 @@ export const TrendingFlameIcon = icon(Flame);
 export const NearbyIcon = icon(Navigation);
 export const TrashIcon = icon(Trash2);
 export const GiftIcon = icon(Gift);
+export const DownloadIcon = icon(Download);
 

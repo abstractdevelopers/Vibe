@@ -11,9 +11,8 @@ const MAX_BYTES = 5 * 1024 * 1024;
  * re-encode as JPEG so a phone photo does not arrive at full sensor size. The
  * upload itself goes through the media boundary, which returns an opaque URL.
  */
-async function compress(file: File): Promise<string> {
+async function compress(file: File, maxEdge = 1600): Promise<string> {
   const bitmap = await createImageBitmap(file);
-  const maxEdge = 1600;
   const scale = Math.min(1, maxEdge / Math.max(bitmap.width, bitmap.height));
   const canvas = document.createElement("canvas");
   canvas.width = Math.round(bitmap.width * scale);
@@ -22,6 +21,18 @@ async function compress(file: File): Promise<string> {
   if (!context) throw new Error("Canvas is unavailable in this browser");
   context.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
   return canvas.toDataURL("image/jpeg", 0.82);
+}
+
+/**
+ * Compress and upload a single image immediately, returning its stored URL.
+ * Used where an upload should not wait for a publish step, such as an avatar.
+ */
+export async function uploadImageFile(file: File, maxEdge = 512): Promise<string> {
+  if (!file.type.startsWith("image/")) throw new Error("Only images can be uploaded");
+  if (file.size > MAX_BYTES) throw new Error("Images must be 5 MB or smaller");
+  const dataUrl = await compress(file, maxEdge);
+  const result = await api<{ url: string }>("/v1/media", { body: { dataUrl } });
+  return result.url;
 }
 
 export interface PendingImage {

@@ -13,8 +13,10 @@ import {
   UsersIcon,
 } from "../components/Icons";
 import { useNav } from "../nav";
+import { Avatar } from "../components/Avatar";
 import { EmptyState } from "../components/EmptyState";
 import { ReportSheet } from "../components/ReportSheet";
+import { ProfileCardSheet } from "../components/ProfileCardSheet";
 
 interface Props {
   userId: string;
@@ -29,6 +31,7 @@ export function ProfileScreen({ userId, me, onChanged }: Props) {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [reporting, setReporting] = useState(false);
+  const [cardOpen, setCardOpen] = useState(false);
   const isSelf = userId === me.id;
 
   const load = useCallback(async () => {
@@ -101,9 +104,7 @@ export function ProfileScreen({ userId, me, onChanged }: Props) {
         <>
           <div className="card" style={{ marginBottom: "var(--space-3)" }}>
             <div className="row" style={{ gap: "var(--space-4)", marginBottom: "var(--space-3)" }}>
-              <span className="avatar" style={{ width: 64, height: 64, fontSize: 24 }} aria-hidden="true">
-                {profile.displayName.slice(0, 1).toUpperCase()}
-              </span>
+              <Avatar name={profile.displayName} url={profile.avatarUrl} style={{ width: 64, height: 64, fontSize: 24 }} />
               <div className="grow">
                 <h1 style={{ fontSize: 22 }}>{profile.displayName}</h1>
                 <div className="meta">
@@ -134,6 +135,9 @@ export function ProfileScreen({ userId, me, onChanged }: Props) {
                 <button className="btn" onClick={() => void message()} disabled={busy}>
                   <ChatIcon width={18} height={18} /> Message
                 </button>
+                <button className="btn" onClick={() => setCardOpen(true)}>
+                  <ShareIcon width={18} height={18} /> Share card
+                </button>
                 <button className="btn" onClick={() => void block()} disabled={busy}>
                   <ShieldIcon width={18} height={18} /> Block
                 </button>
@@ -143,8 +147,10 @@ export function ProfileScreen({ userId, me, onChanged }: Props) {
               </div>
             )}
             {isSelf && (
-              <div className="notice success">
-                <CheckIcon width={16} height={16} /> This is you. Edit details in the You tab.
+              <div className="row" style={{ gap: "var(--space-2)", flexWrap: "wrap" }}>
+                <button className="btn primary" onClick={() => setCardOpen(true)}>
+                  <ShareIcon width={18} height={18} /> Share my card
+                </button>
               </div>
             )}
           </div>
@@ -181,6 +187,10 @@ export function ProfileScreen({ userId, me, onChanged }: Props) {
 
       {reporting && (
         <ReportSheet targetType="user" targetId={userId} onClose={() => setReporting(false)} />
+      )}
+
+      {cardOpen && profile && (
+        <ProfileCardSheet profile={profile} interests={profile.interests ?? []} onClose={() => setCardOpen(false)} />
       )}
     </div>
   );

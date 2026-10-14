@@ -12,6 +12,7 @@ import {
   WalletIcon,
 } from "../components/Icons";
 import { useNav } from "../nav";
+import { Avatar } from "../components/Avatar";
 
 interface Props {
   me: Me;
@@ -81,9 +82,7 @@ export function YouScreen({ me, onMeChanged }: Props) {
 
       <div className="card" style={{ marginBottom: "var(--space-3)" }}>
         <div className="row" style={{ gap: "var(--space-4)" }}>
-          <span className="avatar" style={{ width: 56, height: 56, fontSize: 22 }} aria-hidden="true">
-            {me.displayName.slice(0, 1).toUpperCase()}
-          </span>
+          <Avatar name={me.displayName} url={me.avatarUrl} style={{ width: 56, height: 56, fontSize: 22 }} />
           <div className="grow">
             <div className="feed-author" style={{ fontSize: 18 }}>
               {me.displayName}

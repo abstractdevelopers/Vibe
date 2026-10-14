@@ -1,0 +1,101 @@
+
+/* ============================================================
+   Shareable profile card
+   ============================================================ */
+
+.profile-card {
+  margin-top: var(--space-3);
+  border-radius: var(--radius-card);
+  padding: var(--space-5);
+  border: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  aspect-ratio: 4 / 5;
+  max-width: 340px;
+  width: 100%;
+  margin-left: auto;
+  margin-right: auto;
+  box-shadow: var(--shadow-md);
+}
+
+.profile-card-top {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+}
+.profile-card-wordmark {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 20px;
+  letter-spacing: var(--tracking-display);
+}
+.profile-card-handle {
+  font-size: var(--text-meta);
+  opacity: 0.7;
+}
+
+.profile-card-body {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  justify-content: center;
+}
+.profile-card-name {
+  margin: 0;
+  font-size: 26px;
+  letter-spacing: var(--tracking-display);
+}
+.profile-card-bio {
+  margin: 0;
+  font-size: var(--text-supporting);
+  opacity: 0.85;
+  line-height: 1.45;
+}
+.profile-card-topics {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.profile-card-topic {
+  font-size: var(--text-meta);
+  font-weight: 600;
+  padding: 3px 10px;
+  border-radius: var(--radius-pill);
+}
+.profile-card-foot {
+  font-size: var(--text-meta);
+  opacity: 0.7;
+}
+
+/* Three flat themes. No gradient wash, matching the editorial feed. */
+.card-editorial {
+  background: #ffffff;
+  color: #14161c;
+  border-top: 5px solid #5b5bd6;
+}
+.card-editorial .profile-card-topic {
+  background: #ececfb;
+  color: #3f3fa8;
+}
+
+.card-midnight {
+  background: #14161c;
+  color: #f4f5f8;
+  border-top: 5px solid #8b8bf0;
+}
+.card-midnight .profile-card-topic {
+  background: rgba(139, 139, 240, 0.22);
+  color: #c9c9ff;
+}
+
+.card-sun {
+  background: #fdf6ec;
+  color: #2a2118;
+  border-top: 5px solid #e0663c;
+}
+.card-sun .profile-card-topic {
+  background: #f7e0d1;
+  color: #a3401f;
+}
