@@ -177,8 +177,9 @@ and a warehouse export — **Deferred**.
 
 ## §12 Phased delivery
 
-The spec lays out five phases. This is where each stands; nothing beyond Phase 2
-is claimed as built.
+The spec lays out five phases. This is where each stands. Commerce and
+advertising (Phase 3) are built at the module and API level; nothing in Phase 4
+or Phase 5 is claimed as built.
 
 - **Phase 1 — social MVP.** Profiles, follow/block/mute, Circles, feed, polls,
   comments, reactions, realtime. **Built** and covered by tests.
