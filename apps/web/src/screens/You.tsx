@@ -1,7 +1,14 @@
-import { useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { api, ApiError, setToken } from "../api";
-import type { Me } from "../types";
-import { GlobeIcon, LockIcon, LogOutIcon, MoonIcon, ShieldIcon, WalletIcon } from "../components/Icons";
+import type { Me, PublicUser } from "../types";
+import {
+  GlobeIcon,
+  LockIcon,
+  LogOutIcon,
+  MoonIcon,
+  ShieldIcon,
+  WalletIcon,
+} from "../components/Icons";
 
 interface Props {
   me: Me;
@@ -12,6 +19,25 @@ export function YouScreen({ me, onMeChanged }: Props) {
   const [privacy, setPrivacy] = useState(me.privacy);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<{ tone: "ok" | "bad"; text: string } | null>(null);
+  const [blocked, setBlocked] = useState<PublicUser[]>([]);
+
+  const loadBlocked = useCallback(async () => {
+    try {
+      const result = await api<{ blocked: PublicUser[] }>("/v1/users/blocked");
+      setBlocked(result.blocked);
+    } catch {
+      /* the list is optional; leave it empty on failure */
+    }
+  }, []);
+
+  useEffect(() => {
+    void loadBlocked();
+  }, [loadBlocked]);
+
+  async function unblock(userId: string) {
+    await api(`/v1/users/${userId}/block`, { method: "DELETE" });
+    await loadBlocked();
+  }
 
   async function savePrivacy() {
     setSaving(true);
@@ -128,6 +154,33 @@ export function YouScreen({ me, onMeChanged }: Props) {
         <button className="btn block" onClick={toggleTheme}>
           <MoonIcon width={18} height={18} /> Toggle light / dark
         </button>
+      </div>
+
+      <div className="card" style={{ marginBottom: "var(--space-3)" }}>
+        <div className="row" style={{ gap: "var(--space-2)", marginBottom: "var(--space-3)" }}>
+          <ShieldIcon width={18} height={18} style={{ color: "var(--violet-soft)" }} />
+          <span className="section-title">Blocked accounts</span>
+        </div>
+        {blocked.length === 0 ? (
+          <p className="muted" style={{ margin: 0 }}>
+            You haven&rsquo;t blocked anyone.
+          </p>
+        ) : (
+          blocked.map((u) => (
+            <div
+              key={u.id}
+              className="row spread"
+              style={{ padding: "var(--space-2) 0", borderBottom: "1px solid var(--hairline)" }}
+            >
+              <span>
+                {u.displayName} <span className="meta">@{u.handle}</span>
+              </span>
+              <button className="btn ghost" onClick={() => void unblock(u.id)}>
+                Unblock
+              </button>
+            </div>
+          ))
+        )}
       </div>
 
       <div className="card" style={{ marginBottom: "var(--space-3)" }}>

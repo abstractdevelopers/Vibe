@@ -15,7 +15,7 @@ export default defineConfig({
     // Allow the container's public hostname when running behind a proxy.
     allowedHosts: true,
     proxy: {
-      "/v1": "http://localhost:12000",
+      "/v1": { target: "http://localhost:12000", ws: true },
       "/health": "http://localhost:12000",
     },
   },

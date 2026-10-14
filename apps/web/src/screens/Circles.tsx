@@ -9,8 +9,10 @@ import {
   LockIcon,
   PlusIcon,
   UsersIcon,
+  ChevronRightIcon,
   WalletIcon,
 } from "../components/Icons";
+import { useNav } from "../nav";
 
 interface Props {
   me: Me;
@@ -27,6 +29,7 @@ interface CircleDetail {
 }
 
 export function CirclesScreen({ refreshKey, onChanged }: Props) {
+  const nav = useNav();
   const [circles, setCircles] = useState<CircleSummary[] | null>(null);
   const [selected, setSelected] = useState<string | null>(null);
   const [detail, setDetail] = useState<CircleDetail | null>(null);
@@ -190,13 +193,29 @@ export function CirclesScreen({ refreshKey, onChanged }: Props) {
               <p className="meta">No plans yet — propose one from Create.</p>
             ) : (
               detail.plans.map((plan) => (
-                <div key={plan.id} className="row spread" style={{ padding: "var(--space-2) 0" }}>
+                <button
+                  key={plan.id}
+                  className="row spread"
+                  style={{
+                    padding: "var(--space-3) 0",
+                    width: "100%",
+                    background: "none",
+                    border: "none",
+                    borderBottom: "1px solid var(--hairline)",
+                    cursor: "pointer",
+                    textAlign: "left",
+                  }}
+                  onClick={() => nav.push({ name: "plan", planId: plan.id })}
+                >
                   <span>{plan.title}</span>
-                  <span className="meta">
-                    {new Date(plan.starts_at).toLocaleDateString(undefined, { month: "short", day: "numeric" })} ·{" "}
-                    {plan.state}
+                  <span className="row" style={{ gap: "var(--space-2)" }}>
+                    <span className="meta">
+                      {new Date(plan.starts_at).toLocaleDateString(undefined, { month: "short", day: "numeric" })} ·{" "}
+                      {plan.state}
+                    </span>
+                    <ChevronRightIcon width={16} height={16} style={{ color: "var(--text-faint)" }} />
                   </span>
-                </div>
+                </button>
               ))
             )}
           </Section>
@@ -209,12 +228,28 @@ export function CirclesScreen({ refreshKey, onChanged }: Props) {
               <p className="meta">Nothing to settle.</p>
             ) : (
               detail.expenses.map((expense) => (
-                <div key={expense.id} className="row spread" style={{ padding: "var(--space-2) 0" }}>
+                <button
+                  key={expense.id}
+                  className="row spread"
+                  style={{
+                    padding: "var(--space-3) 0",
+                    width: "100%",
+                    background: "none",
+                    border: "none",
+                    borderBottom: "1px solid var(--hairline)",
+                    cursor: "pointer",
+                    textAlign: "left",
+                  }}
+                  onClick={() => nav.push({ name: "expense", expenseId: expense.id })}
+                >
                   <span>{expense.description}</span>
-                  <span style={{ fontVariantNumeric: "tabular-nums", fontWeight: 600 }}>
-                    {formatMinorUnits(expense.amountMinor, expense.currency)} {expense.currency}
+                  <span className="row" style={{ gap: "var(--space-2)" }}>
+                    <span style={{ fontVariantNumeric: "tabular-nums", fontWeight: 600 }}>
+                      {formatMinorUnits(expense.amountMinor, expense.currency)} {expense.currency}
+                    </span>
+                    <ChevronRightIcon width={16} height={16} style={{ color: "var(--text-faint)" }} />
                   </span>
-                </div>
+                </button>
               ))
             )}
           </Section>

@@ -6,7 +6,10 @@ import {
   CalendarIcon,
   CheckIcon,
   CloseIcon,
-  SparkIcon,
+  PollIcon,
+  PlanIcon,
+  SplitIcon,
+  CommentIcon,
   WalletIcon,
   ChatIcon,
   UsersIcon,
@@ -22,9 +25,9 @@ type Mode = "post" | "poll" | "plan" | "expense";
 
 const MODES: Array<{ id: Mode; label: string; hint: string; Icon: typeof ChatIcon }> = [
   { id: "post", label: "Post", hint: "Share something with your connections or a Circle.", Icon: ChatIcon },
-  { id: "poll", label: "Poll", hint: "Ask a question. Everyone gets one vote.", Icon: SparkIcon },
-  { id: "plan", label: "Plan", hint: "Propose an outing and collect RSVPs.", Icon: CalendarIcon },
-  { id: "expense", label: "Split", hint: "Track a shared cost — Vibe never holds the money.", Icon: WalletIcon },
+  { id: "poll", label: "Poll", hint: "Ask a question. Everyone gets one vote.", Icon: PollIcon },
+  { id: "plan", label: "Plan", hint: "Propose an outing and collect RSVPs.", Icon: PlanIcon },
+  { id: "expense", label: "Split", hint: "Track a shared cost — Vibe never holds the money.", Icon: SplitIcon },
 ];
 
 export function CreateSheet({ me, onClose, onCreated }: Props) {

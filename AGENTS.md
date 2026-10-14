@@ -56,6 +56,19 @@ Tests run against a real Postgres database (no mocks for the DB path). The
 harness in `apps/api/tests/helpers.ts` truncates tables between tests. Add a
 test for any state transition, retry, or duplicate-event path you touch.
 
+## Web client
+
+- `apps/web/src/nav.ts` holds a tiny in-memory navigation context: five tabs
+  plus a stack of detail routes (inbox, profile, plan, expense). It is not a
+  router — swap it for one when deep links matter. Detail screens take an id.
+- Icons come from `lucide-react`, re-exported through
+  `components/Icons.tsx`. Never hand-roll SVG paths or use emoji.
+- `realtime.ts` opens the `/v1/realtime` socket and only signals that something
+  changed; every surface also loads over HTTP, so the UI stays correct when the
+  socket is down.
+- Avoid reloading a whole list after a small write (e.g. posting a comment);
+  update local state, or the reload will remount cards and collapse open UI.
+
 ## Do not
 
 - Introduce floating-point money arithmetic.

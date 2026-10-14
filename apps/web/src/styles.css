@@ -1067,6 +1067,31 @@ select {
    Misc
    ============================================================ */
 
+/* Card-like rows that open a detail view. */
+.row-link {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  width: 100%;
+  padding: var(--space-3) 0;
+  background: none;
+  border: none;
+  border-bottom: 1px solid var(--hairline);
+  cursor: pointer;
+  text-align: left;
+  color: inherit;
+  transition: color var(--motion-fast) var(--ease-out);
+}
+
+.row-link:last-child {
+  border-bottom: none;
+}
+
+.row-link:hover {
+  color: var(--coral);
+}
+
 .divider {
   display: flex;
   align-items: center;

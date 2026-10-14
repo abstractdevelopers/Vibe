@@ -77,3 +77,74 @@ export interface PlanSummary {
   timezone: string;
   place: string | null;
 }
+
+export interface Notification {
+  id: string;
+  type: string;
+  entity_type: string | null;
+  entity_id: string | null;
+  payload: Record<string, unknown> | null;
+  read_at: string | null;
+  created_at: string;
+}
+
+export interface Comment {
+  id: string;
+  body: string;
+  createdAt: string;
+  author: PublicUser;
+}
+
+export interface ExpenseParticipant {
+  userId: string;
+  handle: string;
+  displayName: string;
+  allocationMinor: number;
+  status: string;
+}
+
+export interface PaymentReport {
+  id: string;
+  participantId: string;
+  amountMinor: number;
+  status: string;
+  verificationSource: string | null;
+  createdAt: string;
+  verifiedAt: string | null;
+}
+
+export interface ExpenseDetail {
+  expense: {
+    id: string;
+    circleId: string;
+    creatorId: string;
+    payerId: string;
+    amountMinor: number;
+    currency: string;
+    description: string;
+    splitMode: string;
+    dueDate: string | null;
+    receiptUrl: string | null;
+    status: string;
+    createdAt: string;
+  };
+  participants: ExpenseParticipant[];
+  paymentReports: PaymentReport[];
+}
+
+export interface ExpenseEvent {
+  id: string;
+  actor_id: string | null;
+  type: string;
+  from_status: string | null;
+  to_status: string | null;
+  note: string | null;
+  metadata: Record<string, unknown> | null;
+  created_at: string;
+}
+
+export interface PublicProfile extends PublicUser {
+  interests: string[];
+  profileAudience: string;
+  followerCount: number;
+}

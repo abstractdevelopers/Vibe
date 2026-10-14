@@ -1,14 +1,16 @@
 import { useCallback, useEffect, useState } from "react";
 import { api, ApiError } from "../api";
-import type { FeedItem, Me, PollActivity } from "../types";
+import type { Comment, FeedItem, Me, PollActivity } from "../types";
 import {
   ChatIcon,
+  CommentIcon,
   HeartIcon,
   InboxIcon,
-  PlusIcon,
+  SendIcon,
   ShareIcon,
-  SparkIcon,
 } from "../components/Icons";
+import { useNav } from "../nav";
+import { ReportSheet } from "../components/ReportSheet";
 
 interface Props {
   me: Me;
@@ -147,7 +149,7 @@ export function HomeScreen({ me, refreshKey, onChanged }: Props) {
 
       {items?.length === 0 && (
         <div className="empty">
-          <SparkIcon width={40} height={40} />
+          <InboxIcon width={40} height={40} strokeWidth={1.5} />
           <h3 className="section-title">Your feed is quiet</h3>
           <p className="muted" style={{ maxWidth: "30ch" }}>
             Join a Circle or follow people and this space fills up with plans and ideas.
@@ -156,7 +158,7 @@ export function HomeScreen({ me, refreshKey, onChanged }: Props) {
       )}
 
       {items?.map((item) => (
-        <FeedCard key={item.id} item={item} onReact={() => void toggleReaction(item)} onChanged={onChanged} />
+        <FeedCard key={item.id} item={item} me={me} onReact={() => void toggleReaction(item)} onChanged={onChanged} />
       ))}
 
       {cursor && (
@@ -168,22 +170,50 @@ export function HomeScreen({ me, refreshKey, onChanged }: Props) {
   );
 }
 
-function FeedCard({ item, onReact, onChanged }: { item: FeedItem; onReact: () => void; onChanged: () => void }) {
+function FeedCard({ item, me, onReact, onChanged }: { item: FeedItem; me: Me; onReact: () => void; onChanged: () => void }) {
+  const nav = useNav();
+  const [commentsOpen, setCommentsOpen] = useState(false);
+  const [reporting, setReporting] = useState(false);
+
+  async function share() {
+    const text = item.body ?? "A post on Vibe";
+    const url = `${location.origin}/p/${item.id}`;
+    try {
+      if (navigator.share) await navigator.share({ text, url });
+      else await navigator.clipboard?.writeText(url);
+    } catch {
+      /* the user dismissed the share sheet; nothing to do */
+    }
+  }
+
   return (
     <article className="card" style={{ marginBottom: "var(--space-3)" }}>
       {item.isSponsored && (
         <div className="row spread" style={{ marginBottom: "var(--space-3)" }}>
           <span className="sponsored-tag">Sponsored</span>
-          <span className="meta">Why this ad · Hide · Report</span>
+          <button className="meta" onClick={() => setReporting(true)} style={{ background: "none", border: "none", cursor: "pointer" }}>
+            Why this ad · Report
+          </button>
         </div>
       )}
 
       <div className="feed-head">
-        <span className="avatar" aria-hidden="true">
+        <button
+          className="avatar"
+          aria-label={`View ${item.author.displayName}'s profile`}
+          onClick={() => nav.push({ name: "profile", userId: item.author.id })}
+          style={{ border: "none", cursor: "pointer" }}
+        >
           {item.author.displayName.slice(0, 1).toUpperCase()}
-        </span>
+        </button>
         <div className="grow">
-          <div className="feed-author">{item.author.displayName}</div>
+          <button
+            className="feed-author"
+            onClick={() => nav.push({ name: "profile", userId: item.author.id })}
+            style={{ background: "none", border: "none", padding: 0, cursor: "pointer", textAlign: "left" }}
+          >
+            {item.author.displayName}
+          </button>
           <div className="meta">
             @{item.author.handle} · {relativeTime(item.createdAt)}
           </div>
@@ -199,15 +229,107 @@ function FeedCard({ item, onReact, onChanged }: { item: FeedItem; onReact: () =>
           <HeartIcon />
           {item.reactionCount > 0 ? item.reactionCount : "Like"}
         </button>
-        <button className="react-btn" aria-label="Comments">
-          <ChatIcon />
+        <button
+          className="react-btn"
+          onClick={() => setCommentsOpen((v) => !v)}
+          aria-expanded={commentsOpen}
+          aria-label="Comments"
+        >
+          <CommentIcon />
           {item.commentCount > 0 ? item.commentCount : "Comment"}
         </button>
-        <button className="react-btn" aria-label="Share">
+        <button className="react-btn" onClick={() => void share()} aria-label="Share">
           <ShareIcon />
         </button>
       </div>
+
+      {commentsOpen && <CommentThread postId={item.id} me={me} onChanged={onChanged} />}
+
+      {reporting && (
+        <ReportSheet targetType="post" targetId={item.id} onClose={() => setReporting(false)} />
+      )}
     </article>
+  );
+}
+
+function CommentThread({ postId, me, onChanged }: { postId: string; me: Me; onChanged: () => void }) {
+  const nav = useNav();
+  const [comments, setComments] = useState<Comment[] | null>(null);
+  const [body, setBody] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  const load = useCallback(async () => {
+    try {
+      const result = await api<{ comments: Comment[] }>(`/v1/posts/${postId}/comments`);
+      setComments(result.comments);
+    } catch {
+      setComments([]);
+    }
+  }, [postId]);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  async function submit() {
+    if (!body.trim()) return;
+    setBusy(true);
+    try {
+      const created = await api<{ id: string; createdAt: string }>(`/v1/posts/${postId}/comments`, {
+        body: { body: body.trim() },
+      });
+      // Append locally rather than triggering a feed reload, which would
+      // remount this card and collapse the open thread.
+      setComments((prev) => [
+        ...(prev ?? []),
+        { id: created.id, body: body.trim(), createdAt: created.createdAt, author: me },
+      ]);
+      setBody("");
+      onChanged();
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div style={{ marginTop: "var(--space-3)", paddingTop: "var(--space-3)", borderTop: "1px solid var(--hairline)" }}>
+      {comments === null && <p className="meta">Loading comments…</p>}
+      {comments?.length === 0 && <p className="meta">No comments yet. Start the conversation.</p>}
+      {comments?.map((c) => (
+        <div key={c.id} className="row" style={{ gap: "var(--space-2)", alignItems: "flex-start", marginBottom: "var(--space-2)" }}>
+          <button
+            className="avatar sm"
+            aria-label={`View ${c.author.displayName}'s profile`}
+            onClick={() => nav.push({ name: "profile", userId: c.author.id })}
+            style={{ border: "none", cursor: "pointer" }}
+          >
+            {c.author.displayName.slice(0, 1).toUpperCase()}
+          </button>
+          <div className="grow">
+            <div className="meta">
+              <strong style={{ color: "var(--text-secondary)" }}>@{c.author.handle}</strong> ·{" "}
+              {relativeTime(c.createdAt)}
+            </div>
+            <div>{c.body}</div>
+          </div>
+        </div>
+      ))}
+      <div className="row" style={{ gap: "var(--space-2)", marginTop: "var(--space-2)" }}>
+        <input
+          aria-label="Write a comment"
+          value={body}
+          onChange={(e) => setBody(e.target.value)}
+          placeholder="Add a comment…"
+          style={{ marginBottom: 0 }}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") void submit();
+          }}
+        />
+        <button className="btn primary" onClick={() => void submit()} disabled={busy || !body.trim()}>
+          <SendIcon width={17} height={17} />
+        </button>
+      </div>
+    </div>
   );
 }
 
@@ -283,4 +405,3 @@ function relativeTime(iso: string): string {
   return new Date(iso).toLocaleDateString(undefined, { month: "short", day: "numeric" });
 }
 
-export { InboxIcon, PlusIcon };

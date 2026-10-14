@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { api, ApiError, setToken } from "../api";
-import { ArrowLeftIcon, SparkIcon } from "../components/Icons";
+import { ArrowLeftIcon, ShieldIcon } from "../components/Icons";
 
 interface Props {
   onAuthenticated: () => void | Promise<void>;
@@ -65,7 +65,7 @@ export function AuthScreen({ onAuthenticated }: Props) {
         </div>
 
         <p className="meta reveal" style={{ marginTop: "var(--space-6)", display: "flex", gap: 8, alignItems: "center" }}>
-          <SparkIcon width={15} height={15} />
+          <ShieldIcon width={15} height={15} />
           No contacts. No location. Just you, at sign-up.
         </p>
       </div>
