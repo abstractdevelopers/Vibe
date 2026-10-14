@@ -52,6 +52,11 @@ jobs:
         run: npm test
 
       - name: Build web client
+        # The job-level NODE_ENV=test is for the API test run. Vite reads
+        # NODE_ENV at build time and emits the dev React build under anything
+        # but "production", which doubles the bundle. Force it here.
+        env:
+          NODE_ENV: production
         run: npm run build
 
       - name: Enforce bundle budget
