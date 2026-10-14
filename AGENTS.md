@@ -189,6 +189,17 @@ test for any state transition, retry, or duplicate-event path you touch.
   automated feed delivery is deferred. Regulated categories are refused at
   creation.
 
+## Build and CI gotchas
+- The CI `verify` job sets `NODE_ENV=test` for the API suite. That env leaks
+  into every later step, including the Vite build. Vite picks the dev React
+  build under any `NODE_ENV` other than `production`, which roughly doubles the
+  JS bundle (144 kB vs 81 kB gzip) and fails the budget check. The build step
+  sets `NODE_ENV=production` explicitly. A local `npm run verify` passes either
+  way because `NODE_ENV` is usually unset locally — so always confirm a budget
+  change against the CI build, not just local.
+- `vite build --mode production` does **not** fix this; the `NODE_ENV`
+  environment variable wins over `--mode` for the React dev/prod define.
+
 ## Web client gotchas
 - Comment activity updates the count via a local delta
   (`onCommentChange`), **not** `onChanged()`. `onChanged()` bumps the global
