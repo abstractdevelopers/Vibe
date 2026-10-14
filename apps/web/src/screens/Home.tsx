@@ -2,7 +2,9 @@ import { useCallback, useEffect, useState } from "react";
 import { api, ApiError } from "../api";
 import type { Comment, FeedItem, Me, PollActivity } from "../types";
 import {
+  CloseIcon,
   CommentIcon,
+  GiftIcon,
   HeartIcon,
   ImageIcon,
   InboxIcon,
@@ -13,6 +15,7 @@ import {
 import { EmptyState } from "../components/EmptyState";
 import { useNav } from "../nav";
 import { ReportSheet } from "../components/ReportSheet";
+import { GiftSheet } from "../components/GiftSheet";
 
 export type CreateMode = "post" | "poll" | "plan" | "expense" | "media";
 
@@ -192,6 +195,7 @@ function FeedCard({
   const nav = useNav();
   const [commentsOpen, setCommentsOpen] = useState(false);
   const [reporting, setReporting] = useState(false);
+  const [gifting, setGifting] = useState(false);
 
   async function share() {
     const text = item.body ?? "A post on Vibe";
@@ -264,12 +268,17 @@ function FeedCard({
         <button className="react-btn" onClick={() => onCreate("media")} aria-label="Add a photo">
           <ImageIcon />
         </button>
+        <button className="react-btn" onClick={() => setGifting(true)} aria-label="Send a gift">
+          <GiftIcon />
+        </button>
         <button className="react-btn" onClick={() => void share()} aria-label="Share">
           <ShareIcon />
         </button>
       </div>
 
       {commentsOpen && <CommentThread postId={item.id} me={me} onChanged={onChanged} />}
+
+      {gifting && <GiftSheet postId={item.id} authorName={item.author.displayName} onClose={() => setGifting(false)} />}
 
       {reporting && <ReportSheet targetType="post" targetId={item.id} onClose={() => setReporting(false)} />}
     </article>

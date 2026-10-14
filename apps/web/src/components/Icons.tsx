@@ -57,6 +57,7 @@ import {
   Pencil,
   Ticket,
   Flame,
+  Gift,
   Navigation,
   UserCheck,
   Users,
@@ -125,4 +126,5 @@ export const TicketIcon = icon(Ticket);
 export const TrendingFlameIcon = icon(Flame);
 export const NearbyIcon = icon(Navigation);
 export const TrashIcon = icon(Trash2);
+export const GiftIcon = icon(Gift);
 
