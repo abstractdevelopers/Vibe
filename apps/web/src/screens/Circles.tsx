@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { api, ApiError } from "../api";
 import { formatMinorUnits } from "@vibe/shared";
 import type { CircleSummary, ExpenseSummary, Me, PlanSummary } from "../types";
+import { EmptyState } from "../components/EmptyState";
 import {
   CalendarIcon,
   CheckIcon,
@@ -133,16 +134,16 @@ export function CirclesScreen({ refreshKey, onChanged }: Props) {
       {circles === null && <div className="skeleton" aria-busy="true" />}
 
       {circles?.length === 0 && (
-        <div className="empty">
-          <CirclesIcon width={40} height={40} />
-          <h3 className="section-title">No Circles yet</h3>
-          <p className="muted" style={{ maxWidth: "32ch" }}>
-            A Circle is your group space — plans, shared money and memories in one place.
-          </p>
-          <button className="btn primary" style={{ marginTop: "var(--space-3)" }} onClick={() => setShowCreate(true)}>
-            <PlusIcon width={18} height={18} /> Create your first Circle
-          </button>
-        </div>
+        <EmptyState
+          icon={<CirclesIcon />}
+          title="No Circles yet"
+          text="A Circle is your group space — plans, shared money and memories in one place."
+          action={
+            <button className="btn primary" onClick={() => setShowCreate(true)}>
+              <PlusIcon width={18} height={18} /> Create your first Circle
+            </button>
+          }
+        />
       )}
 
       {circles?.map((circle) => {

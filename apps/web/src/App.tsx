@@ -1,7 +1,7 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { api, ApiError, getToken, setToken } from "./api";
 import { AuthScreen } from "./screens/Auth";
-import { HomeScreen } from "./screens/Home";
+import { HomeScreen, type CreateMode } from "./screens/Home";
 import { CirclesScreen } from "./screens/Circles";
 import { ExploreScreen } from "./screens/Explore";
 import { YouScreen } from "./screens/You";
@@ -9,9 +9,22 @@ import { InboxScreen } from "./screens/Inbox";
 import { ProfileScreen } from "./screens/Profile";
 import { PlanDetailScreen } from "./screens/PlanDetail";
 import { ExpenseDetailScreen } from "./screens/ExpenseDetail";
+import { EditProfileScreen } from "./screens/EditProfile";
+import { SettingsScreen } from "./screens/Settings";
+import { PlaceDetailScreen } from "./screens/PlaceDetail";
 import { CreateSheet } from "./components/CreateSheet";
-import { CirclesIcon, CompassIcon, HomeIcon, InboxIcon, PlusIcon, UserIcon } from "./components/Icons";
-import { NavContext, type Route } from "./nav";
+import {
+  CirclesIcon,
+  CompassIcon,
+  EditIcon,
+  HomeIcon,
+  InboxIcon,
+  LogOutIcon,
+  PlusIcon,
+  SettingsIcon,
+  UserIcon,
+} from "./components/Icons";
+import { NavContext, useNav, type Route } from "./nav";
 import { useRealtime } from "./realtime";
 import type { Me } from "./types";
 
@@ -24,7 +37,13 @@ export function App() {
   const [route, setRoute] = useState<Route>({ name: "tabs" });
   const [unread, setUnread] = useState(0);
   const [createOpen, setCreateOpen] = useState(false);
+  const [createMode, setCreateMode] = useState<CreateMode>("post");
   const [refreshKey, setRefreshKey] = useState(0);
+
+  const openCreate = (mode: CreateMode) => {
+    setCreateMode(mode);
+    setCreateOpen(true);
+  };
 
   const loadMe = useCallback(async () => {
     if (!getToken()) {
@@ -93,22 +112,32 @@ export function App() {
             <span className="wordmark">
               Vibe<span className="dot" aria-hidden="true" />
             </span>
-            <button
-              className="icon-button"
-              aria-label={unread > 0 ? `Inbox, ${unread} unread` : "Inbox"}
-              onClick={() => push({ name: "inbox" })}
-            >
-              <InboxIcon width={20} height={20} />
-              {unread > 0 && <span className="badge">{unread > 99 ? "99+" : unread}</span>}
-            </button>
+            <div className="row" style={{ gap: "var(--space-1)" }}>
+              <button
+                className="icon-button"
+                aria-label={unread > 0 ? `Inbox, ${unread} unread` : "Inbox"}
+                onClick={() => push({ name: "inbox" })}
+              >
+                <InboxIcon width={20} height={20} />
+                {unread > 0 && <span className="badge">{unread > 99 ? "99+" : unread}</span>}
+              </button>
+              <AccountMenu me={me} onMeChanged={loadMe} onOpenProfile={() => push({ name: "profile", userId: me.id })} />
+            </div>
           </header>
 
           <main className="app-shell">
             {route.name === "tabs" && (
               <>
-                {tab === "home" && <HomeScreen me={me} refreshKey={refreshKey} onChanged={bump} />}
+                {tab === "home" && (
+                  <HomeScreen
+                    me={me}
+                    refreshKey={refreshKey}
+                    onChanged={bump}
+                    onCreate={(mode) => openCreate(mode)}
+                  />
+                )}
                 {tab === "circles" && <CirclesScreen me={me} refreshKey={refreshKey} onChanged={bump} />}
-                {tab === "explore" && <ExploreScreen />}
+                {tab === "explore" && <ExploreScreen me={me} />}
                 {tab === "you" && <YouScreen me={me} onMeChanged={loadMe} />}
               </>
             )}
@@ -120,12 +149,17 @@ export function App() {
             {route.name === "expense" && (
               <ExpenseDetailScreen expenseId={route.expenseId} me={me} onBack={back} onChanged={bump} />
             )}
+            {route.name === "edit-profile" && (
+              <EditProfileScreen me={me} onBack={back} onSaved={loadMe} />
+            )}
+            {route.name === "settings" && <SettingsScreen me={me} onBack={back} onMeChanged={loadMe} />}
+            {route.name === "place" && <PlaceDetailScreen placeId={route.placeId} onBack={back} />}
           </main>
 
           <nav className="bottom-nav" aria-label="Primary">
             <NavButton id="home" label="Home" Icon={HomeIcon} tab={tab} setTab={setTab} route={route} onNavigate={back} />
             <NavButton id="circles" label="Circles" Icon={CirclesIcon} tab={tab} setTab={setTab} route={route} onNavigate={back} />
-            <button className="create" aria-label="Create" onClick={() => setCreateOpen(true)}>
+            <button className="create" aria-label="Create" onClick={() => openCreate("post")}>
               <span>
                 <PlusIcon width={22} height={22} />
               </span>
@@ -139,6 +173,7 @@ export function App() {
       {createOpen && me && (
         <CreateSheet
           me={me}
+          initialMode={createMode}
           onClose={() => setCreateOpen(false)}
           onCreated={() => {
             setCreateOpen(false);
@@ -186,3 +221,101 @@ function NavButton({
 }
 
 export { ApiError };
+
+/**
+ * Top-bar account menu. Logout lives here as well as in You, because the spec
+ * requires a reachable sign-out and a user should never have to hunt for it.
+ */
+function AccountMenu({
+  me,
+  onMeChanged,
+  onOpenProfile,
+}: {
+  me: Me;
+  onMeChanged: () => void | Promise<void>;
+  onOpenProfile: () => void;
+}) {
+  const nav = useNav();
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    function onDoc(event: MouseEvent) {
+      if (ref.current && !ref.current.contains(event.target as Node)) setOpen(false);
+    }
+    function onKey(event: KeyboardEvent) {
+      if (event.key === "Escape") setOpen(false);
+    }
+    document.addEventListener("mousedown", onDoc);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onDoc);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [open]);
+
+  async function logout() {
+    try {
+      await api("/v1/auth/logout", { method: "POST" });
+    } finally {
+      setToken(null);
+      window.location.reload();
+    }
+  }
+
+  return (
+    <div ref={ref} style={{ position: "relative" }}>
+      <button
+        className="avatar sm"
+        aria-haspopup="menu"
+        aria-expanded={open}
+        aria-label="Account menu"
+        onClick={() => setOpen((v) => !v)}
+      >
+        {me.displayName.slice(0, 1).toUpperCase()}
+      </button>
+      {open && (
+        <div className="menu" role="menu">
+          <div className="menu-head">
+            <div style={{ fontWeight: 700 }}>{me.displayName}</div>
+            <div className="meta">@{me.handle}</div>
+          </div>
+          <button
+            className="menu-item"
+            role="menuitem"
+            onClick={() => {
+              setOpen(false);
+              onOpenProfile();
+            }}
+          >
+            <UserIcon width={17} height={17} /> View profile
+          </button>
+          <button
+            className="menu-item"
+            role="menuitem"
+            onClick={() => {
+              setOpen(false);
+              nav.push({ name: "edit-profile" });
+            }}
+          >
+            <EditIcon width={17} height={17} /> Edit profile
+          </button>
+          <button
+            className="menu-item"
+            role="menuitem"
+            onClick={() => {
+              setOpen(false);
+              nav.push({ name: "settings" });
+            }}
+          >
+            <SettingsIcon width={17} height={17} /> Settings
+          </button>
+          <button className="menu-item danger" role="menuitem" onClick={() => void logout()}>
+            <LogOutIcon width={17} height={17} /> Log out
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}

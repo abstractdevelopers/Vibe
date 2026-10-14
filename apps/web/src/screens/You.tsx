@@ -2,13 +2,16 @@ import { useCallback, useEffect, useState } from "react";
 import { api, ApiError, setToken } from "../api";
 import type { Me, PublicUser } from "../types";
 import {
+  EditIcon,
   GlobeIcon,
   LockIcon,
   LogOutIcon,
+  MapPinIcon,
   MoonIcon,
   ShieldIcon,
   WalletIcon,
 } from "../components/Icons";
+import { useNav } from "../nav";
 
 interface Props {
   me: Me;
@@ -16,10 +19,13 @@ interface Props {
 }
 
 export function YouScreen({ me, onMeChanged }: Props) {
+  const nav = useNav();
   const [privacy, setPrivacy] = useState(me.privacy);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<{ tone: "ok" | "bad"; text: string } | null>(null);
   const [blocked, setBlocked] = useState<PublicUser[]>([]);
+  const [city, setCity] = useState("");
+  const [area, setArea] = useState("");
 
   const loadBlocked = useCallback(async () => {
     try {
@@ -86,7 +92,63 @@ export function YouScreen({ me, onMeChanged }: Props) {
               @{me.handle} · {me.email}
             </div>
           </div>
+          <button className="btn" onClick={() => nav.push({ name: "edit-profile" })}>
+            <EditIcon width={16} height={16} /> Edit
+          </button>
         </div>
+      </div>
+
+      <div className="card" style={{ marginBottom: "var(--space-3)" }}>
+        <div className="row" style={{ gap: "var(--space-2)", marginBottom: "var(--space-3)" }}>
+          <MapPinIcon width={18} height={18} style={{ color: "var(--violet-soft)" }} />
+          <span className="section-title">Your area</span>
+        </div>
+        <p className="muted" style={{ marginTop: 0 }}>
+          Used to rank Explore by area. This is a city and area label you type — Vibe never reads
+          your device location and never stores coordinates.
+        </p>
+        <div className="row" style={{ gap: "var(--space-3)" }}>
+          <div className="grow">
+            <label htmlFor="youCity">City</label>
+            <input
+              id="youCity"
+              value={city}
+              onChange={(e) => setCity(e.target.value)}
+              placeholder={me.city ?? "Lagos"}
+            />
+          </div>
+          <div className="grow">
+            <label htmlFor="youArea">Area</label>
+            <input
+              id="youArea"
+              value={area}
+              onChange={(e) => setArea(e.target.value)}
+              placeholder={me.area ?? "Lekki"}
+            />
+          </div>
+        </div>
+        <button
+          className="btn block"
+          disabled={saving}
+          onClick={async () => {
+            setSaving(true);
+            setMessage(null);
+            try {
+              await api("/v1/me", {
+                method: "PATCH",
+                body: { city: city.trim() || null, area: area.trim() || null },
+              });
+              setMessage({ tone: "ok", text: "Area saved." });
+              await onMeChanged();
+            } catch (err) {
+              setMessage({ tone: "bad", text: err instanceof ApiError ? err.message : "Could not save" });
+            } finally {
+              setSaving(false);
+            }
+          }}
+        >
+          Save area
+        </button>
       </div>
 
       <div className="card" style={{ marginBottom: "var(--space-3)" }}>
@@ -111,8 +173,8 @@ export function YouScreen({ me, onMeChanged }: Props) {
         />
         <Toggle
           id="locationEnabled"
-          label="Location features"
-          hint="Off by default — only used for Nearby"
+          label="Area-level discovery"
+          hint="Uses the city and area you type — never your device location"
           checked={privacy.locationEnabled}
           onChange={(v) => setPrivacy({ ...privacy, locationEnabled: v })}
         />

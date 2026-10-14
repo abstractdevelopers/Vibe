@@ -18,6 +18,9 @@ const createPlanSchema = z.object({
   budgetCurrency: z.string().length(3).optional(),
   participantLimit: z.number().int().positive().optional(),
   cancellationPolicy: z.string().max(1000).optional(),
+  city: z.string().max(80).optional(),
+  area: z.string().max(80).optional(),
+  discoverable: z.boolean().default(false),
 });
 
 const rsvpSchema = z.object({
@@ -62,8 +65,9 @@ export function plansRoutes(ctx: AppContext) {
       const plan = await queryOne<{ id: string }>(
         ctx.pool,
         `INSERT INTO plans (id, circle_id, organizer_id, title, description, state, starts_at, timezone,
-                            place, online_url, budget_amount, budget_currency, participant_limit, cancellation_policy)
-         VALUES ($1, $2, $3, $4, $5, 'proposed', $6, $7, $8, $9, $10, $11, $12, $13) RETURNING id`,
+                            place, online_url, budget_amount, budget_currency, participant_limit, cancellation_policy,
+                            city, area, discoverable)
+         VALUES ($1, $2, $3, $4, $5, 'proposed', $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16) RETURNING id`,
         [
           newId(),
           input.circleId,
@@ -78,6 +82,9 @@ export function plansRoutes(ctx: AppContext) {
           input.budgetCurrency ?? null,
           input.participantLimit ?? null,
           input.cancellationPolicy ?? null,
+          input.city ?? null,
+          input.area ?? null,
+          input.discoverable,
         ],
       );
       await notifyCircle(ctx, input.circleId, user.id, "plan.created", plan!.id, {

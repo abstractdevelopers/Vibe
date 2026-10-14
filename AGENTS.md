@@ -59,15 +59,37 @@ test for any state transition, retry, or duplicate-event path you touch.
 ## Web client
 
 - `apps/web/src/nav.ts` holds a tiny in-memory navigation context: five tabs
-  plus a stack of detail routes (inbox, profile, plan, expense). It is not a
-  router — swap it for one when deep links matter. Detail screens take an id.
+  plus a stack of detail routes (inbox, profile, plan, expense, edit-profile,
+  settings, place). It is not a router — swap it for one when deep links
+  matter. Detail screens take an id.
 - Icons come from `lucide-react`, re-exported through
   `components/Icons.tsx`. Never hand-roll SVG paths or use emoji.
+- Empty states use `components/EmptyState.tsx` (icon + title + one line of
+  help + an optional next action). Do not build one-off empty markup — the
+  old `.empty` blocks rendered illegible text on the dark surfaces.
+- The feed is a flat editorial stream (`.post`), not a stack of gradient
+  cards. Cards are reserved for self-contained objects (profiles, Circles,
+  plans, expenses).
 - `realtime.ts` opens the `/v1/realtime` socket and only signals that something
   changed; every surface also loads over HTTP, so the UI stays correct when the
   socket is down.
 - Avoid reloading a whole list after a small write (e.g. posting a comment);
   update local state, or the reload will remount cards and collapse open UI.
+
+## Media, discovery, and location
+
+- `modules/media.ts` is a local-disk stub: it accepts an image data URL,
+  validates the decoded magic bytes, and serves the file from `/v1/media/<id>`.
+  Swap `DiskMediaStore` for object storage later; keep the same boundary.
+- Posts carry media in `posts.metadata.mediaUrls`. `createPostSchema` accepts an
+  absolute `http(s)` URL or our own `/v1/media/<id>` path — nothing else, so a
+  post can never smuggle in a `javascript:` URL.
+- `modules/discovery.ts` ranks places and discoverable plans with an explainable
+  score (area match, interest affinity, relationship, recency, verification).
+  Every result returns `reasons`; never show a ranked item without them.
+- **Location is a typed city + area label, never a device fix.** There is no
+  `navigator.geolocation` call and no coordinate column anywhere. Do not add
+  either. See `migrations/0002_discovery.sql`.
 
 ## Do not
 

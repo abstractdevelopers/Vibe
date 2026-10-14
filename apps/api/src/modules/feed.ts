@@ -7,11 +7,22 @@ import { newId } from "../ids.js";
 import { parse, publicUser, requireUser, type AppContext, type UserLike } from "../http.js";
 import { requireCircleMember } from "./access.js";
 
+// Accepts either an absolute URL or a root-relative path returned by our own
+// media boundary (e.g. /v1/media/<id>). Anything else — javascript:, data: —
+// is rejected so a post can never smuggle in an executable URL.
+const mediaUrl = z
+  .string()
+  .max(1000)
+  .refine((value) => /^https?:\/\//.test(value) || /^\/v1\/media\/[A-Za-z0-9._-]+$/.test(value), {
+    message: "Must be an http(s) URL or a Vibe media path",
+  });
+
 const createPostSchema = z.object({
   body: z.string().max(5000).optional(),
   type: z.enum(["text", "image", "video", "carousel", "poll", "announcement"]).default("text"),
   audience: z.enum(["public", "connections", "circle", "private"]).default("connections"),
   circleId: z.string().uuid().optional(),
+  mediaUrls: z.array(mediaUrl).max(4).optional(),
 });
 
 const commentSchema = z.object({ body: z.string().min(1).max(2000) });
@@ -27,6 +38,7 @@ interface PostRow {
   status: string;
   is_sponsored: boolean;
   created_at: Date;
+  metadata: { mediaUrls?: string[] } | null;
   handle: string;
   display_name: string;
   avatar_url: string | null;
@@ -44,7 +56,7 @@ async function visiblePosts(
   return queryMany<PostRow>(
     db,
     `SELECT p.id, p.author_id, p.circle_id, p.type, p.audience, p.body, p.status,
-            p.is_sponsored, p.created_at,
+            p.is_sponsored, p.created_at, p.metadata,
             u.handle, u.display_name, u.avatar_url,
             (SELECT count(*) FROM reactions r WHERE r.post_id = p.id) AS reaction_count,
             (SELECT count(*) FROM comments c WHERE c.post_id = p.id AND c.deleted_at IS NULL) AS comment_count,
@@ -116,6 +128,7 @@ async function attachActivities(db: Db, posts: PostRow[], viewerId: string) {
     audience: post.audience,
     circleId: post.circle_id,
     body: post.body,
+    mediaUrls: post.metadata?.mediaUrls ?? [],
     isSponsored: post.is_sponsored,
     createdAt: post.created_at,
     author: publicUser(post),
@@ -174,11 +187,22 @@ export function feedRoutes(ctx: AppContext) {
       if (!input.body && input.type === "text") {
         throw ApiError.badRequest("A text post needs a body");
       }
+      if (!input.body && (!input.mediaUrls || input.mediaUrls.length === 0)) {
+        throw ApiError.badRequest("A post needs text or at least one photo");
+      }
       const post = await queryOne<{ id: string; created_at: Date }>(
         ctx.pool,
-        `INSERT INTO posts (id, author_id, circle_id, type, audience, body)
-         VALUES ($1, $2, $3, $4, $5, $6) RETURNING id, created_at`,
-        [newId(), user.id, input.circleId ?? null, input.type, input.audience, input.body ?? null],
+        `INSERT INTO posts (id, author_id, circle_id, type, audience, body, metadata)
+         VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id, created_at`,
+        [
+          newId(),
+          user.id,
+          input.circleId ?? null,
+          input.type,
+          input.audience,
+          input.body ?? null,
+          JSON.stringify({ mediaUrls: input.mediaUrls ?? [] }),
+        ],
       );
       reply.code(201);
       return { id: post!.id, createdAt: post!.created_at };

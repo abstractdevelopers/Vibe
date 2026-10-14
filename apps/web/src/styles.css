@@ -1140,6 +1140,299 @@ select {
   letter-spacing: var(--tracking-wide);
 }
 
+/* ============================================================
+   Feed stream — flat, editorial, not a stack of cards
+   ============================================================ */
+
+.stream {
+  display: flex;
+  flex-direction: column;
+}
+
+/* A post is a row of the stream: no box, no shadow, no nested card. */
+.post {
+  padding: var(--space-4) 0 var(--space-2);
+  border-bottom: 1px solid var(--hairline);
+}
+
+.post-head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  margin-bottom: var(--space-2);
+}
+
+.post-body {
+  margin: 0 0 var(--space-2);
+  font-size: 16px;
+  line-height: var(--leading-body);
+  color: var(--text);
+  text-wrap: pretty;
+}
+
+/* Inline activity (poll, plan, split) reads as an inset panel, not a card
+   inside a card. */
+.inset {
+  margin: var(--space-2) 0 var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  background: color-mix(in srgb, var(--surface-1) 70%, transparent);
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-sm);
+}
+
+/* Action bar sits flush on the stream, not inside a box. */
+.post-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  margin-top: var(--space-1);
+}
+.post-actions .react-btn {
+  min-height: 36px;
+  padding: 0 var(--space-2);
+}
+.post-actions .react-btn:hover {
+  background: color-mix(in srgb, var(--surface-3) 55%, transparent);
+}
+
+/* ============================================================
+   Composer — compact, one clear way to create
+   ============================================================ */
+
+.composer {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3) 0;
+  border-bottom: 1px solid var(--hairline);
+}
+.composer-open {
+  display: block;
+  padding: var(--space-4) 0;
+  border-bottom: 1px solid var(--hairline);
+}
+.composer-prompt {
+  flex: 1;
+  min-height: 44px;
+  padding: 0 var(--space-4);
+  text-align: left;
+  font-size: var(--text-body);
+  color: var(--text-muted);
+  background: color-mix(in srgb, var(--surface-2) 60%, transparent);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+  cursor: pointer;
+  transition: border-color var(--motion-fast) var(--ease-out),
+    background var(--motion-fast) var(--ease-out);
+}
+.composer-prompt:hover {
+  border-color: var(--border-strong);
+  background: color-mix(in srgb, var(--surface-3) 60%, transparent);
+}
+.composer-tools {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  flex-wrap: wrap;
+}
+.tool-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 40px;
+  padding: 0 var(--space-3);
+  font-size: var(--text-supporting);
+  font-weight: 600;
+  color: var(--text-muted);
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+  cursor: pointer;
+  transition: all var(--motion-fast) var(--ease-out);
+}
+.tool-btn:hover {
+  color: var(--text);
+  border-color: var(--border-strong);
+}
+.tool-btn.violet:hover {
+  color: var(--violet-soft);
+  border-color: color-mix(in srgb, var(--violet) 60%, transparent);
+}
+.tool-btn.coral:hover {
+  color: var(--coral-soft);
+  border-color: color-mix(in srgb, var(--coral) 60%, transparent);
+}
+
+/* ============================================================
+   Empty states — always legible, always with a next step
+   ============================================================ */
+
+.empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-2);
+  text-align: center;
+  padding: var(--space-10) var(--space-5);
+  margin: var(--space-4) 0;
+  background: color-mix(in srgb, var(--surface-1) 55%, transparent);
+  border: 1px dashed var(--border-strong);
+  border-radius: var(--radius-card);
+  color: var(--text-secondary);
+}
+.empty-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 52px;
+  height: 52px;
+  margin-bottom: var(--space-1);
+  color: var(--violet-soft);
+  background: color-mix(in srgb, var(--violet) 14%, transparent);
+  border-radius: var(--radius-pill);
+}
+.empty-icon svg {
+  width: 26px;
+  height: 26px;
+}
+.empty-title {
+  font-family: var(--font-display);
+  font-size: var(--text-section);
+  font-weight: 700;
+  color: var(--text);
+}
+.empty-text {
+  max-width: 34ch;
+  font-size: var(--text-supporting);
+  line-height: var(--leading-body);
+  color: var(--text-muted);
+}
+.empty .btn {
+  margin-top: var(--space-3);
+}
+
+/* Feed item media */
+.post-media {
+  margin: var(--space-2) 0 var(--space-3);
+  border-radius: var(--radius-card);
+  overflow: hidden;
+  border: 1px solid var(--hairline);
+  background: var(--surface-1);
+}
+.post-media img {
+  display: block;
+  width: 100%;
+  max-height: 560px;
+  object-fit: cover;
+}
+.post-media-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 2px;
+}
+.post-media-grid img {
+  max-height: 260px;
+}
+
+/* Drop zone in the create sheet */
+.dropzone {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-6) var(--space-4);
+  text-align: center;
+  color: var(--text-muted);
+  background: color-mix(in srgb, var(--surface-1) 60%, transparent);
+  border: 1px dashed var(--border-strong);
+  border-radius: var(--radius-card);
+  cursor: pointer;
+}
+.dropzone:hover {
+  border-color: var(--violet);
+  color: var(--text-secondary);
+}
+.thumb-row {
+  display: flex;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+.thumb {
+  position: relative;
+  width: 84px;
+  height: 84px;
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  border: 1px solid var(--border);
+}
+.thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.thumb button {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  width: 24px;
+  height: 24px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  background: rgba(0, 0, 0, 0.6);
+  border: none;
+  border-radius: var(--radius-pill);
+  cursor: pointer;
+}
+
+/* Top-bar account menu */
+.menu {
+  position: absolute;
+  top: calc(100% + var(--space-2));
+  right: 0;
+  z-index: 60;
+  min-width: 220px;
+  padding: var(--space-2);
+  background: var(--surface-2);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow-lg);
+  animation: fade-in var(--motion-fast) var(--ease-out);
+}
+.menu-head {
+  padding: var(--space-2) var(--space-3) var(--space-3);
+  border-bottom: 1px solid var(--hairline);
+  margin-bottom: var(--space-2);
+}
+.menu-item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  width: 100%;
+  min-height: 44px;
+  padding: 0 var(--space-3);
+  text-align: left;
+  font-size: var(--text-body);
+  font-weight: 600;
+  color: var(--text-secondary);
+  background: none;
+  border: none;
+  border-radius: var(--radius-button);
+  cursor: pointer;
+  transition: background var(--motion-fast) var(--ease-out), color var(--motion-fast) var(--ease-out);
+}
+.menu-item:hover {
+  color: var(--text);
+  background: color-mix(in srgb, var(--surface-3) 70%, transparent);
+}
+.menu-item.danger {
+  color: var(--danger);
+}
+.menu-item.danger:hover {
+  background: color-mix(in srgb, var(--danger) 14%, transparent);
+}
+
 /* ---- Accessibility ---- */
 
 :focus-visible {

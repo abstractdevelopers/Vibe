@@ -2,31 +2,34 @@ import { useCallback, useEffect, useState } from "react";
 import { api, ApiError } from "../api";
 import type { Comment, FeedItem, Me, PollActivity } from "../types";
 import {
-  ChatIcon,
   CommentIcon,
   HeartIcon,
+  ImageIcon,
   InboxIcon,
+  PollIcon,
   SendIcon,
   ShareIcon,
 } from "../components/Icons";
+import { EmptyState } from "../components/EmptyState";
 import { useNav } from "../nav";
 import { ReportSheet } from "../components/ReportSheet";
+
+export type CreateMode = "post" | "poll" | "plan" | "expense" | "media";
 
 interface Props {
   me: Me;
   refreshKey: number;
   onChanged: () => void;
+  onCreate: (mode: CreateMode) => void;
 }
 
 type FeedTab = "for-you" | "following";
 
-export function HomeScreen({ me, refreshKey, onChanged }: Props) {
+export function HomeScreen({ me, refreshKey, onChanged, onCreate }: Props) {
   const [tab, setTab] = useState<FeedTab>("for-you");
   const [items, setItems] = useState<FeedItem[] | null>(null);
   const [cursor, setCursor] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [composer, setComposer] = useState("");
-  const [posting, setPosting] = useState(false);
 
   const load = useCallback(async () => {
     setItems(null);
@@ -53,20 +56,6 @@ export function HomeScreen({ me, refreshKey, onChanged }: Props) {
     setCursor(result.nextCursor);
   }
 
-  async function submitPost() {
-    if (!composer.trim()) return;
-    setPosting(true);
-    try {
-      await api("/v1/posts", { body: { body: composer.trim(), audience: "connections" } });
-      setComposer("");
-      onChanged();
-    } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Could not publish");
-    } finally {
-      setPosting(false);
-    }
-  }
-
   async function toggleReaction(item: FeedItem) {
     setItems((prev) =>
       (prev ?? []).map((p) =>
@@ -86,13 +75,15 @@ export function HomeScreen({ me, refreshKey, onChanged }: Props) {
     }
   }
 
+  const firstName = me.displayName.split(" ")[0];
+
   return (
     <div>
-      <div className="row spread" style={{ marginTop: "var(--space-2)", marginBottom: "var(--space-4)" }}>
+      <div className="row spread" style={{ marginTop: "var(--space-2)", marginBottom: "var(--space-3)" }}>
         <div>
           <p className="eyebrow">Good to see you</p>
           <h1 className="screen-title" style={{ margin: 0 }}>
-            {me.displayName.split(" ")[0]}
+            {firstName}
           </h1>
         </div>
         <span className="avatar" aria-hidden="true">
@@ -100,29 +91,26 @@ export function HomeScreen({ me, refreshKey, onChanged }: Props) {
         </span>
       </div>
 
-      <div className="card" style={{ marginBottom: "var(--space-4)" }}>
-        <div className="row" style={{ alignItems: "flex-start" }}>
-          <span className="avatar sm" aria-hidden="true">
-            {me.displayName.slice(0, 1).toUpperCase()}
-          </span>
-          <textarea
-            aria-label="What's happening?"
-            value={composer}
-            onChange={(e) => setComposer(e.target.value)}
-            placeholder="What's happening?"
-            style={{ marginBottom: 0, minHeight: 72 }}
-          />
-        </div>
-        <div className="row spread" style={{ marginTop: "var(--space-3)" }}>
-          <span className="audience-tag">Visible to your connections</span>
-          <button
-            className="btn primary"
-            onClick={() => void submitPost()}
-            disabled={posting || !composer.trim()}
-          >
-            {posting ? "Posting…" : "Post"}
-          </button>
-        </div>
+      {/* One composer. It opens the same create sheet as the centre action, so
+          there is a single creation flow rather than two competing ones. */}
+      <div className="composer">
+        <span className="avatar sm" aria-hidden="true">
+          {me.displayName.slice(0, 1).toUpperCase()}
+        </span>
+        <button className="composer-prompt" onClick={() => onCreate("post")}>
+          What&rsquo;s happening, {firstName}?
+        </button>
+      </div>
+      <div className="composer-tools" style={{ padding: "var(--space-2) 0" }}>
+        <button className="tool-btn" onClick={() => onCreate("media")}>
+          <ImageIcon width={16} height={16} /> Photo
+        </button>
+        <button className="tool-btn violet" onClick={() => onCreate("poll")}>
+          <PollIcon width={16} height={16} /> Poll
+        </button>
+        <button className="tool-btn coral" onClick={() => onCreate("plan")}>
+          <PollIcon width={16} height={16} /> Plan
+        </button>
       </div>
 
       <div className="pill-row" role="tablist" aria-label="Feed filter">
@@ -132,12 +120,16 @@ export function HomeScreen({ me, refreshKey, onChanged }: Props) {
         <button className="pill" role="tab" aria-pressed={tab === "following"} onClick={() => setTab("following")}>
           Following
         </button>
-        <button className="pill" disabled title="Enable location in settings to use Nearby">
-          Nearby · off
-        </button>
       </div>
 
-      {error && <div className="notice danger">{error}</div>}
+      {error && (
+        <div className="notice danger">
+          <span className="grow">{error}</span>
+          <button className="btn ghost" onClick={() => void load()}>
+            Retry
+          </button>
+        </div>
+      )}
 
       {items === null && (
         <div aria-busy="true">
@@ -148,18 +140,30 @@ export function HomeScreen({ me, refreshKey, onChanged }: Props) {
       )}
 
       {items?.length === 0 && (
-        <div className="empty">
-          <InboxIcon width={40} height={40} strokeWidth={1.5} />
-          <h3 className="section-title">Your feed is quiet</h3>
-          <p className="muted" style={{ maxWidth: "30ch" }}>
-            Join a Circle or follow people and this space fills up with plans and ideas.
-          </p>
-        </div>
+        <EmptyState
+          icon={<InboxIcon />}
+          title="Your feed is quiet"
+          text="Follow people or join a Circle and this space fills with plans, polls and ideas."
+          action={
+            <button className="btn primary" onClick={() => onCreate("post")}>
+              Write the first post
+            </button>
+          }
+        />
       )}
 
-      {items?.map((item) => (
-        <FeedCard key={item.id} item={item} me={me} onReact={() => void toggleReaction(item)} onChanged={onChanged} />
-      ))}
+      <div className="stream">
+        {items?.map((item) => (
+          <FeedCard
+            key={item.id}
+            item={item}
+            me={me}
+            onReact={() => void toggleReaction(item)}
+            onChanged={onChanged}
+            onCreate={onCreate}
+          />
+        ))}
+      </div>
 
       {cursor && (
         <button className="btn block" onClick={() => void loadMore()}>
@@ -170,7 +174,19 @@ export function HomeScreen({ me, refreshKey, onChanged }: Props) {
   );
 }
 
-function FeedCard({ item, me, onReact, onChanged }: { item: FeedItem; me: Me; onReact: () => void; onChanged: () => void }) {
+function FeedCard({
+  item,
+  me,
+  onReact,
+  onChanged,
+  onCreate,
+}: {
+  item: FeedItem;
+  me: Me;
+  onReact: () => void;
+  onChanged: () => void;
+  onCreate: (mode: CreateMode) => void;
+}) {
   const nav = useNav();
   const [commentsOpen, setCommentsOpen] = useState(false);
   const [reporting, setReporting] = useState(false);
@@ -187,19 +203,23 @@ function FeedCard({ item, me, onReact, onChanged }: { item: FeedItem; me: Me; on
   }
 
   return (
-    <article className="card" style={{ marginBottom: "var(--space-3)" }}>
+    <article className="post">
       {item.isSponsored && (
-        <div className="row spread" style={{ marginBottom: "var(--space-3)" }}>
+        <div className="row spread" style={{ marginBottom: "var(--space-2)" }}>
           <span className="sponsored-tag">Sponsored</span>
-          <button className="meta" onClick={() => setReporting(true)} style={{ background: "none", border: "none", cursor: "pointer" }}>
+          <button
+            className="meta"
+            onClick={() => setReporting(true)}
+            style={{ background: "none", border: "none", cursor: "pointer" }}
+          >
             Why this ad · Report
           </button>
         </div>
       )}
 
-      <div className="feed-head">
+      <div className="post-head">
         <button
-          className="avatar"
+          className="avatar sm"
           aria-label={`View ${item.author.displayName}'s profile`}
           onClick={() => nav.push({ name: "profile", userId: item.author.id })}
           style={{ border: "none", cursor: "pointer" }}
@@ -221,10 +241,11 @@ function FeedCard({ item, me, onReact, onChanged }: { item: FeedItem; me: Me; on
         <span className="audience-tag">{audienceLabel(item.audience)}</span>
       </div>
 
-      {item.body && <p className="feed-body">{item.body}</p>}
+      {item.body && <p className="post-body">{item.body}</p>}
+      {item.mediaUrls && item.mediaUrls.length > 0 && <PostMedia urls={item.mediaUrls} />}
       {item.activity && <PollCard activity={item.activity} onChanged={onChanged} />}
 
-      <div className="feed-actions">
+      <div className="post-actions">
         <button className="react-btn" onClick={onReact} aria-pressed={item.viewerReacted}>
           <HeartIcon />
           {item.reactionCount > 0 ? item.reactionCount : "Like"}
@@ -238,6 +259,9 @@ function FeedCard({ item, me, onReact, onChanged }: { item: FeedItem; me: Me; on
           <CommentIcon />
           {item.commentCount > 0 ? item.commentCount : "Comment"}
         </button>
+        <button className="react-btn" onClick={() => onCreate("media")} aria-label="Add a photo">
+          <ImageIcon />
+        </button>
         <button className="react-btn" onClick={() => void share()} aria-label="Share">
           <ShareIcon />
         </button>
@@ -245,10 +269,25 @@ function FeedCard({ item, me, onReact, onChanged }: { item: FeedItem; me: Me; on
 
       {commentsOpen && <CommentThread postId={item.id} me={me} onChanged={onChanged} />}
 
-      {reporting && (
-        <ReportSheet targetType="post" targetId={item.id} onClose={() => setReporting(false)} />
-      )}
+      {reporting && <ReportSheet targetType="post" targetId={item.id} onClose={() => setReporting(false)} />}
     </article>
+  );
+}
+
+function PostMedia({ urls }: { urls: string[] }) {
+  if (urls.length === 1) {
+    return (
+      <div className="post-media">
+        <img src={urls[0]} alt="" loading="lazy" />
+      </div>
+    );
+  }
+  return (
+    <div className="post-media post-media-grid">
+      {urls.slice(0, 4).map((url) => (
+        <img key={url} src={url} alt="" loading="lazy" />
+      ))}
+    </div>
   );
 }
 
@@ -296,7 +335,11 @@ function CommentThread({ postId, me, onChanged }: { postId: string; me: Me; onCh
       {comments === null && <p className="meta">Loading comments…</p>}
       {comments?.length === 0 && <p className="meta">No comments yet. Start the conversation.</p>}
       {comments?.map((c) => (
-        <div key={c.id} className="row" style={{ gap: "var(--space-2)", alignItems: "flex-start", marginBottom: "var(--space-2)" }}>
+        <div
+          key={c.id}
+          className="row"
+          style={{ gap: "var(--space-2)", alignItems: "flex-start", marginBottom: "var(--space-2)" }}
+        >
           <button
             className="avatar sm"
             aria-label={`View ${c.author.displayName}'s profile`}
@@ -349,7 +392,7 @@ function PollCard({ activity, onChanged }: { activity: PollActivity; onChanged: 
   }
 
   return (
-    <div className="stack" style={{ marginTop: "var(--space-3)" }}>
+    <div className="inset stack">
       <div className="row spread">
         <span className="eyebrow">Poll</span>
         <span className="meta">
@@ -404,4 +447,3 @@ function relativeTime(iso: string): string {
   if (days < 7) return `${days}d`;
   return new Date(iso).toLocaleDateString(undefined, { month: "short", day: "numeric" });
 }
-

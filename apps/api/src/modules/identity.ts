@@ -37,6 +37,21 @@ const privacySchema = z.object({
   contactsSyncEnabled: z.boolean().optional(),
 });
 
+const profileSchema = z.object({
+  displayName: z.string().min(1).max(60).optional(),
+  handle: z
+    .string()
+    .min(3)
+    .max(30)
+    .regex(/^[a-zA-Z0-9_]+$/, "Handle may contain letters, digits and underscore only")
+    .optional(),
+  bio: z.string().max(280).nullable().optional(),
+  avatarUrl: z.string().url().max(1000).nullable().optional(),
+  interests: z.array(z.string().min(1).max(40)).max(20).optional(),
+  city: z.string().max(80).nullable().optional(),
+  area: z.string().max(80).nullable().optional(),
+});
+
 interface UserRow {
   id: string;
   email: string;
@@ -105,7 +120,8 @@ export function identityRoutes(ctx: AppContext) {
       const user = await requireUser(ctx, req);
       const row = await queryOne<UserRow & Record<string, unknown>>(
         ctx.pool,
-        `SELECT id, email, handle, display_name, bio, avatar_url, is_admin,
+        `SELECT id, email, handle, display_name, bio, avatar_url, is_admin, interests,
+                city, area,
                 discoverable, profile_audience, activity_visibility, read_receipts,
                 location_enabled, contacts_sync_enabled
            FROM users WHERE id = $1`,
@@ -115,6 +131,9 @@ export function identityRoutes(ctx: AppContext) {
         ...publicUser(row!),
         email: row!.email,
         isAdmin: row!.is_admin,
+        interests: (row!.interests as string[]) ?? [],
+        city: (row!.city as string | null) ?? null,
+        area: (row!.area as string | null) ?? null,
         privacy: {
           discoverable: row!.discoverable,
           profileAudience: row!.profile_audience,
@@ -122,6 +141,69 @@ export function identityRoutes(ctx: AppContext) {
           readReceipts: row!.read_receipts,
           locationEnabled: row!.location_enabled,
           contactsSyncEnabled: row!.contacts_sync_enabled,
+        },
+      };
+    });
+
+    app.patch("/v1/me", async (req) => {
+      const user = await requireUser(ctx, req);
+      const input = parse(profileSchema, req.body);
+      const columns: Record<string, string> = {
+        displayName: "display_name",
+        handle: "handle",
+        bio: "bio",
+        avatarUrl: "avatar_url",
+        interests: "interests",
+        city: "city",
+        area: "area",
+      };
+      const sets: string[] = [];
+      const values: unknown[] = [user.id];
+      for (const [key, column] of Object.entries(columns)) {
+        const value = (input as Record<string, unknown>)[key];
+        if (value !== undefined) {
+          values.push(value);
+          sets.push(`${column} = $${values.length}`);
+        }
+      }
+      if (sets.length === 0) throw ApiError.badRequest("Nothing to update");
+
+      // Handles are the public identity, so a change must stay unique and
+      // cannot be a case-only variant of someone else's handle.
+      if (input.handle !== undefined) {
+        const clash = await queryOne<{ id: string }>(
+          ctx.pool,
+          "SELECT id FROM users WHERE lower(handle) = lower($1) AND id <> $2",
+          [input.handle, user.id],
+        );
+        if (clash) throw ApiError.conflict("That handle is taken");
+      }
+
+      sets.push("updated_at = now()");
+      const updated = await queryOne<UserRow & Record<string, unknown>>(
+        ctx.pool,
+        `UPDATE users SET ${sets.join(", ")}
+          WHERE id = $1
+      RETURNING id, email, handle, display_name, bio, avatar_url, is_admin,
+                city, area,
+                discoverable, profile_audience, activity_visibility, read_receipts,
+                location_enabled, contacts_sync_enabled, interests`,
+        values,
+      );
+      return {
+        ...publicUser(updated!),
+        email: updated!.email,
+        isAdmin: updated!.is_admin,
+        interests: (updated!.interests as string[]) ?? [],
+        city: (updated!.city as string | null) ?? null,
+        area: (updated!.area as string | null) ?? null,
+        privacy: {
+          discoverable: updated!.discoverable,
+          profileAudience: updated!.profile_audience,
+          activityVisibility: updated!.activity_visibility,
+          readReceipts: updated!.read_receipts,
+          locationEnabled: updated!.location_enabled,
+          contactsSyncEnabled: updated!.contacts_sync_enabled,
         },
       };
     });

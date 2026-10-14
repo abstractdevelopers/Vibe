@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { api, ApiError } from "../api";
 import type { Notification } from "../types";
+import { EmptyState } from "../components/EmptyState";
 import {
   BellIcon,
   CalendarIcon,
@@ -67,13 +68,11 @@ export function InboxScreen({ refreshKey, onChanged }: Props) {
       )}
 
       {items?.length === 0 && (
-        <div className="empty">
-          <BellIcon width={40} height={40} strokeWidth={1.5} />
-          <h3 className="section-title">You&rsquo;re all caught up</h3>
-          <p className="muted" style={{ maxWidth: "30ch" }}>
-            Plan updates, RSVPs and shared-expense activity land here.
-          </p>
-        </div>
+        <EmptyState
+          icon={<BellIcon />}
+          title="You're all caught up"
+          text="Plan updates, RSVPs and shared-expense activity land here."
+        />
       )}
 
       {items?.map((n) => {

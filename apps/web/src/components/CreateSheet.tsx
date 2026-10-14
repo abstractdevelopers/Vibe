@@ -6,32 +6,39 @@ import {
   CalendarIcon,
   CheckIcon,
   CloseIcon,
+  ImageIcon,
   PollIcon,
   PlanIcon,
   SplitIcon,
   CommentIcon,
+  UploadIcon,
   WalletIcon,
   ChatIcon,
   UsersIcon,
 } from "../components/Icons";
+import { useImageUpload } from "../media";
+
+export type CreateMode = "post" | "poll" | "plan" | "expense" | "media";
 
 interface Props {
   me: Me;
+  initialMode?: CreateMode;
   onClose: () => void;
   onCreated: () => void;
 }
 
-type Mode = "post" | "poll" | "plan" | "expense";
+type Mode = CreateMode;
 
 const MODES: Array<{ id: Mode; label: string; hint: string; Icon: typeof ChatIcon }> = [
   { id: "post", label: "Post", hint: "Share something with your connections or a Circle.", Icon: ChatIcon },
+  { id: "media", label: "Photo", hint: "Add up to four photos. They are resized before upload.", Icon: ImageIcon },
   { id: "poll", label: "Poll", hint: "Ask a question. Everyone gets one vote.", Icon: PollIcon },
   { id: "plan", label: "Plan", hint: "Propose an outing and collect RSVPs.", Icon: PlanIcon },
   { id: "expense", label: "Split", hint: "Track a shared cost — Vibe never holds the money.", Icon: SplitIcon },
 ];
 
-export function CreateSheet({ me, onClose, onCreated }: Props) {
-  const [mode, setMode] = useState<Mode>("post");
+export function CreateSheet({ me, initialMode = "post", onClose, onCreated }: Props) {
+  const [mode, setMode] = useState<Mode>(initialMode);
   const [circles, setCircles] = useState<CircleSummary[]>([]);
   const [error, setError] = useState<string | null>(null);
   const active = MODES.find((m) => m.id === mode)!;
@@ -88,7 +95,8 @@ export function CreateSheet({ me, onClose, onCreated }: Props) {
 
         {error && <div className="notice danger">{error}</div>}
 
-        {mode === "post" && <PostForm circles={circles} onDone={onCreated} setError={setError} />}
+        {mode === "post" && <PostForm circles={circles} onDone={onCreated} setError={setError} allowMedia />}
+        {mode === "media" && <PostForm circles={circles} onDone={onCreated} setError={setError} mediaOnly />}
         {mode === "poll" && <PollForm circles={circles} onDone={onCreated} setError={setError} />}
         {mode === "plan" && <PlanForm circles={circles} onDone={onCreated} setError={setError} />}
         {mode === "expense" && <ExpenseForm me={me} circles={circles} onDone={onCreated} setError={setError} />}
@@ -136,21 +144,33 @@ function PostForm({
   circles,
   onDone,
   setError,
+  allowMedia,
+  mediaOnly,
 }: {
   circles: CircleSummary[];
   onDone: () => void;
   setError: (v: string | null) => void;
+  allowMedia?: boolean;
+  mediaOnly?: boolean;
 }) {
   const [body, setBody] = useState("");
   const [circleId, setCircleId] = useState("");
   const [busy, setBusy] = useState(false);
+  const media = useImageUpload();
 
   async function submit() {
     setBusy(true);
     setError(null);
     try {
+      const mediaUrls = media.images.length > 0 ? await media.upload() : [];
       await api("/v1/posts", {
-        body: { body, audience: circleId ? "circle" : "connections", ...(circleId ? { circleId } : {}) },
+        body: {
+          body: body.trim() || undefined,
+          type: mediaUrls.length > 0 ? "image" : "text",
+          audience: circleId ? "circle" : "connections",
+          ...(circleId ? { circleId } : {}),
+          ...(mediaUrls.length > 0 ? { mediaUrls } : {}),
+        },
       });
       onDone();
     } catch (err) {
@@ -160,6 +180,8 @@ function PostForm({
     }
   }
 
+  const canSubmit = (body.trim().length > 0 || media.images.length > 0) && !busy && !media.busy;
+
   return (
     <form
       onSubmit={(e) => {
@@ -167,13 +189,59 @@ function PostForm({
         void submit();
       }}
     >
-      <label htmlFor="postBody">Message</label>
-      <textarea id="postBody" value={body} onChange={(e) => setBody(e.target.value)} autoFocus required />
+      {!mediaOnly && (
+        <>
+          <label htmlFor="postBody">Message</label>
+          <textarea
+            id="postBody"
+            value={body}
+            onChange={(e) => setBody(e.target.value)}
+            autoFocus
+            required={media.images.length === 0}
+          />
+        </>
+      )}
+
+      {allowMedia || mediaOnly ? (
+        <div style={{ marginBottom: "var(--space-4)" }}>
+          {media.images.length > 0 && (
+            <div className="thumb-row" style={{ marginBottom: "var(--space-2)" }}>
+              {media.images.map((image, index) => (
+                <div className="thumb" key={image.preview}>
+                  <img src={image.preview} alt={`Attachment ${index + 1}`} />
+                  <button type="button" onClick={() => media.remove(index)} aria-label={`Remove photo ${index + 1}`}>
+                    <CloseIcon width={13} height={13} />
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+          {media.images.length < 4 && (
+            <label className="dropzone">
+              <UploadIcon width={22} height={22} />
+              <span>{media.busy ? "Preparing…" : "Add a photo"}</span>
+              <span className="meta">JPEG, PNG, WebP or GIF · up to 4 · resized before upload</span>
+              <input
+                type="file"
+                accept="image/*"
+                multiple
+                hidden
+                onChange={(e) => {
+                  if (e.target.files) void media.add(e.target.files);
+                  e.target.value = "";
+                }}
+              />
+            </label>
+          )}
+          {media.error && <div className="notice danger">{media.error}</div>}
+        </div>
+      ) : null}
+
       {circles.length > 0 && (
         <CircleSelect id="postCircle" circles={circles} value={circleId} onChange={setCircleId} allowNone />
       )}
-      <button className="btn primary block" type="submit" disabled={busy || !body.trim()}>
-        {busy ? "Posting…" : "Publish"}
+      <button className="btn primary block" type="submit" disabled={!canSubmit}>
+        {busy ? "Publishing…" : "Publish"}
       </button>
     </form>
   );
@@ -254,6 +322,9 @@ function PlanForm({
   const [title, setTitle] = useState("");
   const [startsAt, setStartsAt] = useState("");
   const [place, setPlace] = useState("");
+  const [city, setCity] = useState("");
+  const [area, setArea] = useState("");
+  const [discoverable, setDiscoverable] = useState(false);
   const [busy, setBusy] = useState(false);
 
   async function submit() {
@@ -271,6 +342,9 @@ function PlanForm({
           startsAt: new Date(startsAt).toISOString(),
           timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
           ...(place ? { place } : {}),
+          ...(city ? { city } : {}),
+          ...(area ? { area } : {}),
+          discoverable,
         },
       });
       onDone();
@@ -295,6 +369,31 @@ function PlanForm({
       <input id="planWhen" type="datetime-local" value={startsAt} onChange={(e) => setStartsAt(e.target.value)} required />
       <label htmlFor="planPlace">Place</label>
       <input id="planPlace" value={place} onChange={(e) => setPlace(e.target.value)} placeholder="Where?" />
+
+      <div className="row" style={{ gap: "var(--space-3)" }}>
+        <div className="grow">
+          <label htmlFor="planCity">City</label>
+          <input id="planCity" value={city} onChange={(e) => setCity(e.target.value)} placeholder="Lagos" />
+        </div>
+        <div className="grow">
+          <label htmlFor="planArea">Area</label>
+          <input id="planArea" value={area} onChange={(e) => setArea(e.target.value)} placeholder="Lekki" />
+        </div>
+      </div>
+
+      <label className="row" style={{ gap: "var(--space-2)", cursor: "pointer" }}>
+        <input
+          type="checkbox"
+          checked={discoverable}
+          onChange={(e) => setDiscoverable(e.target.checked)}
+          style={{ width: "auto", margin: 0 }}
+        />
+        <span style={{ fontWeight: 600 }}>Let people nearby discover this plan</span>
+      </label>
+      <p className="meta" style={{ marginTop: "-6px" }}>
+        Only the city and area are used. Vibe never shows anyone your precise location.
+      </p>
+
       <button className="btn primary block" type="submit" disabled={busy || !title.trim() || !startsAt || !circleId}>
         {busy ? "Creating…" : "Propose plan"}
       </button>

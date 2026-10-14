@@ -11,7 +11,10 @@ export type Route =
   | { name: "inbox" }
   | { name: "profile"; userId: string }
   | { name: "plan"; planId: string }
-  | { name: "expense"; expenseId: string };
+  | { name: "expense"; expenseId: string }
+  | { name: "edit-profile" }
+  | { name: "settings" }
+  | { name: "place"; placeId: string };
 
 export interface Navigation {
   route: Route;

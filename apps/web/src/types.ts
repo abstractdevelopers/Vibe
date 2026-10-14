@@ -9,6 +9,9 @@ export interface PublicUser {
 export interface Me extends PublicUser {
   email: string;
   isAdmin: boolean;
+  interests: string[];
+  city: string | null;
+  area: string | null;
   privacy: {
     discoverable: boolean;
     profileAudience: "public" | "connections" | "private";
@@ -40,6 +43,7 @@ export interface FeedItem {
   audience: string;
   circleId: string | null;
   body: string | null;
+  mediaUrls: string[];
   isSponsored: boolean;
   createdAt: string;
   author: PublicUser;

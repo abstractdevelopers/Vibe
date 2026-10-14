@@ -25,6 +25,8 @@ import {
   Compass,
   Globe,
   HandCoins,
+  Image,
+  Camera,
   Heart,
   Home,
   Inbox,
@@ -49,7 +51,12 @@ import {
   Timer,
   TrendingUp,
   Trophy,
+  Upload,
   User,
+  Pencil,
+  Ticket,
+  Flame,
+  Navigation,
   UserCheck,
   Users,
   Vote,
@@ -109,4 +116,11 @@ export const InfoIcon = icon(Info);
 export const AtIcon = icon(AtSign);
 export const UserCheckIcon = icon(UserCheck);
 export const SpinnerIcon = icon(Loader2);
+export const ImageIcon = icon(Image);
+export const CameraIcon = icon(Camera);
+export const UploadIcon = icon(Upload);
+export const EditIcon = icon(Pencil);
+export const TicketIcon = icon(Ticket);
+export const TrendingFlameIcon = icon(Flame);
+export const NearbyIcon = icon(Navigation);
 

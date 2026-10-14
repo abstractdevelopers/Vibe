@@ -7,10 +7,12 @@ import {
   CheckIcon,
   HeartIcon,
   ShareIcon,
+  UserIcon,
   ShieldIcon,
   UsersIcon,
 } from "../components/Icons";
 import { useNav } from "../nav";
+import { EmptyState } from "../components/EmptyState";
 import { ReportSheet } from "../components/ReportSheet";
 
 interface Props {
@@ -135,18 +137,20 @@ export function ProfileScreen({ userId, me, onChanged }: Props) {
             Posts
           </h3>
           {posts.length === 0 && (
-            <div className="empty">
-              <p className="muted">Nothing public to show yet.</p>
-            </div>
+            <EmptyState
+              icon={<UserIcon />}
+              title="Nothing public to show yet"
+              text="Posts appear here once this person shares something publicly."
+            />
           )}
           {posts.map((post) => (
-            <article key={post.id} className="card" style={{ marginBottom: "var(--space-3)" }}>
+            <article key={post.id} className="post">
               <div className="meta" style={{ marginBottom: "var(--space-2)" }}>
                 {new Date(post.createdAt).toLocaleDateString(undefined, { month: "short", day: "numeric" })} ·{" "}
                 {post.audience}
               </div>
-              {post.body && <p className="feed-body">{post.body}</p>}
-              <div className="feed-actions">
+              {post.body && <p className="post-body">{post.body}</p>}
+              <div className="post-actions">
                 <span className="react-btn" aria-hidden="true">
                   <HeartIcon width={19} height={19} /> {post.reactionCount}
                 </span>
