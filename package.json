@@ -1,0 +1,23 @@
+{
+  "name": "vibe",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Vibe — interactive social network that turns conversations into plans, activities and commerce.",
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
+  "scripts": {
+    "db:up": "docker compose up -d",
+    "db:down": "docker compose down",
+    "migrate": "npm --workspace @vibe/api run migrate",
+    "dev:api": "npm --workspace @vibe/api run dev",
+    "dev:web": "npm --workspace @vibe/web run dev",
+    "typecheck": "npm --workspace @vibe/api run typecheck && npm --workspace @vibe/web run typecheck",
+    "test": "npm --workspace @vibe/api run test",
+    "build": "npm --workspace @vibe/web run build"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}

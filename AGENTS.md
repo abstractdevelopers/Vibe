@@ -1,0 +1,64 @@
+# AGENTS.md
+
+Repository-specific guidance for AI agents working in this repo.
+
+## What this is
+
+Vibe — an interactive social network built to the VIBE product & engineering
+specification. The first engineering sprint is implemented: a vertical slice of
+Circles, polls, plans and shared expenses. Read
+`docs/first-sprint-design-note.md` before changing behaviour; it is the source
+of truth for schemas, state machines and permissions.
+
+## Stack
+
+- `apps/api` — Fastify 5 + PostgreSQL (`pg`), TypeScript ESM, run with `tsx`.
+  Validation with `zod`. Tests with `vitest`.
+- `apps/web` — React 18 + Vite, plain CSS with design tokens.
+- `packages/shared` — money math and domain vocabulary, imported by both.
+
+## Commands
+
+```bash
+npm install
+npm run db:up        # Postgres + Redis containers
+npm run migrate      # apply migrations
+npm run dev:api      # API on :12000
+npm run dev:web      # web on :12001
+npm run test         # API tests (needs the database)
+npm run typecheck
+```
+
+Docker in this environment needs `sudo`. Postgres/Redis containers are named
+`vibe-pg` and `vibe-redis`.
+
+## Conventions
+
+- **Money.** Always integer minor units. Never floats. Use the helpers in
+  `packages/shared/src/money.ts`; splits must sum to the total exactly.
+- **Migrations.** Add a new file `apps/api/src/migrations/NNNN_name.sql`. Never
+  edit an applied migration — the runner checksums them and will refuse.
+- **Identifiers.** UUID. Timestamps `timestamptz` in UTC; store the IANA zone
+  when a user-facing time needs it.
+- **Errors.** Throw `ApiError` with a machine-readable code. The app's error
+  handler renders the standard envelope.
+- **Authorization.** Every object access re-checks membership on the server.
+  Circle-scoped routes go through `modules/access.ts`. Never trust client
+  filtering for private content.
+- **Idempotency.** Non-repeatable writes (expenses, payment reports, checkout)
+  require an `Idempotency-Key`.
+- **Payments.** The provider is a stub. Do not add real provider calls or mark
+  anything paid without a verified webhook. No custody, stored value, or P2P.
+
+## Testing
+
+Tests run against a real Postgres database (no mocks for the DB path). The
+harness in `apps/api/tests/helpers.ts` truncates tables between tests. Add a
+test for any state transition, retry, or duplicate-event path you touch.
+
+## Do not
+
+- Introduce floating-point money arithmetic.
+- Mark a payment, purchase or check-in complete without server confirmation.
+- Add dead-end UI: if a button is shown, it must work.
+- Break existing API contracts without a migration plan.

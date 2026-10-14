@@ -1,0 +1,150 @@
+/*
+ * Vibe design tokens. Values come straight from the specification's token list.
+ * Colour is never the only signal for state — components pair it with a label
+ * or icon. Light and dark are both defined; the user's choice is remembered.
+ */
+
+:root {
+  /* Brand palette */
+  --ink-950: #10111b;
+  --ink-900: #171927;
+  --ink-800: #24273a;
+  --paper-50: #faf8f5;
+  --paper-100: #f1eee9;
+
+  --vibe-coral: #ff5c6c;
+  --vibe-orange: #ff8a4c;
+  --vibe-violet: #7968f5;
+  --vibe-blue: #4f8cff;
+
+  --border-light: #e4e1e8;
+  --border-dark: #34364a;
+
+  /* Semantic — light mode defaults */
+  --success: #168a63;
+  --warning: #b96b12;
+  --danger: #c63e50;
+
+  --bg: var(--paper-50);
+  --bg-elevated: #ffffff;
+  --bg-secondary: var(--paper-100);
+  --text: #191a24;
+  --text-muted: #666878;
+  --border: var(--border-light);
+  --accent: var(--vibe-coral);
+  --accent-contrast: #ffffff;
+  --interactive: var(--vibe-violet);
+  --link: var(--vibe-blue);
+
+  /* Spacing: 8-point scale */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+
+  /* Radii */
+  --radius-card: 16px;
+  --radius-button: 14px;
+  --radius-pill: 999px;
+
+  /* Type scale */
+  --font-sans: Inter, Geist, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --text-display: 32px;
+  --text-title: 26px;
+  --text-section: 19px;
+  --text-body: 16px;
+  --text-supporting: 14px;
+  --text-meta: 12px;
+
+  /* Motion — subtle, and disabled under reduced-motion */
+  --motion-fast: 120ms;
+  --motion-base: 180ms;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: var(--ink-950);
+    --bg-elevated: var(--ink-900);
+    --bg-secondary: var(--ink-800);
+    --text: #f8f7fc;
+    --text-muted: #b7b8c8;
+    --border: var(--border-dark);
+    --success: #43c995;
+    --warning: #ffc266;
+    --danger: #ff7182;
+    /* White on bright coral fails contrast; use ink text on the coral action. */
+    --accent: var(--vibe-coral);
+    --accent-contrast: var(--ink-950);
+  }
+}
+
+:root[data-theme="dark"] {
+  --bg: var(--ink-950);
+  --bg-elevated: var(--ink-900);
+  --bg-secondary: var(--ink-800);
+  --text: #f8f7fc;
+  --text-muted: #b7b8c8;
+  --border: var(--border-dark);
+  --success: #43c995;
+  --warning: #ffc266;
+  --danger: #ff7182;
+  --accent: var(--vibe-coral);
+  --accent-contrast: var(--ink-950);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: var(--font-sans);
+  background: var(--bg);
+  color: var(--text);
+  font-size: var(--text-body);
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+}
+
+#root {
+  min-height: 100vh;
+}
+
+button,
+input,
+textarea,
+select {
+  font: inherit;
+  color: inherit;
+}
+
+/* Minimum 44x44 touch target for interactive controls. */
+button,
+a,
+[role="button"] {
+  min-height: 44px;
+}
+
+:focus-visible {
+  outline: 3px solid var(--interactive);
+  outline-offset: 2px;
+  border-radius: 6px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
