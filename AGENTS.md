@@ -76,8 +76,24 @@ test for any state transition, retry, or duplicate-event path you touch.
 - Avoid reloading a whole list after a small write (e.g. posting a comment);
   update local state, or the reload will remount cards and collapse open UI.
 
-## Media, discovery, and location
 
+## Stacking and layering (learned the hard way)
+
+- The decorative layers `.atmosphere` and `.grain` are `position: fixed` and
+  must keep a **negative** z-index (-2 and -1). Page content (`.app-shell`,
+  the auth hero, screens) is static, and static content paints *before*
+  positioned siblings. If either layer gets a non-negative z-index it covers
+  the whole page: every post, title and empty state renders at background
+  brightness while only the sticky topbar and fixed bottom-nav (which set their
+  own z-index) stay visible. That bug shipped once and made the app look empty.
+- When adding any full-screen overlay, verify text is actually painted, not just
+  that the element exists in the DOM. `getComputedStyle` reports the intended
+  colour even when an overlay paints over it. Sample the rendered pixels.
+- Minimum touch target is 44x44 CSS px. Icon-only buttons need an explicit
+  `min-width`, and text links can use a transparent `::after` overlay to reach
+  44px without changing the visible line height.
+
+## Media, discovery, and location
 - `modules/media.ts` is a local-disk stub: it accepts an image data URL,
   validates the decoded magic bytes, and serves the file from `/v1/media/<id>`.
   Swap `DiskMediaStore` for object storage later; keep the same boundary.
