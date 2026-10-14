@@ -1,6 +1,14 @@
 import { useCallback, useEffect, useState } from "react";
-import { api, ApiError, idempotencyKey } from "../api";
+import { api, ApiError } from "../api";
 import type { FeedItem, Me, PollActivity } from "../types";
+import {
+  ChatIcon,
+  HeartIcon,
+  InboxIcon,
+  PlusIcon,
+  ShareIcon,
+  SparkIcon,
+} from "../components/Icons";
 
 interface Props {
   me: Me;
@@ -10,7 +18,7 @@ interface Props {
 
 type FeedTab = "for-you" | "following";
 
-export function HomeScreen({ refreshKey, onChanged }: Props) {
+export function HomeScreen({ me, refreshKey, onChanged }: Props) {
   const [tab, setTab] = useState<FeedTab>("for-you");
   const [items, setItems] = useState<FeedItem[] | null>(null);
   const [cursor, setCursor] = useState<string | null>(null);
@@ -58,11 +66,14 @@ export function HomeScreen({ refreshKey, onChanged }: Props) {
   }
 
   async function toggleReaction(item: FeedItem) {
-    // Optimistic: the UI can safely revert if the server disagrees.
     setItems((prev) =>
       (prev ?? []).map((p) =>
         p.id === item.id
-          ? { ...p, viewerReacted: !p.viewerReacted, reactionCount: p.reactionCount + (p.viewerReacted ? -1 : 1) }
+          ? {
+              ...p,
+              viewerReacted: !p.viewerReacted,
+              reactionCount: p.reactionCount + (p.viewerReacted ? -1 : 1),
+            }
           : p,
       ),
     );
@@ -75,33 +86,52 @@ export function HomeScreen({ refreshKey, onChanged }: Props) {
 
   return (
     <div>
-      <h1 className="screen-title">Home</h1>
+      <div className="row spread" style={{ marginTop: "var(--space-2)", marginBottom: "var(--space-4)" }}>
+        <div>
+          <p className="eyebrow">Good to see you</p>
+          <h1 className="screen-title" style={{ margin: 0 }}>
+            {me.displayName.split(" ")[0]}
+          </h1>
+        </div>
+        <span className="avatar" aria-hidden="true">
+          {me.displayName.slice(0, 1).toUpperCase()}
+        </span>
+      </div>
 
-      <div className="card">
-        <label htmlFor="composer">What&rsquo;s happening?</label>
-        <textarea
-          id="composer"
-          value={composer}
-          onChange={(e) => setComposer(e.target.value)}
-          placeholder="Share a plan, ask a question, start something…"
-        />
-        <div className="row spread">
-          <span className="meta">Visible to your connections</span>
-          <button className="btn primary" onClick={() => void submitPost()} disabled={posting || !composer.trim()}>
+      <div className="card" style={{ marginBottom: "var(--space-4)" }}>
+        <div className="row" style={{ alignItems: "flex-start" }}>
+          <span className="avatar sm" aria-hidden="true">
+            {me.displayName.slice(0, 1).toUpperCase()}
+          </span>
+          <textarea
+            aria-label="What's happening?"
+            value={composer}
+            onChange={(e) => setComposer(e.target.value)}
+            placeholder="What's happening?"
+            style={{ marginBottom: 0, minHeight: 72 }}
+          />
+        </div>
+        <div className="row spread" style={{ marginTop: "var(--space-3)" }}>
+          <span className="audience-tag">Visible to your connections</span>
+          <button
+            className="btn primary"
+            onClick={() => void submitPost()}
+            disabled={posting || !composer.trim()}
+          >
             {posting ? "Posting…" : "Post"}
           </button>
         </div>
       </div>
 
       <div className="pill-row" role="tablist" aria-label="Feed filter">
-        <button className="pill" aria-pressed={tab === "for-you"} onClick={() => setTab("for-you")}>
+        <button className="pill" role="tab" aria-pressed={tab === "for-you"} onClick={() => setTab("for-you")}>
           For You
         </button>
-        <button className="pill" aria-pressed={tab === "following"} onClick={() => setTab("following")}>
+        <button className="pill" role="tab" aria-pressed={tab === "following"} onClick={() => setTab("following")}>
           Following
         </button>
-        <button className="pill" aria-pressed={false} disabled title="Enable location in settings to use Nearby">
-          Nearby (off)
+        <button className="pill" disabled title="Enable location in settings to use Nearby">
+          Nearby · off
         </button>
       </div>
 
@@ -111,13 +141,17 @@ export function HomeScreen({ refreshKey, onChanged }: Props) {
         <div aria-busy="true">
           <div className="skeleton" />
           <div className="skeleton" />
+          <div className="skeleton" />
         </div>
       )}
 
       {items?.length === 0 && (
         <div className="empty">
-          <p>Your feed is quiet.</p>
-          <p className="muted">Join a Circle or follow people to fill it up.</p>
+          <SparkIcon width={40} height={40} />
+          <h3 className="section-title">Your feed is quiet</h3>
+          <p className="muted" style={{ maxWidth: "30ch" }}>
+            Join a Circle or follow people and this space fills up with plans and ideas.
+          </p>
         </div>
       )}
 
@@ -126,7 +160,7 @@ export function HomeScreen({ refreshKey, onChanged }: Props) {
       ))}
 
       {cursor && (
-        <button className="btn" onClick={() => void loadMore()}>
+        <button className="btn block" onClick={() => void loadMore()}>
           Load more
         </button>
       )}
@@ -136,36 +170,42 @@ export function HomeScreen({ refreshKey, onChanged }: Props) {
 
 function FeedCard({ item, onReact, onChanged }: { item: FeedItem; onReact: () => void; onChanged: () => void }) {
   return (
-    <article className="card">
+    <article className="card" style={{ marginBottom: "var(--space-3)" }}>
       {item.isSponsored && (
-        <div className="row spread" style={{ marginBottom: "var(--space-2)" }}>
+        <div className="row spread" style={{ marginBottom: "var(--space-3)" }}>
           <span className="sponsored-tag">Sponsored</span>
           <span className="meta">Why this ad · Hide · Report</span>
         </div>
       )}
-      <div className="row" style={{ marginBottom: "var(--space-2)" }}>
+
+      <div className="feed-head">
         <span className="avatar" aria-hidden="true">
           {item.author.displayName.slice(0, 1).toUpperCase()}
         </span>
-        <div>
-          <div style={{ fontWeight: 600 }}>{item.author.displayName}</div>
+        <div className="grow">
+          <div className="feed-author">{item.author.displayName}</div>
           <div className="meta">
-            @{item.author.handle} · {new Date(item.createdAt).toLocaleString()}
+            @{item.author.handle} · {relativeTime(item.createdAt)}
           </div>
         </div>
-        <span className="audience-tag" style={{ marginLeft: "auto" }}>
-          {item.audience}
-        </span>
+        <span className="audience-tag">{audienceLabel(item.audience)}</span>
       </div>
 
-      {item.body && <p style={{ marginTop: 0 }}>{item.body}</p>}
+      {item.body && <p className="feed-body">{item.body}</p>}
       {item.activity && <PollCard activity={item.activity} onChanged={onChanged} />}
 
-      <div className="row" style={{ marginTop: "var(--space-2)" }}>
-        <button className="btn ghost" onClick={onReact} aria-pressed={item.viewerReacted}>
-          {item.viewerReacted ? "♥" : "♡"} {item.reactionCount}
+      <div className="feed-actions">
+        <button className="react-btn" onClick={onReact} aria-pressed={item.viewerReacted}>
+          <HeartIcon />
+          {item.reactionCount > 0 ? item.reactionCount : "Like"}
         </button>
-        <span className="meta">{item.commentCount} comments</span>
+        <button className="react-btn" aria-label="Comments">
+          <ChatIcon />
+          {item.commentCount > 0 ? item.commentCount : "Comment"}
+        </button>
+        <button className="react-btn" aria-label="Share">
+          <ShareIcon />
+        </button>
       </div>
     </article>
   );
@@ -188,29 +228,59 @@ function PollCard({ activity, onChanged }: { activity: PollActivity; onChanged: 
 
   return (
     <div className="stack" style={{ marginTop: "var(--space-3)" }}>
-      <div className="meta">
-        Poll · {activity.totalVotes} votes · {closed ? activity.state : "open"}
+      <div className="row spread">
+        <span className="eyebrow">Poll</span>
+        <span className="meta">
+          {activity.totalVotes} {activity.totalVotes === 1 ? "vote" : "votes"} ·{" "}
+          {closed ? activity.state.replace("_", " ") : "open"}
+        </span>
       </div>
-      {activity.options.map((option) => (
-        <button
-          key={option.id}
-          className="option"
-          aria-pressed={activity.viewerOptionId === option.id}
-          onClick={() => void vote(option.id)}
-          disabled={closed}
-        >
-          <span>{option.label}</span>
-          <span className="row" style={{ gap: "var(--space-2)" }}>
-            <span
-              className="option-bar"
-              style={{ width: `${Math.round((option.votes / total) * 60) + 6}px` }}
-              aria-hidden="true"
-            />
-            <span className="meta">{option.votes}</span>
-          </span>
-        </button>
-      ))}
+      {activity.options.map((option) => {
+        const pct = Math.round((option.votes / total) * 100);
+        const chosen = activity.viewerOptionId === option.id;
+        return (
+          <button
+            key={option.id}
+            className="option"
+            aria-pressed={chosen}
+            onClick={() => void vote(option.id)}
+            disabled={closed}
+          >
+            <span className="option-fill" style={{ width: `${pct}%` }} aria-hidden="true" />
+            <span className="option-label">{option.label}</span>
+            <span className="option-count">{pct}%</span>
+          </button>
+        );
+      })}
       {error && <div className="notice danger">{error}</div>}
     </div>
   );
 }
+
+function audienceLabel(audience: string): string {
+  switch (audience) {
+    case "public":
+      return "Public";
+    case "circle":
+      return "Circle";
+    case "private":
+      return "Only me";
+    default:
+      return "Connections";
+  }
+}
+
+function relativeTime(iso: string): string {
+  const then = new Date(iso).getTime();
+  const diff = Date.now() - then;
+  const mins = Math.round(diff / 60000);
+  if (mins < 1) return "now";
+  if (mins < 60) return `${mins}m`;
+  const hours = Math.round(mins / 60);
+  if (hours < 24) return `${hours}h`;
+  const days = Math.round(hours / 24);
+  if (days < 7) return `${days}d`;
+  return new Date(iso).toLocaleDateString(undefined, { month: "short", day: "numeric" });
+}
+
+export { InboxIcon, PlusIcon };

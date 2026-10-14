@@ -1,11 +1,17 @@
 /*
- * Vibe design tokens. Values come straight from the specification's token list.
- * Colour is never the only signal for state — components pair it with a label
- * or icon. Light and dark are both defined; the user's choice is remembered.
+ * Vibe design tokens — "after-dark editorial warmth".
+ *
+ * The spec asks for a confident dark ink foundation with bright coral energy
+ * and a cool violet interaction accent, feeling energetic, expressive, warm and
+ * trustworthy. This layer defines the raw palette, the semantic surface ramp,
+ * depth/glow primitives, typography, motion and spacing.
+ *
+ * Colour is never the only signal for state; components pair it with a label,
+ * icon or shape.
  */
 
 :root {
-  /* Brand palette */
+  /* ---- Raw brand palette (from the spec) ---- */
   --ink-950: #10111b;
   --ink-900: #171927;
   --ink-800: #24273a;
@@ -20,131 +26,128 @@
   --border-light: #e4e1e8;
   --border-dark: #34364a;
 
-  /* Semantic — light mode defaults */
-  --success: #168a63;
-  --warning: #b96b12;
-  --danger: #c63e50;
+  /* ---- Surface ramp (dark, default) ----
+   * Deeper than the spec's ink-950 so content can sit on a lit stage rather
+   * than a flat sheet. */
+  --void: #08090f;
+  --surface-0: #0d0f18;
+  --surface-1: #14161f;
+  --surface-2: #1b1e2b;
+  --surface-3: #242838;
 
-  --bg: var(--paper-50);
-  --bg-elevated: #ffffff;
-  --bg-secondary: var(--paper-100);
-  --text: #191a24;
-  --text-muted: #666878;
-  --border: var(--border-light);
-  --accent: var(--vibe-coral);
-  --accent-contrast: #ffffff;
-  --interactive: var(--vibe-violet);
-  --link: var(--vibe-blue);
+  --text: #f8f7fc;
+  --text-secondary: #c6c8d6;
+  --text-muted: #8a8d9f;
+  --text-faint: #5f6274;
 
-  /* Spacing: 8-point scale */
+  --border: rgba(255, 255, 255, 0.08);
+  --border-strong: rgba(255, 255, 255, 0.14);
+  --hairline: rgba(255, 255, 255, 0.06);
+
+  /* ---- Brand roles ---- */
+  --coral: #ff5c6c;
+  --coral-soft: #ff8a94;
+  --orange: #ff8a4c;
+  --violet: #7968f5;
+  --violet-soft: #a89bff;
+  --blue: #4f8cff;
+
+  --accent: var(--coral);
+  --accent-ink: #1a0a0e; /* ink text on coral: white on coral fails contrast */
+  --interactive: var(--violet);
+  --link: var(--blue);
+
+  --success: #43c995;
+  --warning: #ffc266;
+  --danger: #ff7182;
+
+  /* ---- Atmosphere ---- */
+  --glow-coral: radial-gradient(circle at 50% 50%, rgba(255, 92, 108, 0.5), transparent 70%);
+  --glow-violet: radial-gradient(circle at 50% 50%, rgba(121, 104, 245, 0.42), transparent 70%);
+  --brand-gradient: linear-gradient(100deg, var(--coral) 0%, var(--orange) 46%, var(--violet) 100%);
+  --grain-opacity: 0.05;
+
+  /* ---- Depth ---- */
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --shadow-md: 0 8px 24px -8px rgba(0, 0, 0, 0.6);
+  --shadow-lg: 0 24px 60px -20px rgba(0, 0, 0, 0.75);
+  --shadow-coral: 0 12px 40px -12px rgba(255, 92, 108, 0.55);
+  --shadow-violet: 0 12px 40px -12px rgba(121, 104, 245, 0.5);
+
+  /* ---- Typography ---- */
+  --font-display: "Bricolage Grotesque", "Instrument Sans", system-ui, sans-serif;
+  --font-body: "Instrument Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: ui-monospace, "SF Mono", Menlo, monospace;
+
+  --text-display: clamp(34px, 9vw, 46px);
+  --text-title: clamp(24px, 6vw, 30px);
+  --text-section: 19px;
+  --text-body: 15.5px;
+  --text-supporting: 13.5px;
+  --text-meta: 11.5px;
+
+  --leading-tight: 1.05;
+  --leading-snug: 1.25;
+  --leading-body: 1.55;
+
+  --tracking-display: -0.035em;
+  --tracking-tight: -0.02em;
+  --tracking-wide: 0.14em;
+
+  /* ---- Spacing: 8-point scale ---- */
   --space-1: 4px;
   --space-2: 8px;
   --space-3: 12px;
   --space-4: 16px;
   --space-5: 20px;
   --space-6: 24px;
+  --space-7: 28px;
   --space-8: 32px;
+  --space-10: 40px;
+  --space-12: 48px;
 
-  /* Radii */
-  --radius-card: 16px;
+  /* ---- Radii ---- */
+  --radius-sm: 10px;
+  --radius-card: 20px;
+  --radius-lg: 26px;
   --radius-button: 14px;
   --radius-pill: 999px;
 
-  /* Type scale */
-  --font-sans: Inter, Geist, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
-  --text-display: 32px;
-  --text-title: 26px;
-  --text-section: 19px;
-  --text-body: 16px;
-  --text-supporting: 14px;
-  --text-meta: 12px;
-
-  /* Motion — subtle, and disabled under reduced-motion */
-  --motion-fast: 120ms;
-  --motion-base: 180ms;
+  /* ---- Motion ---- */
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+  --motion-instant: 90ms;
+  --motion-fast: 140ms;
+  --motion-base: 220ms;
+  --motion-slow: 420ms;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) {
-    --bg: var(--ink-950);
-    --bg-elevated: var(--ink-900);
-    --bg-secondary: var(--ink-800);
-    --text: #f8f7fc;
-    --text-muted: #b7b8c8;
-    --border: var(--border-dark);
-    --success: #43c995;
-    --warning: #ffc266;
-    --danger: #ff7182;
-    /* White on bright coral fails contrast; use ink text on the coral action. */
-    --accent: var(--vibe-coral);
-    --accent-contrast: var(--ink-950);
-  }
-}
+/* ---- Light mode: warm paper, same brand energy ---- */
+:root[data-theme="light"] {
+  --void: #efeae2;
+  --surface-0: #faf8f5;
+  --surface-1: #ffffff;
+  --surface-2: #f3efe9;
+  --surface-3: #e9e3da;
 
-:root[data-theme="dark"] {
-  --bg: var(--ink-950);
-  --bg-elevated: var(--ink-900);
-  --bg-secondary: var(--ink-800);
-  --text: #f8f7fc;
-  --text-muted: #b7b8c8;
-  --border: var(--border-dark);
-  --success: #43c995;
-  --warning: #ffc266;
-  --danger: #ff7182;
-  --accent: var(--vibe-coral);
-  --accent-contrast: var(--ink-950);
-}
+  --text: #17181f;
+  --text-secondary: #3d3f4d;
+  --text-muted: #6b6d7c;
+  --text-faint: #9a9cab;
 
-* {
-  box-sizing: border-box;
-}
+  --border: rgba(23, 24, 31, 0.1);
+  --border-strong: rgba(23, 24, 31, 0.18);
+  --hairline: rgba(23, 24, 31, 0.07);
 
-html,
-body {
-  margin: 0;
-  padding: 0;
-}
+  --accent-ink: #ffffff;
+  --success: #168a63;
+  --warning: #b96b12;
+  --danger: #c63e50;
 
-body {
-  font-family: var(--font-sans);
-  background: var(--bg);
-  color: var(--text);
-  font-size: var(--text-body);
-  line-height: 1.5;
-  -webkit-font-smoothing: antialiased;
-}
-
-#root {
-  min-height: 100vh;
-}
-
-button,
-input,
-textarea,
-select {
-  font: inherit;
-  color: inherit;
-}
-
-/* Minimum 44x44 touch target for interactive controls. */
-button,
-a,
-[role="button"] {
-  min-height: 44px;
-}
-
-:focus-visible {
-  outline: 3px solid var(--interactive);
-  outline-offset: 2px;
-  border-radius: 6px;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  *,
-  *::before,
-  *::after {
-    animation-duration: 0.01ms !important;
-    animation-iteration-count: 1 !important;
-    transition-duration: 0.01ms !important;
-  }
+  --shadow-sm: 0 1px 2px rgba(60, 40, 20, 0.08);
+  --shadow-md: 0 10px 30px -12px rgba(60, 40, 20, 0.22);
+  --shadow-lg: 0 30px 70px -24px rgba(60, 40, 20, 0.28);
+  --shadow-coral: 0 14px 40px -14px rgba(255, 92, 108, 0.5);
+  --shadow-violet: 0 14px 40px -14px rgba(121, 104, 245, 0.45);
+  --grain-opacity: 0.035;
 }

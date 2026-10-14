@@ -6,16 +6,23 @@ import { CirclesScreen } from "./screens/Circles";
 import { ExploreScreen } from "./screens/Explore";
 import { YouScreen } from "./screens/You";
 import { CreateSheet } from "./components/CreateSheet";
+import {
+  CirclesIcon,
+  CompassIcon,
+  HomeIcon,
+  InboxIcon,
+  PlusIcon,
+  UserIcon,
+} from "./components/Icons";
 import type { Me } from "./types";
 
 export type Tab = "home" | "circles" | "create" | "explore" | "you";
 
-const TABS: Array<{ id: Tab; label: string; icon: string }> = [
-  { id: "home", label: "Home", icon: "🏠" },
-  { id: "circles", label: "Circles", icon: "👥" },
-  { id: "create", label: "Create", icon: "+" },
-  { id: "explore", label: "Explore", icon: "🧭" },
-  { id: "you", label: "You", icon: "🙂" },
+const TABS = [
+  { id: "home" as const, label: "Home", Icon: HomeIcon },
+  { id: "circles" as const, label: "Circles", Icon: CirclesIcon },
+  { id: "explore" as const, label: "Explore", Icon: CompassIcon },
+  { id: "you" as const, label: "You", Icon: UserIcon },
 ];
 
 export function App() {
@@ -50,79 +57,71 @@ export function App() {
   }, [loadMe]);
 
   useEffect(() => {
-    const theme = localStorage.getItem("vibe.theme");
-    if (theme) document.documentElement.dataset.theme = theme;
+    const saved = localStorage.getItem("vibe.theme");
+    if (saved) document.documentElement.dataset.theme = saved;
   }, []);
 
   const bump = () => setRefreshKey((k) => k + 1);
 
-  if (checking) {
-    return (
-      <div className="app-shell">
-        <div className="skeleton" aria-label="Loading" />
-      </div>
-    );
-  }
-
-  if (!me) {
-    return (
-      <AuthScreen
-        onAuthenticated={async () => {
-          setChecking(true);
-          await loadMe();
-        }}
-      />
-    );
-  }
-
   return (
     <>
-      <header className="topbar">
-        <span className="wordmark">Vibe</span>
-        <div className="row">
-          <button
-            className="icon-button"
-            aria-label={`Inbox, ${unread} unread`}
-            onClick={() => setTab("home")}
-          >
-            ✉️
-            {unread > 0 && <span className="badge">{unread}</span>}
-          </button>
+      <div className="atmosphere" aria-hidden="true" />
+      <div className="grain" aria-hidden="true" />
+
+      {checking && (
+        <div className="app-shell">
+          <div className="skeleton" aria-label="Loading Vibe" />
+          <div className="skeleton" />
         </div>
-      </header>
+      )}
 
-      <main className="app-shell">
-        {tab === "home" && <HomeScreen me={me} refreshKey={refreshKey} onChanged={bump} />}
-        {tab === "circles" && <CirclesScreen me={me} refreshKey={refreshKey} onChanged={bump} />}
-        {tab === "explore" && <ExploreScreen />}
-        {tab === "you" && <YouScreen me={me} onMeChanged={loadMe} />}
-      </main>
+      {!checking && !me && (
+        <AuthScreen
+          onAuthenticated={async () => {
+            setChecking(true);
+            await loadMe();
+          }}
+        />
+      )}
 
-      <nav className="bottom-nav" aria-label="Primary">
-        {TABS.map((item) =>
-          item.id === "create" ? (
+      {!checking && me && (
+        <>
+          <header className="topbar">
+            <span className="wordmark">
+              Vibe<span className="dot" aria-hidden="true" />
+            </span>
             <button
-              key={item.id}
-              className="create"
-              aria-label="Create"
-              onClick={() => setCreateOpen(true)}
+              className="icon-button"
+              aria-label={unread > 0 ? `Inbox, ${unread} unread` : "Inbox"}
+              onClick={() => setTab("home")}
             >
-              <span aria-hidden="true">+</span>
+              <InboxIcon width={20} height={20} />
+              {unread > 0 && <span className="badge">{unread > 99 ? "99+" : unread}</span>}
             </button>
-          ) : (
-            <button
-              key={item.id}
-              aria-current={tab === item.id ? "page" : undefined}
-              onClick={() => setTab(item.id)}
-            >
-              <span aria-hidden="true">{item.icon}</span>
-              {item.label}
-            </button>
-          ),
-        )}
-      </nav>
+          </header>
 
-      {createOpen && (
+          <main className="app-shell">
+            {tab === "home" && <HomeScreen me={me} refreshKey={refreshKey} onChanged={bump} />}
+            {tab === "circles" && <CirclesScreen me={me} refreshKey={refreshKey} onChanged={bump} />}
+            {tab === "explore" && <ExploreScreen />}
+            {tab === "you" && <YouScreen me={me} onMeChanged={loadMe} />}
+          </main>
+
+          <nav className="bottom-nav" aria-label="Primary">
+            <NavButton tab={tab} setTab={setTab} {...TABS[0]!} />
+            <NavButton tab={tab} setTab={setTab} {...TABS[1]!} />
+            <button className="create" aria-label="Create" onClick={() => setCreateOpen(true)}>
+              <span>
+                <PlusIcon width={22} height={22} />
+              </span>
+            </button>
+            <NavButton tab={tab} setTab={setTab} {...TABS[2]!} />
+            <NavButton tab={tab} setTab={setTab} {...TABS[3]!} />
+          </nav>
+        </>
+      )}
+
+      {createOpen && me && (
         <CreateSheet
           me={me}
           onClose={() => setCreateOpen(false)}
@@ -134,6 +133,28 @@ export function App() {
         />
       )}
     </>
+  );
+}
+
+function NavButton({
+  id,
+  label,
+  Icon,
+  tab,
+  setTab,
+}: {
+  id: Tab;
+  label: string;
+  Icon: typeof HomeIcon;
+  tab: Tab;
+  setTab: (t: Tab) => void;
+}) {
+  const active = tab === id;
+  return (
+    <button aria-current={active ? "page" : undefined} onClick={() => setTab(id)}>
+      <Icon />
+      {label}
+    </button>
   );
 }
 

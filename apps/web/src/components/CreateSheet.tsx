@@ -2,6 +2,15 @@ import { useEffect, useState } from "react";
 import { api, ApiError, idempotencyKey } from "../api";
 import { parseToMinorUnits } from "@vibe/shared";
 import type { CircleSummary, Me } from "../types";
+import {
+  CalendarIcon,
+  CheckIcon,
+  CloseIcon,
+  SparkIcon,
+  WalletIcon,
+  ChatIcon,
+  UsersIcon,
+} from "../components/Icons";
 
 interface Props {
   me: Me;
@@ -11,56 +20,75 @@ interface Props {
 
 type Mode = "post" | "poll" | "plan" | "expense";
 
-const MODES: Array<{ id: Mode; label: string; hint: string }> = [
-  { id: "post", label: "Post", hint: "Share something with your connections or a Circle" },
-  { id: "poll", label: "Poll", hint: "Ask a question and let people vote once" },
-  { id: "plan", label: "Plan", hint: "Propose an outing and collect RSVPs" },
-  { id: "expense", label: "Shared expense", hint: "Split a cost — Vibe never holds the money" },
+const MODES: Array<{ id: Mode; label: string; hint: string; Icon: typeof ChatIcon }> = [
+  { id: "post", label: "Post", hint: "Share something with your connections or a Circle.", Icon: ChatIcon },
+  { id: "poll", label: "Poll", hint: "Ask a question. Everyone gets one vote.", Icon: SparkIcon },
+  { id: "plan", label: "Plan", hint: "Propose an outing and collect RSVPs.", Icon: CalendarIcon },
+  { id: "expense", label: "Split", hint: "Track a shared cost — Vibe never holds the money.", Icon: WalletIcon },
 ];
 
 export function CreateSheet({ me, onClose, onCreated }: Props) {
   const [mode, setMode] = useState<Mode>("post");
   const [circles, setCircles] = useState<CircleSummary[]>([]);
   const [error, setError] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
+  const active = MODES.find((m) => m.id === mode)!;
 
   useEffect(() => {
     void api<{ circles: CircleSummary[] }>("/v1/circles").then((r) => setCircles(r.circles));
   }, []);
 
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose]);
+
   return (
-    <div className="sheet" role="dialog" aria-modal="true" aria-label="Create">
-      <div className="sheet-inner">
-        <div className="row spread">
-          <h2 className="screen-title" style={{ margin: 0 }}>
-            Create
-          </h2>
-          <button className="btn ghost" onClick={onClose} aria-label="Close">
-            ✕
+    <div className="sheet" role="dialog" aria-modal="true" aria-label="Create" onClick={onClose}>
+      <div className="sheet-inner" onClick={(e) => e.stopPropagation()}>
+        <div className="sheet-handle" aria-hidden="true" />
+
+        <div className="row spread" style={{ marginBottom: "var(--space-4)" }}>
+          <div>
+            <p className="eyebrow">Create</p>
+            <h2 style={{ fontSize: "var(--text-title)", letterSpacing: "var(--tracking-display)" }}>
+              {active.label}
+            </h2>
+          </div>
+          <button className="icon-button" onClick={onClose} aria-label="Close">
+            <CloseIcon width={18} height={18} />
           </button>
         </div>
 
         <div className="pill-row" role="tablist" aria-label="What to create">
           {MODES.map((m) => (
-            <button key={m.id} className="pill" aria-pressed={mode === m.id} onClick={() => setMode(m.id)}>
+            <button
+              key={m.id}
+              className="pill"
+              role="tab"
+              aria-pressed={mode === m.id}
+              onClick={() => {
+                setMode(m.id);
+                setError(null);
+              }}
+            >
+              <m.Icon width={15} height={15} style={{ marginRight: 6 }} />
               {m.label}
             </button>
           ))}
         </div>
-        <p className="meta">{MODES.find((m) => m.id === mode)?.hint}</p>
+        <p className="meta" style={{ marginBottom: "var(--space-4)" }}>
+          {active.hint}
+        </p>
 
         {error && <div className="notice danger">{error}</div>}
 
         {mode === "post" && <PostForm circles={circles} onDone={onCreated} setError={setError} />}
-        {mode === "poll" && (
-          <PollForm circles={circles} onDone={onCreated} setError={setError} busy={busy} setBusy={setBusy} />
-        )}
-        {mode === "plan" && (
-          <PlanForm circles={circles} onDone={onCreated} setError={setError} busy={busy} setBusy={setBusy} />
-        )}
-        {mode === "expense" && (
-          <ExpenseForm me={me} circles={circles} onDone={onCreated} setError={setError} />
-        )}
+        {mode === "poll" && <PollForm circles={circles} onDone={onCreated} setError={setError} />}
+        {mode === "plan" && <PlanForm circles={circles} onDone={onCreated} setError={setError} />}
+        {mode === "expense" && <ExpenseForm me={me} circles={circles} onDone={onCreated} setError={setError} />}
       </div>
     </div>
   );
@@ -71,20 +99,26 @@ function CircleSelect({
   value,
   onChange,
   allowNone,
+  id,
 }: {
   circles: CircleSummary[];
   value: string;
   onChange: (v: string) => void;
   allowNone?: boolean;
+  id: string;
 }) {
   if (circles.length === 0) {
-    return <p className="meta">You need to be in a Circle for this. Create one first.</p>;
+    return (
+      <div className="notice">
+        <UsersIcon width={16} height={16} /> You need to be in a Circle for this. Create one first.
+      </div>
+    );
   }
   return (
     <>
-      <label htmlFor="circleSelect">Circle</label>
-      <select id="circleSelect" value={value} onChange={(e) => onChange(e.target.value)}>
-        {allowNone && <option value="">No Circle (your connections)</option>}
+      <label htmlFor={id}>Circle</label>
+      <select id={id} value={value} onChange={(e) => onChange(e.target.value)}>
+        {allowNone && <option value="">No Circle — my connections</option>}
         {circles.map((c) => (
           <option key={c.id} value={c.id}>
             {c.name}
@@ -113,11 +147,7 @@ function PostForm({
     setError(null);
     try {
       await api("/v1/posts", {
-        body: {
-          body,
-          audience: circleId ? "circle" : "connections",
-          ...(circleId ? { circleId } : {}),
-        },
+        body: { body, audience: circleId ? "circle" : "connections", ...(circleId ? { circleId } : {}) },
       });
       onDone();
     } catch (err) {
@@ -135,11 +165,11 @@ function PostForm({
       }}
     >
       <label htmlFor="postBody">Message</label>
-      <textarea id="postBody" value={body} onChange={(e) => setBody(e.target.value)} required />
+      <textarea id="postBody" value={body} onChange={(e) => setBody(e.target.value)} autoFocus required />
       {circles.length > 0 && (
-        <CircleSelect circles={circles} value={circleId} onChange={setCircleId} allowNone />
+        <CircleSelect id="postCircle" circles={circles} value={circleId} onChange={setCircleId} allowNone />
       )}
-      <button className="btn primary" type="submit" disabled={busy || !body.trim()}>
+      <button className="btn primary block" type="submit" disabled={busy || !body.trim()}>
         {busy ? "Posting…" : "Publish"}
       </button>
     </form>
@@ -150,18 +180,15 @@ function PollForm({
   circles,
   onDone,
   setError,
-  busy,
-  setBusy,
 }: {
   circles: CircleSummary[];
   onDone: () => void;
   setError: (v: string | null) => void;
-  busy: boolean;
-  setBusy: (v: boolean) => void;
 }) {
   const [question, setQuestion] = useState("");
   const [options, setOptions] = useState(["", ""]);
   const [circleId, setCircleId] = useState(circles[0]?.id ?? "");
+  const [busy, setBusy] = useState(false);
 
   async function submit() {
     const cleaned = options.map((o) => o.trim()).filter(Boolean);
@@ -172,9 +199,7 @@ function PollForm({
     setBusy(true);
     setError(null);
     try {
-      await api("/v1/activities", {
-        body: { question, options: cleaned, ...(circleId ? { circleId } : {}) },
-      });
+      await api("/v1/activities", { body: { question, options: cleaned, ...(circleId ? { circleId } : {}) } });
       onDone();
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Could not create the poll");
@@ -191,7 +216,7 @@ function PollForm({
       }}
     >
       <label htmlFor="question">Question</label>
-      <input id="question" value={question} onChange={(e) => setQuestion(e.target.value)} required />
+      <input id="question" value={question} onChange={(e) => setQuestion(e.target.value)} autoFocus required />
       {options.map((option, index) => (
         <div key={index}>
           <label htmlFor={`option-${index}`}>Option {index + 1}</label>
@@ -202,16 +227,11 @@ function PollForm({
           />
         </div>
       ))}
-      <button
-        className="btn ghost"
-        type="button"
-        onClick={() => setOptions([...options, ""])}
-        disabled={options.length >= 10}
-      >
-        Add option
+      <button className="btn ghost" type="button" onClick={() => setOptions([...options, ""])} disabled={options.length >= 10}>
+        + Add option
       </button>
-      <CircleSelect circles={circles} value={circleId} onChange={setCircleId} />
-      <button className="btn primary" type="submit" disabled={busy || !question.trim()}>
+      <CircleSelect id="pollCircle" circles={circles} value={circleId} onChange={setCircleId} />
+      <button className="btn primary block" type="submit" disabled={busy || !question.trim()}>
         {busy ? "Creating…" : "Create poll"}
       </button>
     </form>
@@ -222,19 +242,16 @@ function PlanForm({
   circles,
   onDone,
   setError,
-  busy,
-  setBusy,
 }: {
   circles: CircleSummary[];
   onDone: () => void;
   setError: (v: string | null) => void;
-  busy: boolean;
-  setBusy: (v: boolean) => void;
 }) {
   const [circleId, setCircleId] = useState(circles[0]?.id ?? "");
   const [title, setTitle] = useState("");
   const [startsAt, setStartsAt] = useState("");
   const [place, setPlace] = useState("");
+  const [busy, setBusy] = useState(false);
 
   async function submit() {
     if (!circleId) {
@@ -268,20 +285,14 @@ function PlanForm({
         void submit();
       }}
     >
-      <CircleSelect circles={circles} value={circleId} onChange={setCircleId} />
+      <CircleSelect id="planCircle" circles={circles} value={circleId} onChange={setCircleId} />
       <label htmlFor="planTitle">Title</label>
-      <input id="planTitle" value={title} onChange={(e) => setTitle(e.target.value)} required />
+      <input id="planTitle" value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Friday dinner" required />
       <label htmlFor="planWhen">When</label>
-      <input
-        id="planWhen"
-        type="datetime-local"
-        value={startsAt}
-        onChange={(e) => setStartsAt(e.target.value)}
-        required
-      />
+      <input id="planWhen" type="datetime-local" value={startsAt} onChange={(e) => setStartsAt(e.target.value)} required />
       <label htmlFor="planPlace">Place</label>
-      <input id="planPlace" value={place} onChange={(e) => setPlace(e.target.value)} />
-      <button className="btn primary" type="submit" disabled={busy || !title.trim() || !startsAt || !circleId}>
+      <input id="planPlace" value={place} onChange={(e) => setPlace(e.target.value)} placeholder="Where?" />
+      <button className="btn primary block" type="submit" disabled={busy || !title.trim() || !startsAt || !circleId}>
         {busy ? "Creating…" : "Propose plan"}
       </button>
     </form>
@@ -338,15 +349,7 @@ function ExpenseForm({
 
       await api("/v1/expenses", {
         idempotencyKey: idempotencyKey("expense"),
-        body: {
-          circleId,
-          description,
-          amountMinor,
-          currency,
-          payerId: me.id,
-          splitMode,
-          participants,
-        },
+        body: { circleId, description, amountMinor, currency, payerId: me.id, splitMode, participants },
       });
       onDone();
     } catch (err) {
@@ -368,24 +371,18 @@ function ExpenseForm({
       }}
     >
       <div className="notice">
-        Track and coordinate shared expenses. Payments happen through your bank or provider — Vibe
-        does not hold pooled funds.
+        <WalletIcon width={16} height={16} /> Payments happen through your bank or provider. Vibe does not hold pooled funds.
       </div>
-      <CircleSelect circles={circles} value={circleId} onChange={setCircleId} />
+      <CircleSelect id="expCircle" circles={circles} value={circleId} onChange={setCircleId} />
       <label htmlFor="expDesc">Description</label>
-      <input id="expDesc" value={description} onChange={(e) => setDescription(e.target.value)} required />
-      <div className="row">
-        <div style={{ flex: 2 }}>
+      <input id="expDesc" value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Dinner" required />
+
+      <div className="row" style={{ gap: "var(--space-3)" }}>
+        <div className="grow">
           <label htmlFor="expAmount">Amount</label>
-          <input
-            id="expAmount"
-            inputMode="decimal"
-            value={amount}
-            onChange={(e) => setAmount(e.target.value)}
-            required
-          />
+          <input id="expAmount" inputMode="decimal" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="0.00" required />
         </div>
-        <div style={{ flex: 1 }}>
+        <div style={{ width: 100 }}>
           <label htmlFor="expCurrency">Currency</label>
           <input id="expCurrency" value={currency} onChange={(e) => setCurrency(e.target.value.toUpperCase())} maxLength={3} />
         </div>
@@ -397,18 +394,20 @@ function ExpenseForm({
         <option value="custom">Custom amounts</option>
       </select>
 
-      <p className="meta">Participants</p>
+      <p className="eyebrow" style={{ marginTop: "var(--space-3)" }}>
+        Participants
+      </p>
       {members.map((member) => (
-        <div key={member.id} className="row spread" style={{ marginBottom: "var(--space-1)" }}>
-          <label htmlFor={`part-${member.id}`} style={{ marginBottom: 0 }}>
+        <div key={member.id} className="row spread" style={{ padding: "var(--space-2) 0" }}>
+          <label htmlFor={`part-${member.id}`} style={{ marginBottom: 0, color: "var(--text)" }}>
             @{member.handle}
           </label>
-          <div className="row">
+          <div className="row" style={{ gap: "var(--space-2)" }}>
             {splitMode === "custom" && selected.includes(member.id) && (
               <input
                 aria-label={`Amount for ${member.handle}`}
                 inputMode="decimal"
-                style={{ width: 100, marginBottom: 0 }}
+                style={{ width: 96, marginBottom: 0 }}
                 value={custom[member.id] ?? ""}
                 onChange={(e) => setCustom({ ...custom, [member.id]: e.target.value })}
               />
@@ -420,17 +419,19 @@ function ExpenseForm({
               onChange={(e) =>
                 setSelected(e.target.checked ? [...selected, member.id] : selected.filter((id) => id !== member.id))
               }
-              style={{ width: 44, minHeight: 24, marginBottom: 0 }}
+              style={{ width: 26, minHeight: 26, height: 26, marginBottom: 0, accentColor: "var(--coral)", cursor: "pointer" }}
             />
           </div>
         </div>
       ))}
 
       <button
-        className="btn primary"
+        className="btn primary block"
         type="submit"
+        style={{ marginTop: "var(--space-4)" }}
         disabled={busy || !description.trim() || !amount || selected.length === 0 || !circleId}
       >
+        <CheckIcon width={18} height={18} />
         {busy ? "Saving…" : "Save expense"}
       </button>
     </form>

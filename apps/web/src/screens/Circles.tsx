@@ -2,6 +2,15 @@ import { useCallback, useEffect, useState } from "react";
 import { api, ApiError } from "../api";
 import { formatMinorUnits } from "@vibe/shared";
 import type { CircleSummary, ExpenseSummary, Me, PlanSummary } from "../types";
+import {
+  CalendarIcon,
+  CheckIcon,
+  CirclesIcon,
+  LockIcon,
+  PlusIcon,
+  UsersIcon,
+  WalletIcon,
+} from "../components/Icons";
 
 interface Props {
   me: Me;
@@ -22,6 +31,7 @@ export function CirclesScreen({ refreshKey, onChanged }: Props) {
   const [selected, setSelected] = useState<string | null>(null);
   const [detail, setDetail] = useState<CircleDetail | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
   const [name, setName] = useState("");
   const [showCreate, setShowCreate] = useState(false);
 
@@ -43,7 +53,9 @@ export function CirclesScreen({ refreshKey, onChanged }: Props) {
       setDetail(null);
       return;
     }
-    void api<CircleDetail>(`/v1/circles/${selected}`).then(setDetail).catch(() => setDetail(null));
+    void api<CircleDetail>(`/v1/circles/${selected}`)
+      .then(setDetail)
+      .catch(() => setDetail(null));
   }, [selected, refreshKey]);
 
   async function createCircle() {
@@ -69,7 +81,8 @@ export function CirclesScreen({ refreshKey, onChanged }: Props) {
         body: { role: "member", maxUses: 10, expiresInHours: 72 },
       });
       await navigator.clipboard?.writeText(result.inviteToken).catch(() => undefined);
-      setError(`Invite token (copied): ${result.inviteToken}`);
+      setNotice(`Invite copied · expires in 72h`);
+      setTimeout(() => setNotice(null), 6000);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Could not create an invite");
     }
@@ -77,97 +90,164 @@ export function CirclesScreen({ refreshKey, onChanged }: Props) {
 
   return (
     <div>
-      <div className="row spread">
-        <h1 className="screen-title">Circles</h1>
-        <button className="btn" onClick={() => setShowCreate((v) => !v)}>
-          New Circle
+      <div className="row spread" style={{ marginBottom: "var(--space-4)" }}>
+        <h1 className="screen-title" style={{ margin: 0 }}>
+          Circles
+        </h1>
+        <button className="btn" onClick={() => setShowCreate((v) => !v)} aria-expanded={showCreate}>
+          <PlusIcon width={18} height={18} /> New
         </button>
       </div>
 
-      {error && <div className="notice">{error}</div>}
+      {notice && (
+        <div className="notice success">
+          <CheckIcon width={16} height={16} /> {notice}
+        </div>
+      )}
+      {error && <div className="notice danger">{error}</div>}
 
       {showCreate && (
-        <div className="card">
-          <label htmlFor="circleName">Circle name</label>
-          <input id="circleName" value={name} onChange={(e) => setName(e.target.value)} />
-          <p className="meta">Private by default. Invite people after creating it.</p>
-          <button className="btn primary" onClick={() => void createCircle()} disabled={!name.trim()}>
-            Create
+        <div className="card" style={{ marginBottom: "var(--space-4)" }}>
+          <h3 className="section-title" style={{ marginBottom: "var(--space-3)" }}>
+            New Circle
+          </h3>
+          <label htmlFor="circleName">Name</label>
+          <input
+            id="circleName"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            placeholder="Weekend crew, Housemates, Book club…"
+          />
+          <p className="meta" style={{ marginBottom: "var(--space-3)" }}>
+            <LockIcon width={13} height={13} style={{ verticalAlign: "-2px" }} /> Private by default. Invite people after.
+          </p>
+          <button className="btn primary block" onClick={() => void createCircle()} disabled={!name.trim()}>
+            Create Circle
           </button>
         </div>
       )}
 
       {circles === null && <div className="skeleton" aria-busy="true" />}
+
       {circles?.length === 0 && (
         <div className="empty">
-          <p>No Circles yet.</p>
-          <p className="muted">Create one to coordinate plans and shared expenses.</p>
+          <CirclesIcon width={40} height={40} />
+          <h3 className="section-title">No Circles yet</h3>
+          <p className="muted" style={{ maxWidth: "32ch" }}>
+            A Circle is your group space — plans, shared money and memories in one place.
+          </p>
+          <button className="btn primary" style={{ marginTop: "var(--space-3)" }} onClick={() => setShowCreate(true)}>
+            <PlusIcon width={18} height={18} /> Create your first Circle
+          </button>
         </div>
       )}
 
-      {circles?.map((circle) => (
-        <button
-          key={circle.id}
-          className="card"
-          style={{ display: "block", textAlign: "left", width: "100%", cursor: "pointer" }}
-          onClick={() => setSelected(circle.id === selected ? null : circle.id)}
-          aria-expanded={selected === circle.id}
-        >
-          <div className="row spread">
-            <h3 style={{ margin: 0 }}>{circle.name}</h3>
-            <span className="audience-tag">{circle.privacy.replace("_", " ")}</span>
-          </div>
-          <div className="meta">
-            {circle.member_count} members · you are {circle.role}
-          </div>
-        </button>
-      ))}
+      {circles?.map((circle) => {
+        const active = selected === circle.id;
+        return (
+          <button
+            key={circle.id}
+            className="card interactive"
+            style={{ display: "block", width: "100%", textAlign: "left", marginBottom: "var(--space-3)" }}
+            onClick={() => setSelected(active ? null : circle.id)}
+            aria-expanded={active}
+          >
+            <div className="row spread">
+              <div className="row" style={{ gap: "var(--space-3)" }}>
+                <span className="avatar violet" aria-hidden="true">
+                  {circle.name.slice(0, 1).toUpperCase()}
+                </span>
+                <div>
+                  <div className="feed-author">{circle.name}</div>
+                  <div className="meta">
+                    {circle.member_count} {circle.member_count === 1 ? "member" : "members"}
+                  </div>
+                </div>
+              </div>
+              <span className="audience-tag">
+                {circle.privacy === "private" ? (
+                  <LockIcon width={12} height={12} />
+                ) : null}
+                {circle.privacy.replace("_", " ")}
+              </span>
+            </div>
+          </button>
+        );
+      })}
 
       {detail && (
-        <div className="card">
-          <div className="row spread">
+        <div className="card" style={{ marginTop: "var(--space-2)" }}>
+          <div className="row spread" style={{ marginBottom: "var(--space-3)" }}>
             <h3>{detail.circle.name}</h3>
-            <button className="btn" onClick={() => void createInvite()}>
-              Invite
+            <button className="btn violet" onClick={() => void createInvite()}>
+              <PlusIcon width={17} height={17} /> Invite
             </button>
           </div>
           <p className="muted">{detail.circle.description ?? "No description yet."}</p>
 
-          <h4>Plans</h4>
-          {detail.plans.length === 0 && <p className="meta">No plans yet.</p>}
-          {detail.plans.map((plan) => (
-            <div key={plan.id} className="row spread">
-              <span>{plan.title}</span>
-              <span className="meta">
-                {new Date(plan.starts_at).toLocaleDateString()} · {plan.state}
-              </span>
-            </div>
-          ))}
+          <Section icon={<CalendarIcon width={16} height={16} />} title="Plans">
+            {detail.plans.length === 0 ? (
+              <p className="meta">No plans yet — propose one from Create.</p>
+            ) : (
+              detail.plans.map((plan) => (
+                <div key={plan.id} className="row spread" style={{ padding: "var(--space-2) 0" }}>
+                  <span>{plan.title}</span>
+                  <span className="meta">
+                    {new Date(plan.starts_at).toLocaleDateString(undefined, { month: "short", day: "numeric" })} ·{" "}
+                    {plan.state}
+                  </span>
+                </div>
+              ))
+            )}
+          </Section>
 
-          <h4>Shared money</h4>
-          <p className="meta">
-            Track and coordinate shared expenses. Vibe does not hold pooled funds in this version.
-          </p>
-          {detail.expenses.length === 0 && <p className="meta">Nothing to settle.</p>}
-          {detail.expenses.map((expense) => (
-            <div key={expense.id} className="row spread">
-              <span>{expense.description}</span>
-              <span>
-                {formatMinorUnits(expense.amountMinor, expense.currency)} {expense.currency} ·{" "}
-                <span className="meta">{expense.splitMode}</span>
-              </span>
-            </div>
-          ))}
+          <Section icon={<WalletIcon width={16} height={16} />} title="Shared money">
+            <p className="meta" style={{ marginBottom: "var(--space-2)" }}>
+              Vibe coordinates shared expenses. It never holds your money.
+            </p>
+            {detail.expenses.length === 0 ? (
+              <p className="meta">Nothing to settle.</p>
+            ) : (
+              detail.expenses.map((expense) => (
+                <div key={expense.id} className="row spread" style={{ padding: "var(--space-2) 0" }}>
+                  <span>{expense.description}</span>
+                  <span style={{ fontVariantNumeric: "tabular-nums", fontWeight: 600 }}>
+                    {formatMinorUnits(expense.amountMinor, expense.currency)} {expense.currency}
+                  </span>
+                </div>
+              ))
+            )}
+          </Section>
 
-          <h4>Members</h4>
-          {detail.members.map((member) => (
-            <div key={member.id} className="row spread">
-              <span>@{member.handle}</span>
-              <span className="meta">{member.role}</span>
-            </div>
-          ))}
+          <Section icon={<UsersIcon width={16} height={16} />} title={`Members · ${detail.members.length}`}>
+            {detail.members.map((member) => (
+              <div key={member.id} className="row spread" style={{ padding: "var(--space-2) 0" }}>
+                <div className="row" style={{ gap: "var(--space-2)" }}>
+                  <span className="avatar sm" aria-hidden="true">
+                    {member.displayName.slice(0, 1).toUpperCase()}
+                  </span>
+                  <span>@{member.handle}</span>
+                </div>
+                <span className="status-chip">{member.role}</span>
+              </div>
+            ))}
+          </Section>
         </div>
       )}
     </div>
+  );
+}
+
+function Section({ icon, title, children }: { icon: React.ReactNode; title: string; children: React.ReactNode }) {
+  return (
+    <section style={{ marginTop: "var(--space-5)" }}>
+      <div className="row" style={{ gap: "var(--space-2)", marginBottom: "var(--space-2)", color: "var(--text-secondary)" }}>
+        {icon}
+        <span className="eyebrow" style={{ color: "var(--text-secondary)" }}>
+          {title}
+        </span>
+      </div>
+      {children}
+    </section>
   );
 }
