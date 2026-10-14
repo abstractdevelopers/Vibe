@@ -3,6 +3,7 @@ import { api, ApiError, getToken, setToken } from "./api";
 import { AuthScreen } from "./screens/Auth";
 import { HomeScreen, type CreateMode } from "./screens/Home";
 import { CirclesScreen } from "./screens/Circles";
+import { CircleDetailScreen } from "./screens/CircleDetail";
 import { ExploreScreen } from "./screens/Explore";
 import { YouScreen } from "./screens/You";
 import { InboxScreen } from "./screens/Inbox";
@@ -14,6 +15,8 @@ import { SettingsScreen } from "./screens/Settings";
 import { PlaceDetailScreen } from "./screens/PlaceDetail";
 import { MessagesScreen } from "./screens/Messages";
 import { ConversationScreen } from "./screens/Conversation";
+import { StorefrontScreen, ProductScreen, OrdersScreen, OrderScreen } from "./screens/Commerce";
+import { AdvertisingScreen } from "./screens/Advertising";
 import { CreateSheet } from "./components/CreateSheet";
 import {
   ChatIcon,
@@ -23,7 +26,9 @@ import {
   HomeIcon,
   InboxIcon,
   LogOutIcon,
+  MegaphoneIcon,
   PlusIcon,
+  ReceiptIcon,
   SettingsIcon,
   UserIcon,
 } from "./components/Icons";
@@ -39,6 +44,7 @@ export function App() {
   const [checking, setChecking] = useState(true);
   const [tab, setTab] = useState<Tab>("home");
   const [route, setRoute] = useState<Route>({ name: "tabs" });
+  const [routeStack, setRouteStack] = useState<Route[]>([]);
   const [unread, setUnread] = useState(0);
   const [createOpen, setCreateOpen] = useState(false);
   const [createMode, setCreateMode] = useState<CreateMode>("post");
@@ -90,8 +96,27 @@ export function App() {
   }, []);
 
   const bump = () => setRefreshKey((k) => k + 1);
-  const push = (next: Exclude<Route, { name: "tabs" }>) => setRoute(next);
-  const back = () => setRoute({ name: "tabs" });
+  // Detail views form a real stack, so Back returns to the screen you came from
+  // (a plan returns to its Circle, not straight to the tab).
+  const push = (next: Exclude<Route, { name: "tabs" }>) => {
+    setRouteStack((stack) => [...stack, route]);
+    setRoute(next);
+  };
+  const back = () => {
+    setRouteStack((stack) => {
+      if (stack.length === 0) {
+        setRoute({ name: "tabs" });
+        return stack;
+      }
+      setRoute(stack[stack.length - 1]!);
+      return stack.slice(0, -1);
+    });
+  };
+  // A tab tap always clears the detail stack and returns to the tab shell.
+  const goToTabs = () => {
+    setRouteStack([]);
+    setRoute({ name: "tabs" });
+  };
 
   return (
     <NavContext.Provider value={{ route, push, back }}>
@@ -154,6 +179,14 @@ export function App() {
             )}
             {route.name === "inbox" && <InboxScreen refreshKey={refreshKey} onChanged={bump} />}
             {route.name === "profile" && <ProfileScreen userId={route.userId} me={me} onChanged={bump} />}
+            {route.name === "circle" && (
+              <CircleDetailScreen
+                circleId={route.circleId}
+                refreshKey={refreshKey}
+                onBack={back}
+                onChanged={bump}
+              />
+            )}
             {route.name === "plan" && (
               <PlanDetailScreen planId={route.planId} me={me} onBack={back} onChanged={bump} />
             )}
@@ -169,18 +202,23 @@ export function App() {
             {route.name === "conversation" && (
               <ConversationScreen conversationId={route.conversationId} me={me} onChanged={bump} />
             )}
+            {route.name === "store" && <StorefrontScreen merchantId={route.merchantId} onBack={back} />}
+            {route.name === "product" && <ProductScreen productId={route.productId} onBack={back} />}
+            {route.name === "orders" && <OrdersScreen onBack={back} />}
+            {route.name === "order" && <OrderScreen orderId={route.orderId} onBack={back} />}
+            {route.name === "advertising" && <AdvertisingScreen onBack={back} />}
           </main>
 
           <nav className="bottom-nav" aria-label="Primary">
-            <NavButton id="home" label="Home" Icon={HomeIcon} tab={tab} setTab={setTab} route={route} onNavigate={back} />
-            <NavButton id="circles" label="Circles" Icon={CirclesIcon} tab={tab} setTab={setTab} route={route} onNavigate={back} />
+            <NavButton id="home" label="Home" Icon={HomeIcon} tab={tab} setTab={setTab} route={route} onNavigate={goToTabs} />
+            <NavButton id="circles" label="Circles" Icon={CirclesIcon} tab={tab} setTab={setTab} route={route} onNavigate={goToTabs} />
             <button className="create" aria-label="Create" onClick={() => openCreate("post")}>
               <span>
                 <PlusIcon width={22} height={22} />
               </span>
             </button>
-            <NavButton id="explore" label="Explore" Icon={CompassIcon} tab={tab} setTab={setTab} route={route} onNavigate={back} />
-            <NavButton id="you" label="You" Icon={UserIcon} tab={tab} setTab={setTab} route={route} onNavigate={back} />
+            <NavButton id="explore" label="Explore" Icon={CompassIcon} tab={tab} setTab={setTab} route={route} onNavigate={goToTabs} />
+            <NavButton id="you" label="You" Icon={UserIcon} tab={tab} setTab={setTab} route={route} onNavigate={goToTabs} />
           </nav>
         </>
       )}
@@ -315,6 +353,26 @@ function AccountMenu({
             }}
           >
             <EditIcon width={17} height={17} /> Edit profile
+          </button>
+          <button
+            className="menu-item"
+            role="menuitem"
+            onClick={() => {
+              setOpen(false);
+              nav.push({ name: "orders" });
+            }}
+          >
+            <ReceiptIcon width={17} height={17} /> Orders
+          </button>
+          <button
+            className="menu-item"
+            role="menuitem"
+            onClick={() => {
+              setOpen(false);
+              nav.push({ name: "advertising" });
+            }}
+          >
+            <MegaphoneIcon width={17} height={17} /> Advertising
           </button>
           <button
             className="menu-item"

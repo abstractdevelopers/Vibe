@@ -4,6 +4,7 @@ import { ApiError } from "../errors.js";
 import { queryOne } from "../db.js";
 import { parse, requireUser, type AppContext } from "../http.js";
 import { requireIdempotencyKey, runIdempotent } from "../idempotency.js";
+import { applyProviderEvent } from "./commerce.js";
 
 /**
  * Payment boundary endpoints. No order/checkout product ships in V1's first
@@ -50,29 +51,36 @@ export function paymentsRoutes(ctx: AppContext) {
     });
 
     app.post("/v1/webhooks/payments", async (req, reply) => {
-      const raw = typeof req.body === "string" ? req.body : JSON.stringify(req.body ?? {});
-      const signature = req.headers["x-vibe-signature"] as string | undefined;
-      if (!ctx.provider.verifyWebhook(raw, signature)) {
+      // Use the exact bytes Bachs signed, not a re-serialised body.
+      const raw = (req as { rawBody?: string }).rawBody ?? (typeof req.body === "string" ? req.body : JSON.stringify(req.body ?? {}));
+      const signature =
+        (req.headers["x-bachs-signature"] as string | undefined) ??
+        (req.headers["x-bachs-signature-v2"] as string | undefined) ??
+        (req.headers["x-vibe-signature"] as string | undefined);
+      const timestamp = req.headers["x-bachs-timestamp"] as string | undefined;
+      if (!ctx.provider.verifyWebhook(raw, signature, timestamp)) {
         throw ApiError.unauthorized("Invalid webhook signature");
       }
       const event = ctx.provider.parseWebhook(raw);
       // The inbox primary key (provider, event_id) makes redelivery a no-op.
       const inserted = await ctx.pool.query(
-        `INSERT INTO provider_webhook_events (provider, event_id, payload)
-         VALUES ($1, $2, $3) ON CONFLICT (provider, event_id) DO NOTHING`,
-        [event.provider, event.eventId, JSON.stringify(event)],
+        `INSERT INTO provider_webhook_events (provider, event_id, provider_ref, payload)
+         VALUES ($1, $2, $3, $4) ON CONFLICT (provider, event_id) DO NOTHING`,
+        [event.provider, event.eventId, event.providerRef, JSON.stringify(event)],
       );
       if (inserted.rowCount === 0) {
         reply.code(200);
         return { status: "duplicate_ignored" };
       }
-      // A verified event is recorded; applying it to orders is Phase 3 work.
+      // A verified event can advance the order it references. Unmatched events
+      // are recorded but not applied (they may belong to a different system).
+      const applied = await applyProviderEvent(ctx.pool, event);
       await ctx.pool.query(
         `UPDATE provider_webhook_events SET processed_at = now() WHERE provider = $1 AND event_id = $2`,
         [event.provider, event.eventId],
       );
       reply.code(202);
-      return { status: "accepted", eventId: event.eventId };
+      return { status: "accepted", eventId: event.eventId, type: event.type, orderUpdated: applied };
     });
 
     app.get("/v1/payments/attempts/:providerRef", async (req) => {
@@ -81,7 +89,7 @@ export function paymentsRoutes(ctx: AppContext) {
       const row = await queryOne(
         ctx.pool,
         `SELECT provider, event_id, received_at, processed_at FROM provider_webhook_events
-          WHERE payload->>'providerRef' = $1 ORDER BY received_at DESC LIMIT 1`,
+          WHERE provider_ref = $1 ORDER BY received_at DESC LIMIT 1`,
         [providerRef],
       );
       return {

@@ -4,19 +4,23 @@ import type { Comment, FeedItem, Me, PollActivity } from "../types";
 import {
   CloseIcon,
   CommentIcon,
+  EditIcon,
   GiftIcon,
   HeartIcon,
   ImageIcon,
   InboxIcon,
   PollIcon,
+  ReplyIcon,
   SendIcon,
   ShareIcon,
+  TrashIcon,
 } from "../components/Icons";
 import { EmptyState } from "../components/EmptyState";
 import { useNav } from "../nav";
 import { ReportSheet } from "../components/ReportSheet";
 import { GiftSheet } from "../components/GiftSheet";
 import { Avatar } from "../components/Avatar";
+import { Toast, type ToastState } from "../components/Toast";
 
 export type CreateMode = "post" | "poll" | "plan" | "expense" | "media";
 
@@ -34,6 +38,11 @@ export function HomeScreen({ me, refreshKey, onChanged, onCreate }: Props) {
   const [items, setItems] = useState<FeedItem[] | null>(null);
   const [cursor, setCursor] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [toast, setToast] = useState<ToastState | null>(null);
+
+  const notify = useCallback((next: Omit<ToastState, "id">) => {
+    setToast({ ...next, id: Date.now() });
+  }, []);
 
   const load = useCallback(async () => {
     setItems(null);
@@ -77,6 +86,48 @@ export function HomeScreen({ me, refreshKey, onChanged, onCreate }: Props) {
     try {
       await api(`/v1/posts/${item.id}/reactions`, { body: { kind: "like" } });
     } catch {
+      void load();
+    }
+  }
+
+  /**
+   * Optimistically remove the post, then offer an Undo that restores it. The
+   * server keeps the post (soft-delete), so undo is a real state transition and
+   * survives a reload, not just a local list edit.
+   */
+  async function deletePost(item: FeedItem) {
+    const snapshot = items;
+    setItems((prev) => (prev ?? []).filter((p) => p.id !== item.id));
+    try {
+      await api(`/v1/posts/${item.id}`, { method: "DELETE" });
+    } catch (err) {
+      setItems(snapshot);
+      notify({ message: err instanceof ApiError ? err.message : "Could not delete the post", tone: "danger" });
+      return;
+    }
+    notify({
+      message: "Post deleted",
+      action: {
+        label: "Undo",
+        onAction: () => void restorePost(item, snapshot),
+      },
+    });
+  }
+
+  async function restorePost(item: FeedItem, snapshot: FeedItem[] | null) {
+    try {
+      await api(`/v1/posts/${item.id}/restore`, { method: "POST" });
+      // Put it back where it was rather than jumping it to the top.
+      setItems((prev) => {
+        const list = prev ?? [];
+        if (list.some((p) => p.id === item.id)) return list;
+        const restored = snapshot?.find((p) => p.id === item.id) ?? item;
+        return [restored, ...list].sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1));
+      });
+      notify({ message: "Post restored", tone: "success" });
+      onChanged();
+    } catch (err) {
+      notify({ message: err instanceof ApiError ? err.message : "Could not restore the post", tone: "danger" });
       void load();
     }
   }
@@ -161,6 +212,8 @@ export function HomeScreen({ me, refreshKey, onChanged, onCreate }: Props) {
             item={item}
             me={me}
             onReact={() => void toggleReaction(item)}
+            onDelete={() => void deletePost(item)}
+            notify={notify}
             onChanged={onChanged}
             onCreate={onCreate}
           />
@@ -172,6 +225,12 @@ export function HomeScreen({ me, refreshKey, onChanged, onCreate }: Props) {
           Load more
         </button>
       )}
+
+      {toast && (
+        <div className="toast-host">
+          <Toast toast={toast} onDismiss={() => setToast(null)} />
+        </div>
+      )}
     </div>
   );
 }
@@ -180,12 +239,16 @@ function FeedCard({
   item,
   me,
   onReact,
+  onDelete,
+  notify,
   onChanged,
   onCreate,
 }: {
   item: FeedItem;
   me: Me;
   onReact: () => void;
+  onDelete: () => void;
+  notify: (t: Omit<ToastState, "id">) => void;
   onChanged: () => void;
   onCreate: (mode: CreateMode) => void;
 }) {
@@ -193,6 +256,30 @@ function FeedCard({
   const [commentsOpen, setCommentsOpen] = useState(false);
   const [reporting, setReporting] = useState(false);
   const [gifting, setGifting] = useState(false);
+  const [editing, setEditing] = useState(false);
+  const [editBody, setEditBody] = useState(item.body ?? "");
+  const [editError, setEditError] = useState<string | null>(null);
+  const [editBusy, setEditBusy] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  // Comment activity is counted locally so the thread can stay open. Calling
+  // onChanged() here would bump the feed's refresh key, reload the feed, and
+  // remount this card, collapsing the conversation the user is in the middle of.
+  const [commentDelta, setCommentDelta] = useState(0);
+  const isMine = item.author.id === me.id;
+
+  async function saveEdit() {
+    setEditBusy(true);
+    setEditError(null);
+    try {
+      await api(`/v1/posts/${item.id}`, { method: "PATCH", body: { body: editBody } });
+      setEditing(false);
+      onChanged();
+    } catch (err) {
+      setEditError(err instanceof ApiError ? err.message : "Could not save your edit");
+    } finally {
+      setEditBusy(false);
+    }
+  }
 
   async function share() {
     const text = item.body ?? "A post on Vibe";
@@ -202,6 +289,15 @@ function FeedCard({
       else await navigator.clipboard?.writeText(url);
     } catch {
       /* the user dismissed the share sheet; nothing to do */
+    }
+  }
+
+  async function copyPostLink() {
+    try {
+      await navigator.clipboard?.writeText(`${location.origin}/p/${item.id}`);
+      notify({ message: "Link copied", tone: "success" });
+    } catch {
+      notify({ message: "Could not copy the link", tone: "danger" });
     }
   }
 
@@ -243,7 +339,29 @@ function FeedCard({
         <span className="audience-tag">{audienceLabel(item.audience)}</span>
       </div>
 
-      {item.body && <p className="post-body">{item.body}</p>}
+      {editing ? (
+        <div className="card" style={{ margin: "var(--space-2) 0" }}>
+          <label htmlFor={`edit-${item.id}`}>Edit your post</label>
+          <textarea
+            id={`edit-${item.id}`}
+            value={editBody}
+            onChange={(e) => setEditBody(e.target.value)}
+            rows={3}
+            maxLength={5000}
+          />
+          {editError && <div className="notice danger">{editError}</div>}
+          <div className="row" style={{ gap: "var(--space-2)", marginTop: "var(--space-2)" }}>
+            <button className="btn primary" onClick={() => void saveEdit()} disabled={editBusy || !editBody.trim()}>
+              {editBusy ? "Saving…" : "Save changes"}
+            </button>
+            <button className="btn ghost" onClick={() => setEditing(false)} disabled={editBusy}>
+              Cancel
+            </button>
+          </div>
+        </div>
+      ) : (
+        item.body && <p className="post-body">{item.body}</p>
+      )}
       {item.mediaUrls && item.mediaUrls.length > 0 && <PostMedia urls={item.mediaUrls} />}
       {item.activity && <PollCard activity={item.activity} onChanged={onChanged} />}
 
@@ -259,7 +377,7 @@ function FeedCard({
           aria-label="Comments"
         >
           <CommentIcon />
-          {item.commentCount > 0 ? item.commentCount : "Comment"}
+          {item.commentCount + commentDelta > 0 ? item.commentCount + commentDelta : "Comment"}
         </button>
         <button className="react-btn" onClick={() => onCreate("media")} aria-label="Add a photo">
           <ImageIcon />
@@ -267,12 +385,51 @@ function FeedCard({
         <button className="react-btn" onClick={() => setGifting(true)} aria-label="Send a gift">
           <GiftIcon />
         </button>
-        <button className="react-btn" onClick={() => void share()} aria-label="Share">
+        <button className="react-btn" onClick={() => void copyPostLink()} aria-label="Copy link">
           <ShareIcon />
         </button>
+        {isMine && !editing && (
+          <button className="react-btn" onClick={() => setEditing(true)} aria-label="Edit post">
+            <EditIcon />
+          </button>
+        )}
+        {isMine && (
+          <button
+            className="react-btn"
+            onClick={() => setConfirmDelete(true)}
+            aria-label="Delete post"
+          >
+            <TrashIcon />
+          </button>
+        )}
       </div>
 
-      {commentsOpen && <CommentThread postId={item.id} me={me} onChanged={onChanged} />}
+      {confirmDelete && (
+        <div className="notice danger" role="alertdialog" aria-label="Delete this post?">
+          <span className="grow">Delete this post? You can undo for a few seconds.</span>
+          <button
+            className="btn ghost"
+            onClick={() => {
+              setConfirmDelete(false);
+              onDelete();
+            }}
+          >
+            Delete
+          </button>
+          <button className="btn ghost" onClick={() => setConfirmDelete(false)}>
+            Cancel
+          </button>
+        </div>
+      )}
+
+      {commentsOpen && (
+        <CommentThread
+          postId={item.id}
+          me={me}
+          notify={notify}
+          onCommentChange={(delta) => setCommentDelta((d) => d + delta)}
+        />
+      )}
 
       {gifting && <GiftSheet postId={item.id} authorName={item.author.displayName} onClose={() => setGifting(false)} />}
 
@@ -298,11 +455,25 @@ function PostMedia({ urls }: { urls: string[] }) {
   );
 }
 
-function CommentThread({ postId, me, onChanged }: { postId: string; me: Me; onChanged: () => void }) {
+function CommentThread({
+  postId,
+  me,
+  notify,
+  onCommentChange,
+}: {
+  postId: string;
+  me: Me;
+  notify: (t: Omit<ToastState, "id">) => void;
+  onCommentChange: (delta: number) => void;
+}) {
   const nav = useNav();
   const [comments, setComments] = useState<Comment[] | null>(null);
   const [body, setBody] = useState("");
   const [busy, setBusy] = useState(false);
+  const [replyTo, setReplyTo] = useState<{ id: string; handle: string } | null>(null);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editBody, setEditBody] = useState("");
+  const [editBusy, setEditBusy] = useState(false);
 
   const load = useCallback(async () => {
     try {
@@ -321,32 +492,65 @@ function CommentThread({ postId, me, onChanged }: { postId: string; me: Me; onCh
     if (!body.trim()) return;
     setBusy(true);
     try {
-      const created = await api<{ id: string; createdAt: string }>(`/v1/posts/${postId}/comments`, {
-        body: { body: body.trim() },
+      await api(`/v1/posts/${postId}/comments`, {
+        body: { body: body.trim(), ...(replyTo ? { parentId: replyTo.id } : {}) },
       });
-      // Append locally rather than triggering a feed reload, which would
-      // remount this card and collapse the open thread.
-      setComments((prev) => [
-        ...(prev ?? []),
-        { id: created.id, body: body.trim(), createdAt: created.createdAt, author: me },
-      ]);
       setBody("");
-      onChanged();
+      setReplyTo(null);
+      // Reload the thread so the new reply lands in the right place in the tree.
+      await load();
+      onCommentChange(1);
     } finally {
       setBusy(false);
     }
   }
 
-  return (
-    <div style={{ marginTop: "var(--space-3)", paddingTop: "var(--space-3)", borderTop: "1px solid var(--hairline)" }}>
-      {comments === null && <p className="meta">Loading comments…</p>}
-      {comments?.length === 0 && <p className="meta">No comments yet. Start the conversation.</p>}
-      {comments?.map((c) => (
-        <div
-          key={c.id}
-          className="row"
-          style={{ gap: "var(--space-2)", alignItems: "flex-start", marginBottom: "var(--space-2)" }}
-        >
+  async function saveEdit(id: string) {
+    if (!editBody.trim()) return;
+    setEditBusy(true);
+    try {
+      await api(`/v1/comments/${id}`, { method: "PATCH", body: { body: editBody.trim() } });
+      setEditingId(null);
+      await load();
+    } catch (err) {
+      notify({ message: err instanceof ApiError ? err.message : "Could not save your edit", tone: "danger" });
+    } finally {
+      setEditBusy(false);
+    }
+  }
+
+  async function remove(id: string) {
+    try {
+      await api(`/v1/comments/${id}`, { method: "DELETE" });
+      await load();
+      notify({
+        message: "Comment deleted",
+        action: {
+          label: "Undo",
+          onAction: () => void restore(id),
+        },
+      });
+    } catch (err) {
+      notify({ message: err instanceof ApiError ? err.message : "Could not delete the comment", tone: "danger" });
+    }
+  }
+
+  async function restore(id: string) {
+    try {
+      await api(`/v1/comments/${id}/restore`, { method: "POST" });
+      await load();
+      notify({ message: "Comment restored", tone: "success" });
+    } catch (err) {
+      notify({ message: err instanceof ApiError ? err.message : "Could not restore the comment", tone: "danger" });
+      await load();
+    }
+  }
+
+  function renderComment(c: Comment, isReply: boolean) {
+    const editing = editingId === c.id;
+    return (
+      <div key={c.id}>
+        <div className="comment-row">
           <button
             className="avatar sm"
             aria-label={`View ${c.author.displayName}'s profile`}
@@ -359,17 +563,85 @@ function CommentThread({ postId, me, onChanged }: { postId: string; me: Me; onCh
             <div className="meta">
               <strong style={{ color: "var(--text-secondary)" }}>@{c.author.handle}</strong> ·{" "}
               {relativeTime(c.createdAt)}
+              {c.editedAt && !c.deleted ? " · edited" : ""}
             </div>
-            <div>{c.body}</div>
+            {c.deleted ? (
+              <div className="comment-deleted">Comment deleted</div>
+            ) : editing ? (
+              <div className="comment-editor">
+                <input
+                  aria-label="Edit your comment"
+                  value={editBody}
+                  onChange={(e) => setEditBody(e.target.value)}
+                  style={{ marginBottom: 0 }}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") void saveEdit(c.id);
+                    if (e.key === "Escape") setEditingId(null);
+                  }}
+                />
+                <button className="btn primary" disabled={editBusy || !editBody.trim()} onClick={() => void saveEdit(c.id)}>
+                  Save
+                </button>
+                <button className="btn ghost" onClick={() => setEditingId(null)}>
+                  Cancel
+                </button>
+              </div>
+            ) : (
+              <div>{c.body}</div>
+            )}
+            {!c.deleted && !editing && (
+              <div className="comment-actions">
+                {!isReply && (
+                  <button onClick={() => setReplyTo({ id: c.id, handle: c.author.handle })}>
+                    <ReplyIcon width={13} height={13} /> Reply
+                  </button>
+                )}
+                {c.isMine && (
+                  <button
+                    onClick={() => {
+                      setEditingId(c.id);
+                      setEditBody(c.body);
+                    }}
+                  >
+                    Edit
+                  </button>
+                )}
+                {c.isMine && <button onClick={() => void remove(c.id)}>Delete</button>}
+              </div>
+            )}
           </div>
         </div>
-      ))}
+        {!isReply && c.replies && c.replies.length > 0 && (
+          <div className="comment-replies">{c.replies.map((reply) => renderComment(reply, true))}</div>
+        )}
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ marginTop: "var(--space-3)", paddingTop: "var(--space-3)", borderTop: "1px solid var(--hairline)" }}>
+      {comments === null && <p className="meta">Loading comments…</p>}
+      {comments?.length === 0 && <p className="meta">No comments yet. Start the conversation.</p>}
+      {comments?.map((c) => renderComment(c, false))}
+
+      {replyTo && (
+        <div className="meta" style={{ marginTop: "var(--space-2)" }}>
+          Replying to @{replyTo.handle}{" "}
+          <button
+            className="btn ghost"
+            style={{ padding: "0 var(--space-2)" }}
+            onClick={() => setReplyTo(null)}
+          >
+            Cancel
+          </button>
+        </div>
+      )}
       <div className="row" style={{ gap: "var(--space-2)", marginTop: "var(--space-2)" }}>
         <input
-          aria-label="Write a comment"
+          aria-label={replyTo ? `Reply to ${replyTo.handle}` : "Write a comment"}
           value={body}
           onChange={(e) => setBody(e.target.value)}
-          placeholder="Add a comment…"
+          placeholder={replyTo ? `Reply to @${replyTo.handle}…` : "Add a comment…"}
           style={{ marginBottom: 0 }}
           onKeyDown={(e) => {
             if (e.key === "Enter") void submit();

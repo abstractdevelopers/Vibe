@@ -1,5 +1,7 @@
 import type { FastifyInstance } from "fastify";
+import type pg from "pg";
 import { queryMany, queryOne } from "../db.js";
+import { newId } from "../ids.js";
 import { requireUser, type AppContext } from "../http.js";
 
 export function notificationsRoutes(ctx: AppContext) {
@@ -44,4 +46,59 @@ export function notificationsRoutes(ctx: AppContext) {
       return { unread: row?.count ?? 0 };
     });
   };
+}
+
+/**
+ * Emitted notification types use a dotted namespace ("plan.created"), while the
+ * user's preference keys are coarse families ("plan_invite", "plan_change").
+ * This table is the single source of truth for that mapping, so an opt-out is
+ * enforced against the family the user actually sees in Settings.
+ */
+const NOTIFICATION_FAMILY: Record<string, string> = {
+  "plan.created": "plan_invite",
+  "plan.rsvp_updated": "plan_change",
+  "plan.changed": "plan_change",
+  "plan.cancelled": "plan_change",
+  "poll.closed": "poll_closed",
+  "expense.updated": "expense_update",
+  "payment.reported": "payment_reported",
+  "payment.verified": "payment_verified",
+  "message.created": "message",
+  "gift.received": "gift",
+  "comment.reply": "comment_reply",
+  "comment.mention": "mention",
+};
+
+/**
+ * Insert one notification per recipient, honouring each user's per-type opt-out.
+ * Types use a dotted namespace (e.g. "plan.created"); the preference key is the
+ * first segment's family, matched against the NOTIFICATION_TYPES allow-list in
+ * modules/account.ts. A recipient who has switched a family off simply gets no
+ * row, so quiet-by-choice is enforced server-side, not just in the UI.
+ */
+export async function notifyUsers(
+  pool: pg.Pool,
+  userIds: string[],
+  type: string,
+  entityType: string,
+  entityId: string,
+  payload: Record<string, unknown>,
+): Promise<void> {
+  if (userIds.length === 0) return;
+  const family = NOTIFICATION_FAMILY[type] ?? type.split(".")[0] ?? type;
+  const rows = await queryMany<{ id: string; notification_prefs: Record<string, boolean> | null }>(
+    pool,
+    "SELECT id, notification_prefs FROM users WHERE id = ANY($1::uuid[])",
+    [userIds],
+  );
+  for (const row of rows) {
+    const prefs = row.notification_prefs ?? {};
+    // Opt-out only: absent means on. Accept either the family or the full type.
+    if (prefs[family] === false || prefs[type] === false) continue;
+    await pool.query(
+      `INSERT INTO notifications (id, user_id, type, entity_type, entity_id, payload)
+       VALUES ($1, $2, $3, $4, $5, $6)`,
+      [newId(), row.id, type, entityType, entityId, JSON.stringify(payload)],
+    );
+  }
 }

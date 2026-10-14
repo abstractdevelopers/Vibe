@@ -2,7 +2,7 @@
   "name": "vibe",
   "version": "0.1.0",
   "private": true,
-  "description": "Vibe — interactive social network that turns conversations into plans, activities and commerce.",
+  "description": "Vibe \u2014 interactive social network that turns conversations into plans, activities and commerce.",
   "workspaces": [
     "packages/*",
     "apps/*"
@@ -15,7 +15,9 @@
     "dev:web": "npm --workspace @vibe/web run dev",
     "typecheck": "npm --workspace @vibe/api run typecheck && npm --workspace @vibe/web run typecheck",
     "test": "npm --workspace @vibe/api run test",
-    "build": "npm --workspace @vibe/web run build"
+    "build": "npm --workspace @vibe/web run build",
+    "check-bundle": "node scripts/check-bundle.mjs",
+    "verify": "npm run typecheck && npm test && npm run build && npm run check-bundle"
   },
   "engines": {
     "node": ">=22"

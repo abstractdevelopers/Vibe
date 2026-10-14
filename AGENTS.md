@@ -107,9 +107,111 @@ test for any state transition, retry, or duplicate-event path you touch.
   `navigator.geolocation` call and no coordinate column anywhere. Do not add
   either. See `migrations/0002_discovery.sql`.
 
+## Navigation
+- `nav.ts` is an in-memory route plus a **stack** (`routeStack` in `App.tsx`).
+  `push` grows the stack, `back` pops it. A detail view therefore returns to the
+  screen it came from — a plan returns to its Circle, not straight to the tab.
+- A tab tap must call `goToTabs()` (which clears the stack), **not** `back()`.
+  Wiring the nav buttons to `back()` makes a tab tap pop one detail view, so
+  tapping Explore from Settings lands on the previous screen instead.
+- Circle detail is its own route (`{ name: "circle", circleId }`), not inline
+  state in the Circles list, so it survives the plan/expense round trip.
+
+## API serialization
+- `publicUser(row)` reads `row.id` as the **user** id. When a row's `id` is some
+  other entity (a post id, a conversation id), pass an explicit object:
+  `publicUser({ id: row.author_id, handle, display_name, avatar_url })`. Passing
+  the raw post row makes `author.id` the post id, which breaks every "is this
+  mine" check (edit/delete affordances) and profile links. A regression test
+  guards this (`tests/feed-author.test.ts`).
+- Entity responses are **camelCase**; only raw analytics rows are snake_case.
+  When a handler returns a DB row directly (e.g. a list), map it to camelCase —
+  `priceMinor`, `amountMinor`, `unitAmountMinor`, `createdAt`. A screen that
+  reads `price_minor` from a camelCase payload renders `NaN`, which no typecheck
+  catches because the client types the response by hand. The e2e asserts on a
+  formatted price and the absence of `NaN` for this reason.
+
+## Analytics and notifications
+- Analytics events are allow-listed by name and by property key
+  (`modules/analytics.ts`). Unknown names are dropped; only scalar, allow-listed
+  properties are stored. Never attach a message body or payment data.
+- Server events are fire-and-forget (`trackSafe`), so a test that asserts on one
+  must poll briefly rather than read immediately after the response.
+- Notification opt-outs are keyed by a **family** ("plan_invite"), while emitted
+  types are dotted ("plan.created"). `NOTIFICATION_FAMILY` in
+  `modules/notifications.ts` is the single mapping. Add a mapping for any new
+  type or the opt-out silently does nothing.
+
+## Content lifecycle (posts and comments)
+- Both posts and comments are **soft-deleted with an undo window**
+  (`UNDO_WINDOW_MS`, 30 s, in `modules/feed.ts`). The server keeps the row and
+  the client offers Undo; the two windows must stay equal.
+- Posts record `deleted_by`. Undo is only allowed when `deleted_by` is the
+  author, so an author can never restore content a moderator removed. Keep that
+  distinction when touching the delete/restore routes.
+- A deleted comment with visible replies is kept as a `[deleted]` placeholder so
+  the replies are not orphaned; a deleted comment with no replies is dropped
+  from the thread. Replies are capped at one level: a reply to a reply attaches
+  to the same root (`parent_id`), so the tree never nests arbitrarily.
+- Edits are auditable, not silent: `post_revisions` and `comment_revisions`
+  record `previous_body`/`new_body` before the live body changes.
+
+## Feed ranking and the per-author cap
+- `diversify()` keeps at most **three posts per author per page**. A probe or
+  test that creates several posts as one user and then looks for the newest one
+  in the feed will fail. Create the post as a **fresh account** instead. This
+  bit both the comment probe and the first e2e run.
+
+## Commerce, payments and advertising
+- Order lifecycle lives in `modules/commerce.ts` (`ORDER_TRANSITIONS` +
+  `transitionOrder`). A transition is allowed **only** if it is listed; a
+  same-status target is a no-op. `paid` is reachable directly from `created`
+  because a provider webhook can arrive before our own checkout status write
+  lands, and the provider is authoritative about whether money moved.
+- An order reaches `paid` **only** from a signature-verified webhook
+  (`applyProviderEvent`), never from the checkout redirect. Webhook events are
+  deduped by `(provider, event_id)`; a redelivery is a no-op.
+- The provider seam is `payments/provider.ts`. `bachs` is a real REST adapter;
+  `stub` is local-only and refused in production. Bachs webhook signature is
+  HMAC-SHA256 of `"{timestamp}.{raw_body}"` over the **exact raw bytes**, so the
+  JSON content-type parser in `app.ts` captures `req.rawBody`. That parser must
+  treat an empty body as `{}` — a POST with no payload (e.g. `/checkout`)
+  otherwise throws `Unexpected end of JSON input` and 500s.
+- Bachs sends the event id as `id`; the normalised parser falls back to `id` when
+  `eventId` is absent, or every event collapses to `"unknown"` and dedupes
+  against itself.
+- Merchants start `unverified` and cannot publish an active product until
+  verified. Verification and campaign review are operator actions
+  (`requireAdmin`); the e2e run grants the actor admin directly, as an operator
+  would be provisioned.
+- Campaigns: draft → submitted → operator review → approved/rejected. Only an
+  approved campaign is eligible to run, but approval does not place an ad:
+  automated feed delivery is deferred. Regulated categories are refused at
+  creation.
+
+## Web client gotchas
+- Comment activity updates the count via a local delta
+  (`onCommentChange`), **not** `onChanged()`. `onChanged()` bumps the global
+  `refreshKey`, which reloads the feed and remounts the card, collapsing the
+  thread the user is posting in.
+- Transient confirmations with an optional action use `components/Toast.tsx`
+  (`.toast-host`, z-index 70). Undo toasts pause their timer on hover/focus.
+- React-controlled inputs cannot be driven in a CDP probe by setting `.value`
+  directly. Use the native setter
+  (`Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,"value").set`).
+
 ## Do not
 
 - Introduce floating-point money arithmetic.
 - Mark a payment, purchase or check-in complete without server confirmation.
 - Add dead-end UI: if a button is shown, it must work.
 - Break existing API contracts without a migration plan.
+- Build payment-provider, custody, location or regulated-advertising behaviour
+  without the boundary being explicitly approved. The provider seam is
+  `payments/provider.ts` (`PaymentProvider`); the **Bachs** adapter is a real
+  implementation of that interface, with webhook signature verification and
+  idempotency. It must not be described as live or working without credentials,
+  and it never reports success on its own: only a verified webhook marks an
+  order paid. Custody/stored-value and regulated-category advertising stay out.
+  A provider name alone is not an approval; do not weaken the production config
+  guard (`SESSION_SECRET`, `PAYMENTS_PROVIDER`) on the strength of one.

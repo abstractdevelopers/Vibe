@@ -8,7 +8,12 @@ async function main(): Promise<void> {
   const config = loadConfig();
   const pool = createPool(config.DATABASE_URL);
   const hub = new RealtimeHub();
-  const provider = createPaymentProvider(config.PAYMENTS_PROVIDER, config.PAYMENTS_WEBHOOK_SECRET);
+  const provider = createPaymentProvider(config.PAYMENTS_PROVIDER, config.PAYMENTS_WEBHOOK_SECRET, {
+    apiKey: config.BACHS_API_KEY,
+    baseUrl: config.BACHS_BASE_URL,
+    webUrl: config.PUBLIC_WEB_URL,
+    apiUrl: config.PUBLIC_API_URL,
+  });
 
   const app = await buildApp({ pool, config, hub, provider });
   await app.listen({ port: config.PORT, host: "0.0.0.0" });

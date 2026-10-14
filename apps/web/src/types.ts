@@ -94,9 +94,14 @@ export interface Notification {
 
 export interface Comment {
   id: string;
+  parentId: string | null;
   body: string;
   createdAt: string;
+  editedAt: string | null;
+  deleted: boolean;
+  isMine: boolean;
   author: PublicUser;
+  replies?: Comment[];
 }
 
 export interface ExpenseParticipant {

@@ -3,6 +3,7 @@ import { z } from "zod";
 import { queryMany, queryOne } from "../db.js";
 import { ApiError } from "../errors.js";
 import { parse, publicUser, requireUser, type AppContext } from "../http.js";
+import { trackSafe } from "./analytics.js";
 
 /**
  * Direct messaging.
@@ -336,6 +337,7 @@ export function messagingRoutes(ctx: AppContext) {
         { type: "message.created", entityId: id, payload: { conversationId: id, messageId: inserted!.id } },
       );
 
+      trackSafe(ctx.pool, { name: "circle_message_sent", userId: user.id, properties: { entityType: "conversation", entityId: id } });
       reply.code(201);
       return { id: inserted!.id, createdAt: inserted!.created_at };
     });

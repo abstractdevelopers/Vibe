@@ -2,7 +2,7 @@ import type { FastifyInstance } from "fastify";
 import { createPool } from "../src/db.js";
 import { buildApp } from "../src/app.js";
 import { RealtimeHub } from "../src/realtime.js";
-import { createPaymentProvider } from "../src/payments/provider.js";
+import { createPaymentProvider, type PaymentProvider } from "../src/payments/provider.js";
 import type { Config } from "../src/config.js";
 import type pg from "pg";
 
@@ -16,7 +16,11 @@ export const testConfig: Config = {
   SESSION_SECRET: "test-session-secret-value",
   PAYMENTS_PROVIDER: "stub",
   PAYMENTS_WEBHOOK_SECRET: "test-webhook-secret",
+  BACHS_API_KEY: undefined,
+  BACHS_WEBHOOK_SECRET: undefined,
+  BACHS_BASE_URL: "https://sandbox-api.bachs.io",
   PUBLIC_API_URL: "http://localhost:12000",
+  PUBLIC_WEB_URL: "http://localhost:12001",
   isProduction: false,
 };
 
@@ -26,10 +30,10 @@ export interface Harness {
   close(): Promise<void>;
 }
 
-export async function createHarness(): Promise<Harness> {
+export async function createHarness(providerOverride?: PaymentProvider): Promise<Harness> {
   const pool = createPool(testConfig.DATABASE_URL);
   const hub = new RealtimeHub();
-  const provider = createPaymentProvider("stub", testConfig.PAYMENTS_WEBHOOK_SECRET);
+  const provider = providerOverride ?? createPaymentProvider("stub", testConfig.PAYMENTS_WEBHOOK_SECRET);
   const app = await buildApp({ pool, config: testConfig, hub, provider });
   await app.ready();
   return {
@@ -50,7 +54,9 @@ export async function resetDb(pool: pg.Pool): Promise<void> {
              provider_webhook_events, idempotency_keys, reports, moderation_cases,
              moderation_actions, audit_events, notifications, sessions, follows,
              blocks, mutes, comments, reactions, circle_members, circle_invites,
-             conversations, conversation_members, messages, post_gifts
+             conversations, conversation_members, messages, post_gifts,
+             post_revisions, comment_revisions, account_deletion_requests, analytics_events,
+             order_items, order_events, orders, products, merchants, campaigns
     RESTART IDENTITY CASCADE
   `);
 }

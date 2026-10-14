@@ -11,6 +11,7 @@ import {
 import { queryOne, withTransaction } from "../db.js";
 import { newId } from "../ids.js";
 import { parse, publicUser, requireUser, type AppContext } from "../http.js";
+import { trackSafe } from "./analytics.js";
 
 const registerSchema = z.object({
   email: z.string().email().max(254),
@@ -92,6 +93,7 @@ export function identityRoutes(ctx: AppContext) {
         );
       });
       const session = await createSession(ctx.pool, user!.id, ctx.config.SESSION_TTL_SECONDS);
+      trackSafe(ctx.pool, { name: "signup_completed", userId: user!.id });
       reply.code(201);
       return {
         user: { ...publicUser(user!), email: user!.email },

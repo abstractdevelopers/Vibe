@@ -42,6 +42,7 @@ import {
   Moon,
   Plus,
   Receipt,
+  Reply,
   Search,
   Send,
   Settings,
@@ -83,6 +84,7 @@ export const InboxIcon = icon(Inbox);
 export const HeartIcon = icon(Heart);
 export const ChatIcon = icon(MessageCircle);
 export const CommentIcon = icon(MessageSquare);
+export const ReplyIcon = icon(Reply);
 export const ShareIcon = icon(Share2);
 export const CalendarIcon = icon(CalendarDays);
 export const PollIcon = icon(Vote);

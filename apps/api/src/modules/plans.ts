@@ -5,6 +5,8 @@ import { queryMany, queryOne, withTransaction } from "../db.js";
 import { newId } from "../ids.js";
 import { parse, requireUser, type AppContext } from "../http.js";
 import { requireCircleMember } from "./access.js";
+import { trackSafe } from "./analytics.js";
+import { notifyUsers } from "./notifications.js";
 
 const createPlanSchema = z.object({
   circleId: z.string().uuid(),
@@ -40,13 +42,7 @@ async function notifyCircle(
     "SELECT user_id FROM circle_members WHERE circle_id = $1 AND user_id <> $2",
     [circleId, exceptUserId],
   );
-  for (const member of members) {
-    await ctx.pool.query(
-      `INSERT INTO notifications (id, user_id, type, entity_type, entity_id, payload)
-       VALUES ($1, $2, $3, 'plan', $4, $5)`,
-      [newId(), member.user_id, type, entityId, JSON.stringify(payload)],
-    );
-  }
+  await notifyUsers(ctx.pool, members.map((m) => m.user_id), type, "plan", entityId, payload);
   ctx.hub.publishToUsers(
     members.map((m) => m.user_id),
     { type: "plan.updated", entityId, payload },
@@ -91,6 +87,7 @@ export function plansRoutes(ctx: AppContext) {
         title: input.title,
         startsAt: input.startsAt,
       });
+      trackSafe(ctx.pool, { name: "plan_created", userId: user.id, properties: { entityType: "plan", entityId: plan!.id } });
       reply.code(201);
       return { id: plan!.id };
     });
@@ -178,6 +175,7 @@ export function plansRoutes(ctx: AppContext) {
         userId: user.id,
         state,
       });
+      trackSafe(ctx.pool, { name: "rsvp_updated", userId: user.id, properties: { entityType: "plan", entityId: id, result: state } });
       return { state };
     });
 

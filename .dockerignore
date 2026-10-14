@@ -1,0 +1,10 @@
+node_modules
+**/node_modules
+**/dist
+.audit
+.agent_tmp
+.git
+.env
+.env.*
+*.log
+apps/api/.data

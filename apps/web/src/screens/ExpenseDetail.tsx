@@ -82,6 +82,28 @@ export function ExpenseDetailScreen({ expenseId, me, onBack, onChanged }: Props)
     }
   }
 
+  /**
+   * Raise a dispute on a participant's allocation. A dispute is a correction,
+   * not a deletion: it moves the allocation to `disputed` and writes an audit
+   * event, exactly as §4.6 requires.
+   */
+  async function disputeAllocation(targetUserId: string) {
+    setBusy(true);
+    setError(null);
+    try {
+      await api(`/v1/expenses/${expenseId}/participants/${targetUserId}/status`, {
+        body: { status: "disputed" },
+      });
+      setNotice("Dispute recorded. It is visible to the Circle and kept in the history.");
+      await load();
+      onChanged();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Could not record the dispute");
+    } finally {
+      setBusy(false);
+    }
+  }
+
   const currency = detail?.expense.currency ?? "";
   const mine = detail?.participants.find((p) => p.userId === me.id);
   const myReport = detail?.paymentReports.find((r) => r.participantId === me.id);
@@ -145,6 +167,16 @@ export function ExpenseDetailScreen({ expenseId, me, onBack, onChanged }: Props)
                   <StatusChip status={p.status} />
                 </div>
               </div>
+              {canVerify && p.status !== "settled" && p.status !== "waived" && p.status !== "disputed" && (
+                <button
+                  className="btn ghost"
+                  style={{ paddingLeft: 0, marginTop: "var(--space-2)" }}
+                  onClick={() => void disputeAllocation(p.userId)}
+                  disabled={busy}
+                >
+                  <InfoIcon width={15} height={15} /> Raise a dispute
+                </button>
+              )}
             </div>
           ))}
 

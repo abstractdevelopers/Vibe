@@ -51,7 +51,19 @@ export function ExploreScreen({ me }: { me: Me }) {
   const [kind, setKind] = useState<"all" | "event" | "place">("all");
   const [results, setResults] = useState<DiscoveryResult[] | null>(null);
   const [people, setPeople] = useState<Array<{ id: string; handle: string; displayName: string }>>([]);
+  const [shops, setShops] = useState<Array<{ id: string; name: string; category: string | null }> | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const res = await api<{ merchants: Array<{ id: string; name: string; category: string | null }> }>("/v1/merchants");
+        setShops(res.merchants);
+      } catch {
+        setShops([]);
+      }
+    })();
+  }, []);
 
   const load = useCallback(async () => {
     setResults(null);
@@ -217,6 +229,21 @@ export function ExploreScreen({ me }: { me: Me }) {
             <PlaceCard key={r.id} result={r} onOpen={() => nav.push({ name: "place", placeId: r.id })} />
           ),
         )}
+      </div>
+
+      <h2 className="section-title" style={{ marginTop: "var(--space-5)" }}>Shops</h2>
+      {shops === null && <div className="skeleton" aria-busy="true" />}
+      {shops?.length === 0 && <p className="meta">No verified shops yet.</p>}
+      <div className="stack">
+        {shops?.map((s) => (
+          <button key={s.id} className="card row spread" onClick={() => nav.push({ name: "store", merchantId: s.id })}>
+            <span>
+              <strong>{s.name}</strong>
+              {s.category && <div className="meta">{s.category}</div>}
+            </span>
+            <span className="audience-tag"><StoreIcon width={12} height={12} /> Verified</span>
+          </button>
+        ))}
       </div>
     </div>
   );

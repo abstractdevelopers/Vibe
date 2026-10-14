@@ -1,18 +1,8 @@
 import { useCallback, useEffect, useState } from "react";
 import { api, ApiError } from "../api";
-import { formatMinorUnits } from "@vibe/shared";
-import type { CircleSummary, ExpenseSummary, Me, PlanSummary } from "../types";
+import type { CircleSummary, Me } from "../types";
 import { EmptyState } from "../components/EmptyState";
-import {
-  CalendarIcon,
-  CheckIcon,
-  CirclesIcon,
-  LockIcon,
-  PlusIcon,
-  UsersIcon,
-  ChevronRightIcon,
-  WalletIcon,
-} from "../components/Icons";
+import { CheckIcon, CirclesIcon, LockIcon, PlusIcon } from "../components/Icons";
 import { useNav } from "../nav";
 
 interface Props {
@@ -21,19 +11,9 @@ interface Props {
   onChanged: () => void;
 }
 
-interface CircleDetail {
-  circle: { id: string; name: string; description: string | null; privacy: string };
-  viewerRole: string;
-  members: Array<{ id: string; handle: string; displayName: string; role: string }>;
-  plans: PlanSummary[];
-  expenses: ExpenseSummary[];
-}
-
 export function CirclesScreen({ refreshKey, onChanged }: Props) {
   const nav = useNav();
   const [circles, setCircles] = useState<CircleSummary[] | null>(null);
-  const [selected, setSelected] = useState<string | null>(null);
-  const [detail, setDetail] = useState<CircleDetail | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [name, setName] = useState("");
@@ -52,16 +32,6 @@ export function CirclesScreen({ refreshKey, onChanged }: Props) {
     void loadCircles();
   }, [loadCircles, refreshKey]);
 
-  useEffect(() => {
-    if (!selected) {
-      setDetail(null);
-      return;
-    }
-    void api<CircleDetail>(`/v1/circles/${selected}`)
-      .then(setDetail)
-      .catch(() => setDetail(null));
-  }, [selected, refreshKey]);
-
   async function createCircle() {
     if (!name.trim()) return;
     try {
@@ -71,26 +41,13 @@ export function CirclesScreen({ refreshKey, onChanged }: Props) {
       setName("");
       setShowCreate(false);
       await loadCircles();
-      setSelected(result.id);
+      nav.push({ name: "circle", circleId: result.id });
       onChanged();
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Could not create the Circle");
     }
   }
 
-  async function createInvite() {
-    if (!selected) return;
-    try {
-      const result = await api<{ inviteToken: string }>(`/v1/circles/${selected}/invites`, {
-        body: { role: "member", maxUses: 10, expiresInHours: 72 },
-      });
-      await navigator.clipboard?.writeText(result.inviteToken).catch(() => undefined);
-      setNotice(`Invite copied · expires in 72h`);
-      setTimeout(() => setNotice(null), 6000);
-    } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Could not create an invite");
-    }
-  }
 
   return (
     <div>
@@ -147,14 +104,12 @@ export function CirclesScreen({ refreshKey, onChanged }: Props) {
       )}
 
       {circles?.map((circle) => {
-        const active = selected === circle.id;
         return (
           <button
             key={circle.id}
             className="card interactive"
             style={{ display: "block", width: "100%", textAlign: "left", marginBottom: "var(--space-3)" }}
-            onClick={() => setSelected(active ? null : circle.id)}
-            aria-expanded={active}
+            onClick={() => nav.push({ name: "circle", circleId: circle.id })}
           >
             <div className="row spread">
               <div className="row" style={{ gap: "var(--space-3)" }}>
@@ -179,111 +134,7 @@ export function CirclesScreen({ refreshKey, onChanged }: Props) {
         );
       })}
 
-      {detail && (
-        <div className="card" style={{ marginTop: "var(--space-2)" }}>
-          <div className="row spread" style={{ marginBottom: "var(--space-3)" }}>
-            <h3>{detail.circle.name}</h3>
-            <button className="btn violet" onClick={() => void createInvite()}>
-              <PlusIcon width={17} height={17} /> Invite
-            </button>
-          </div>
-          <p className="muted">{detail.circle.description ?? "No description yet."}</p>
-
-          <Section icon={<CalendarIcon width={16} height={16} />} title="Plans">
-            {detail.plans.length === 0 ? (
-              <p className="meta">No plans yet — propose one from Create.</p>
-            ) : (
-              detail.plans.map((plan) => (
-                <button
-                  key={plan.id}
-                  className="row spread"
-                  style={{
-                    padding: "var(--space-3) 0",
-                    width: "100%",
-                    background: "none",
-                    border: "none",
-                    borderBottom: "1px solid var(--hairline)",
-                    cursor: "pointer",
-                    textAlign: "left",
-                  }}
-                  onClick={() => nav.push({ name: "plan", planId: plan.id })}
-                >
-                  <span>{plan.title}</span>
-                  <span className="row" style={{ gap: "var(--space-2)" }}>
-                    <span className="meta">
-                      {new Date(plan.starts_at).toLocaleDateString(undefined, { month: "short", day: "numeric" })} ·{" "}
-                      {plan.state}
-                    </span>
-                    <ChevronRightIcon width={16} height={16} style={{ color: "var(--text-faint)" }} />
-                  </span>
-                </button>
-              ))
-            )}
-          </Section>
-
-          <Section icon={<WalletIcon width={16} height={16} />} title="Shared money">
-            <p className="meta" style={{ marginBottom: "var(--space-2)" }}>
-              Vibe coordinates shared expenses. It never holds your money.
-            </p>
-            {detail.expenses.length === 0 ? (
-              <p className="meta">Nothing to settle.</p>
-            ) : (
-              detail.expenses.map((expense) => (
-                <button
-                  key={expense.id}
-                  className="row spread"
-                  style={{
-                    padding: "var(--space-3) 0",
-                    width: "100%",
-                    background: "none",
-                    border: "none",
-                    borderBottom: "1px solid var(--hairline)",
-                    cursor: "pointer",
-                    textAlign: "left",
-                  }}
-                  onClick={() => nav.push({ name: "expense", expenseId: expense.id })}
-                >
-                  <span>{expense.description}</span>
-                  <span className="row" style={{ gap: "var(--space-2)" }}>
-                    <span style={{ fontVariantNumeric: "tabular-nums", fontWeight: 600 }}>
-                      {formatMinorUnits(expense.amountMinor, expense.currency)} {expense.currency}
-                    </span>
-                    <ChevronRightIcon width={16} height={16} style={{ color: "var(--text-faint)" }} />
-                  </span>
-                </button>
-              ))
-            )}
-          </Section>
-
-          <Section icon={<UsersIcon width={16} height={16} />} title={`Members · ${detail.members.length}`}>
-            {detail.members.map((member) => (
-              <div key={member.id} className="row spread" style={{ padding: "var(--space-2) 0" }}>
-                <div className="row" style={{ gap: "var(--space-2)" }}>
-                  <span className="avatar sm" aria-hidden="true">
-                    {member.displayName.slice(0, 1).toUpperCase()}
-                  </span>
-                  <span>@{member.handle}</span>
-                </div>
-                <span className="status-chip">{member.role}</span>
-              </div>
-            ))}
-          </Section>
-        </div>
-      )}
     </div>
   );
 }
 
-function Section({ icon, title, children }: { icon: React.ReactNode; title: string; children: React.ReactNode }) {
-  return (
-    <section style={{ marginTop: "var(--space-5)" }}>
-      <div className="row" style={{ gap: "var(--space-2)", marginBottom: "var(--space-2)", color: "var(--text-secondary)" }}>
-        {icon}
-        <span className="eyebrow" style={{ color: "var(--text-secondary)" }}>
-          {title}
-        </span>
-      </div>
-      {children}
-    </section>
-  );
-}

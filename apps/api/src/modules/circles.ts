@@ -7,6 +7,7 @@ import { newId, newToken } from "../ids.js";
 import { hashToken } from "../auth.js";
 import { parse, publicUser, requireUser, type AppContext, type UserLike } from "../http.js";
 import { circleIdsFor, requireCircleMember, requireCircleRole } from "./access.js";
+import { trackSafe } from "./analytics.js";
 
 const createSchema = z.object({
   name: z.string().min(1).max(80),
@@ -47,6 +48,7 @@ export function circlesRoutes(ctx: AppContext) {
         );
         return created!;
       });
+      trackSafe(ctx.pool, { name: "circle_created", userId: user.id, properties: { entityType: "circle", entityId: circle.id } });
       reply.code(201);
       return { id: circle.id };
     });
@@ -129,6 +131,7 @@ export function circlesRoutes(ctx: AppContext) {
         [newId(), id, hashToken(token), input.role, user.id, expiresAt, input.maxUses ?? null],
       );
       reply.code(201);
+      trackSafe(ctx.pool, { name: "circle_invite_sent", userId: user.id, properties: { entityType: "circle", entityId: id } });
       // The raw token is returned once and never stored in the clear.
       return { inviteToken: token, expiresAt: expiresAt?.toISOString() ?? null, role: input.role };
     });
@@ -166,6 +169,7 @@ export function circlesRoutes(ctx: AppContext) {
         );
         await tx.query("UPDATE circle_invites SET uses = uses + 1 WHERE id = $1", [invite.id]);
       });
+      trackSafe(ctx.pool, { name: "circle_invite_accepted", userId: user.id, properties: { entityType: "circle", entityId: invite.circle_id } });
       return { circleId: invite.circle_id, role: invite.role };
     });
 

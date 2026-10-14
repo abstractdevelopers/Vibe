@@ -1,6 +1,10 @@
 import Fastify, { type FastifyError, type FastifyInstance } from "fastify";
 import cors from "@fastify/cors";
 import websocket from "@fastify/websocket";
+import fastifyStatic from "@fastify/static";
+import { existsSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { ApiError, errorBody } from "./errors.js";
 import type { AppContext } from "./http.js";
 import { identityRoutes } from "./modules/identity.js";
@@ -17,6 +21,10 @@ import { mediaRoutes } from "./modules/media.js";
 import { discoveryRoutes } from "./modules/discovery.js";
 import { messagingRoutes } from "./modules/messaging.js";
 import { giftsRoutes } from "./modules/gifts.js";
+import { accountRoutes } from "./modules/account.js";
+import { analyticsRoutes } from "./modules/analytics.js";
+import { commerceRoutes } from "./modules/commerce.js";
+import { advertisingRoutes } from "./modules/advertising.js";
 import { resolveSession } from "./auth.js";
 import { bearerToken } from "./auth.js";
 import { circleIdsFor } from "./modules/access.js";
@@ -29,6 +37,25 @@ export async function buildApp(ctx: AppContext): Promise<FastifyInstance> {
 
   await app.register(cors, { origin: ctx.config.CORS_ORIGIN === "*" ? true : ctx.config.CORS_ORIGIN });
   await app.register(websocket);
+
+  // Webhook signatures are computed over the exact bytes Bachs sent. Fastify's
+  // JSON parser discards those bytes, so capture them on the webhook path only
+  // and keep the parsed body too.
+  app.addContentTypeParser("application/json", { parseAs: "string" }, (req, body, done) => {
+    const raw = body as string;
+    (req as { rawBody?: string }).rawBody = raw;
+    // An empty body (a POST with no payload) is not an error; Fastify's default
+    // parser treats it as an empty object, so match that.
+    if (!raw || raw.trim() === "") {
+      done(null, {});
+      return;
+    }
+    try {
+      done(null, JSON.parse(raw));
+    } catch (err) {
+      done(err as Error, undefined);
+    }
+  });
 
   app.setErrorHandler((error: FastifyError, req, reply) => {
     if (error instanceof ApiError) {
@@ -62,6 +89,10 @@ export async function buildApp(ctx: AppContext): Promise<FastifyInstance> {
   await app.register(discoveryRoutes(ctx));
   await app.register(messagingRoutes(ctx));
   await app.register(giftsRoutes(ctx));
+  await app.register(accountRoutes(ctx));
+  await app.register(analyticsRoutes(ctx));
+  await app.register(commerceRoutes(ctx));
+  await app.register(advertisingRoutes(ctx));
 
   // Realtime: chat/poll/plan updates for the circles the user belongs to.
   app.get("/v1/realtime", { websocket: true }, async (socket, req) => {
@@ -80,6 +111,23 @@ export async function buildApp(ctx: AppContext): Promise<FastifyInstance> {
     socket.send(JSON.stringify({ type: "realtime.ready", entityId: user.id, payload: { circleIds } }));
     socket.on("close", unsubscribe);
   });
+
+  // When the web client has been built into the image, serve it from the same
+  // origin as the API so one artefact covers both tiers. In development the
+  // client is normally served by Vite on its own port and this is skipped
+  // because no build exists yet.
+  const webDist = join(dirname(fileURLToPath(import.meta.url)), "../../web/dist");
+  if (existsSync(webDist)) {
+    await app.register(fastifyStatic, { root: webDist, wildcard: false });
+    // SPA fallback: any non-API GET returns index.html so client routing works.
+    app.setNotFoundHandler((req, reply) => {
+      if (req.method === "GET" && !req.url.startsWith("/v1/") && !req.url.startsWith("/health")) {
+        reply.sendFile("index.html");
+        return;
+      }
+      reply.code(404).send({ error: { code: "not_found", message: "Not found", requestId: req.id } });
+    });
+  }
 
   return app;
 }

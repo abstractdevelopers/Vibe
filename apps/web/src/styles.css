@@ -211,6 +211,32 @@ h4 {
   justify-content: space-between;
 }
 
+/* Commerce and advertising surfaces. */
+.price {
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.plain-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.plain-list > li + li {
+  margin-top: var(--space-1);
+}
+
+.plain-list > li {
+  padding: var(--space-2) 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.plain-list > li:last-child {
+  border-bottom: none;
+}
+
 .grow {
   flex: 1;
   min-width: 0;
@@ -1490,6 +1516,127 @@ select {
 }
 .menu-item.danger:hover {
   background: color-mix(in srgb, var(--danger) 14%, transparent);
+}
+
+/* ============================================================
+   Toast with undo
+   ============================================================ */
+
+.toast-host {
+  position: fixed;
+  left: 50%;
+  transform: translateX(-50%);
+  bottom: calc(76px + env(safe-area-inset-bottom));
+  z-index: 70;
+  width: min(560px, calc(100% - var(--space-5) * 2));
+  display: flex;
+  justify-content: center;
+  pointer-events: none;
+}
+
+.toast {
+  pointer-events: auto;
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  width: 100%;
+  padding: var(--space-3) var(--space-3) var(--space-3) var(--space-4);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--violet);
+  border-radius: var(--radius-sm);
+  box-shadow: 0 12px 32px rgb(0 0 0 / 32%);
+  color: var(--text-primary);
+  font-size: var(--text-supporting);
+  animation: fade-in var(--motion-base) var(--ease-out);
+}
+
+.toast.success {
+  border-left-color: var(--success);
+}
+
+.toast.danger {
+  border-left-color: var(--danger);
+}
+
+.toast-action {
+  flex: none;
+  min-height: 44px;
+  padding: 0 var(--space-3);
+  background: none;
+  border: none;
+  color: var(--violet);
+  font-weight: 600;
+  font-size: var(--text-supporting);
+  cursor: pointer;
+  border-radius: var(--radius-sm);
+}
+
+.toast-action:hover {
+  background: color-mix(in srgb, var(--violet) 14%, transparent);
+}
+
+.toast-close {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 44px;
+  min-height: 44px;
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  border-radius: var(--radius-sm);
+}
+
+/* ---- Comment thread ---- */
+
+.comment-row {
+  display: flex;
+  gap: var(--space-2);
+  align-items: flex-start;
+  margin-bottom: var(--space-2);
+}
+
+.comment-replies {
+  margin-top: var(--space-2);
+  margin-left: var(--space-5);
+  padding-left: var(--space-3);
+  border-left: 2px solid var(--hairline);
+}
+
+.comment-actions {
+  display: flex;
+  gap: var(--space-3);
+  margin-top: var(--space-1);
+}
+
+.comment-actions button {
+  background: none;
+  border: none;
+  padding: 0;
+  min-height: 32px;
+  color: var(--text-muted);
+  font-size: var(--text-meta);
+  cursor: pointer;
+}
+
+.comment-actions button:hover {
+  color: var(--text-secondary);
+  text-decoration: underline;
+}
+
+.comment-deleted {
+  color: var(--text-faint);
+  font-style: italic;
+}
+
+.comment-editor {
+  margin-top: var(--space-2);
+  display: flex;
+  gap: var(--space-2);
+  align-items: flex-start;
 }
 
 /* ---- Accessibility ---- */

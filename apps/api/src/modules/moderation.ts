@@ -4,6 +4,7 @@ import { ApiError } from "../errors.js";
 import { queryMany, queryOne, withTransaction } from "../db.js";
 import { newId } from "../ids.js";
 import { parse, requireAdmin, requireUser, type AppContext } from "../http.js";
+import { trackSafe } from "./analytics.js";
 const reportSchema = z.object({
   targetType: z.enum(["user", "post", "comment", "activity", "circle", "ad"]),
   targetId: z.string().uuid(),
@@ -40,6 +41,7 @@ export function moderationRoutes(ctx: AppContext) {
          VALUES ($1, $2, $3, $4, $5, $6) RETURNING id`,
         [newId(), user.id, input.targetType, input.targetId, input.reason, input.details ?? null],
       );
+      trackSafe(ctx.pool, { name: "report_submitted", userId: user.id, properties: { entityType: input.targetType, entityId: input.targetId, reason: input.reason } });
       reply.code(201);
       return { id: report!.id, status: "open" };
     });

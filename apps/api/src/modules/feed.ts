@@ -6,6 +6,8 @@ import { queryMany, queryOne, withTransaction } from "../db.js";
 import { newId } from "../ids.js";
 import { parse, publicUser, requireUser, type AppContext, type UserLike } from "../http.js";
 import { requireCircleMember } from "./access.js";
+import { trackSafe } from "./analytics.js";
+import { notifyUsers } from "./notifications.js";
 
 // Accepts either an absolute URL or a root-relative path returned by our own
 // media boundary (e.g. /v1/media/<id>). Anything else — javascript:, data: —
@@ -25,8 +27,70 @@ const createPostSchema = z.object({
   mediaUrls: z.array(mediaUrl).max(4).optional(),
 });
 
-const commentSchema = z.object({ body: z.string().min(1).max(2000) });
+const commentSchema = z.object({
+  body: z.string().min(1).max(2000),
+  parentId: z.string().uuid().optional(),
+});
+const editCommentSchema = z.object({ body: z.string().min(1).max(2000) });
 const reactionSchema = z.object({ kind: z.string().min(1).max(20).default("like") });
+
+const editPostSchema = z.object({
+  body: z.string().max(5000),
+});
+
+/**
+ * How long an author can undo a deletion. The client shows an Undo affordance
+ * for the same window, so the two never disagree.
+ */
+export const UNDO_WINDOW_MS = 30_000;
+
+interface CommentRow {
+  id: string;
+  parent_id: string | null;
+  body: string | null;
+  created_at: Date;
+  edited_at: Date | null;
+  deleted_at: Date | null;
+  user_id: string;
+  handle: string;
+  display_name: string;
+  avatar_url: string | null;
+}
+
+interface CommentView {
+  id: string;
+  parentId: string | null;
+  body: string;
+  createdAt: Date;
+  editedAt: Date | null;
+  deleted: boolean;
+  isMine: boolean;
+  author: ReturnType<typeof publicUser>;
+  replies?: CommentView[];
+}
+
+/**
+ * A deleted comment keeps its shape but loses its words, so a thread that has
+ * replies reads as "[deleted]" rather than vanishing and orphaning them.
+ */
+function toCommentView(row: CommentRow, viewerId: string): CommentView {
+  const deleted = Boolean(row.deleted_at);
+  return {
+    id: row.id,
+    parentId: row.parent_id,
+    body: deleted ? "" : (row.body ?? ""),
+    createdAt: row.created_at,
+    editedAt: row.edited_at,
+    deleted,
+    isMine: row.user_id === viewerId,
+    author: publicUser({
+      id: row.user_id,
+      handle: row.handle,
+      display_name: row.display_name,
+      avatar_url: row.avatar_url,
+    }),
+  };
+}
 
 interface PostRow {
   id: string;
@@ -258,7 +322,12 @@ async function attachActivities(db: Db, posts: PostRow[], viewerId: string) {
     mediaUrls: post.metadata?.mediaUrls ?? [],
     isSponsored: post.is_sponsored,
     createdAt: post.created_at,
-    author: publicUser(post),
+    author: publicUser({
+      id: post.author_id,
+      handle: post.handle,
+      display_name: post.display_name,
+      avatar_url: post.avatar_url,
+    }),
     reactionCount: post.reaction_count,
     commentCount: post.comment_count,
     viewerReacted: post.viewer_reacted,
@@ -358,6 +427,7 @@ export function feedRoutes(ctx: AppContext) {
           JSON.stringify({ mediaUrls: input.mediaUrls ?? [] }),
         ],
       );
+      trackSafe(ctx.pool, { name: "post_created", userId: user.id, properties: { entityType: "post", entityId: post!.id, audience: input.audience } });
       reply.code(201);
       return { id: post!.id, createdAt: post!.created_at };
     });
@@ -365,12 +435,120 @@ export function feedRoutes(ctx: AppContext) {
     app.delete("/v1/posts/:id", async (req, reply) => {
       const user = await requireUser(ctx, req);
       const { id } = req.params as { id: string };
-      const post = await queryOne<{ author_id: string }>(ctx.pool, "SELECT author_id FROM posts WHERE id = $1", [id]);
+      const post = await queryOne<{ author_id: string; status: string }>(
+        ctx.pool,
+        "SELECT author_id, status FROM posts WHERE id = $1",
+        [id],
+      );
       if (!post) throw ApiError.notFound("Post not found");
       if (post.author_id !== user.id && !user.isAdmin) throw ApiError.forbidden();
-      await ctx.pool.query("UPDATE posts SET status = 'removed', updated_at = now() WHERE id = $1", [id]);
+      if (post.status === "removed") {
+        reply.code(204);
+        return null;
+      }
+      // Record who deleted it. Undo is only allowed for the author, so this
+      // column is what stops an author from un-removing a moderator's action.
+      await ctx.pool.query(
+        `UPDATE posts SET status = 'removed', deleted_by = $2, deleted_at = now(), updated_at = now()
+          WHERE id = $1`,
+        [id, user.id],
+      );
+      await ctx.pool.query(
+        `INSERT INTO audit_events (actor_id, action, entity_type, entity_id)
+         VALUES ($1, 'post.deleted', 'post', $2)`,
+        [user.id, id],
+      );
+      trackSafe(ctx.pool, { name: "post_deleted", userId: user.id, properties: { entityType: "post", entityId: id } });
       reply.code(204);
       return null;
+    });
+
+    /**
+     * Undo an author deletion within the undo window (§4.2). Only the author's
+     * own deletion can be undone; a moderator removal is final from here.
+     */
+    app.post("/v1/posts/:id/restore", async (req) => {
+      const user = await requireUser(ctx, req);
+      const { id } = req.params as { id: string };
+      const post = await queryOne<{ author_id: string; status: string; deleted_by: string | null; deleted_at: Date | null }>(
+        ctx.pool,
+        "SELECT author_id, status, deleted_by, deleted_at FROM posts WHERE id = $1",
+        [id],
+      );
+      if (!post) throw ApiError.notFound("Post not found");
+      if (post.author_id !== user.id) throw ApiError.forbidden("Only the author can restore this post");
+      if (post.status !== "removed") return { id, status: post.status, restored: false };
+      if (post.deleted_by !== user.id) {
+        throw ApiError.forbidden("This post was removed by moderation and cannot be restored here");
+      }
+      if (post.deleted_at && Date.now() - new Date(post.deleted_at).getTime() > UNDO_WINDOW_MS) {
+        throw ApiError.badRequest("The undo window has passed");
+      }
+      await ctx.pool.query(
+        `UPDATE posts SET status = 'published', deleted_by = NULL, deleted_at = NULL, updated_at = now()
+          WHERE id = $1`,
+        [id],
+      );
+      await ctx.pool.query(
+        `INSERT INTO audit_events (actor_id, action, entity_type, entity_id)
+         VALUES ($1, 'post.restored', 'post', $2)`,
+        [user.id, id],
+      );
+      return { id, status: "published", restored: true };
+    });
+
+    /**
+     * Edit a post. The previous body is recorded as a revision before the live
+     * body changes, so an edit is auditable rather than a silent overwrite
+     * (§4.2: draft -> published -> edited (revision history)).
+     */
+    app.patch("/v1/posts/:id", async (req) => {
+      const user = await requireUser(ctx, req);
+      const { id } = req.params as { id: string };
+      const input = parse(editPostSchema, req.body);
+      const post = await queryOne<{ author_id: string; body: string | null; status: string }>(
+        ctx.pool,
+        "SELECT author_id, body, status FROM posts WHERE id = $1",
+        [id],
+      );
+      if (!post) throw ApiError.notFound("Post not found");
+      if (post.author_id !== user.id) throw ApiError.forbidden("Only the author can edit a post");
+      if (post.status !== "published") throw ApiError.badRequest("Only a published post can be edited");
+      if ((post.body ?? "") === input.body) {
+        return { id, body: input.body, editedAt: null, unchanged: true };
+      }
+      const updated = await withTransaction(ctx.pool, async (tx) => {
+        await tx.query(
+          `INSERT INTO post_revisions (id, post_id, editor_id, previous_body, new_body)
+           VALUES ($1, $2, $3, $4, $5)`,
+          [newId(), id, user.id, post.body, input.body],
+        );
+        return queryOne<{ edited_at: Date }>(
+          tx,
+          `UPDATE posts SET body = $2, edited_at = now(), updated_at = now()
+            WHERE id = $1 RETURNING edited_at`,
+          [id, input.body],
+        );
+      });
+      return { id, body: input.body, editedAt: updated!.edited_at };
+    });
+
+    /** Revision history for a post the caller can see. */
+    app.get("/v1/posts/:id/revisions", async (req) => {
+      const user = await requireUser(ctx, req);
+      const { id } = req.params as { id: string };
+      const post = await queryOne<{ author_id: string }>(ctx.pool, "SELECT author_id FROM posts WHERE id = $1", [id]);
+      if (!post) throw ApiError.notFound("Post not found");
+      if (post.author_id !== user.id && !user.isAdmin) {
+        throw ApiError.forbidden("Only the author can see edit history");
+      }
+      const rows = await queryMany(
+        ctx.pool,
+        `SELECT id, previous_body, new_body, created_at FROM post_revisions
+          WHERE post_id = $1 ORDER BY created_at DESC`,
+        [id],
+      );
+      return { revisions: rows };
     });
 
     app.post("/v1/posts/:id/reactions", async (req) => {
@@ -401,48 +579,205 @@ export function feedRoutes(ctx: AppContext) {
         user.id,
         input.kind,
       ]);
+      trackSafe(ctx.pool, { name: "post_reacted", userId: user.id, properties: { entityType: "post", entityId: id, kind: input.kind } });
       return { reacted: true };
     });
 
+    /**
+     * A post's comments as a one-level thread. Top-level comments carry their
+     * replies so the client can render the conversation without a second call.
+     * A soft-deleted comment is kept as a placeholder when it still has visible
+     * replies, so the replies are not orphaned.
+     */
     app.get("/v1/posts/:id/comments", async (req) => {
       const user = await requireUser(ctx, req);
       const { id } = req.params as { id: string };
-      const rows = await queryMany(
+      const rows = await queryMany<CommentRow>(
         ctx.pool,
-        `SELECT c.id, c.body, c.created_at, u.id AS user_id, u.handle, u.display_name, u.bio, u.avatar_url
+        `SELECT c.id, c.parent_id, c.body, c.created_at, c.edited_at, c.deleted_at,
+                u.id AS user_id, u.handle, u.display_name, u.bio, u.avatar_url
            FROM comments c JOIN users u ON u.id = c.author_id
-          WHERE c.post_id = $1 AND c.deleted_at IS NULL
-          ORDER BY c.created_at LIMIT 100`,
+          WHERE c.post_id = $1
+          ORDER BY c.created_at`,
         [id],
       );
-      return {
-        comments: rows.map((r) => ({
-          id: r.id,
-          body: r.body,
-          createdAt: r.created_at,
-          author: publicUser({ id: r.user_id, handle: r.handle, display_name: r.display_name, avatar_url: r.avatar_url }),
-        })),
-      };
+      const repliesByParent = new Map<string, CommentView[]>();
+      const roots: CommentView[] = [];
+      for (const r of rows) {
+        const view = toCommentView(r, user.id);
+        if (r.parent_id) {
+          const list = repliesByParent.get(r.parent_id as string) ?? [];
+          list.push(view);
+          repliesByParent.set(r.parent_id as string, list);
+        } else {
+          roots.push(view);
+        }
+      }
+      const comments = roots
+        .map((root) => ({ ...root, replies: repliesByParent.get(root.id) ?? [] }))
+        // Hide a deleted root only when nothing visible hangs off it.
+        .filter((root) => !root.deleted || root.replies.some((reply) => !reply.deleted));
+      return { comments };
     });
 
     app.post("/v1/posts/:id/comments", async (req, reply) => {
       const user = await requireUser(ctx, req);
       const { id } = req.params as { id: string };
       const input = parse(commentSchema, req.body);
-      const post = await queryOne<{ id: string }>(
+      const post = await queryOne<{ id: string; author_id: string }>(
         ctx.pool,
-        "SELECT id FROM posts WHERE id = $1 AND status = 'published'",
+        "SELECT id, author_id FROM posts WHERE id = $1 AND status = 'published'",
         [id],
       );
       if (!post) throw ApiError.notFound("Post not found");
+
+      // Replies are one level deep: a reply to a reply attaches to the same
+      // root, so the thread never nests arbitrarily.
+      let parentId: string | null = null;
+      let parentAuthorId: string | null = null;
+      if (input.parentId) {
+        const parent = await queryOne<{ id: string; author_id: string; parent_id: string | null }>(
+          ctx.pool,
+          "SELECT id, author_id, parent_id FROM comments WHERE id = $1 AND post_id = $2 AND deleted_at IS NULL",
+          [input.parentId, id],
+        );
+        if (!parent) throw ApiError.badRequest("The comment you are replying to no longer exists");
+        parentId = parent.parent_id ?? parent.id;
+        parentAuthorId = parent.author_id;
+      }
+
       const comment = await queryOne<{ id: string; created_at: Date }>(
         ctx.pool,
-        `INSERT INTO comments (id, post_id, author_id, body) VALUES ($1, $2, $3, $4)
+        `INSERT INTO comments (id, post_id, author_id, parent_id, body) VALUES ($1, $2, $3, $4, $5)
          RETURNING id, created_at`,
-        [newId(), id, user.id, input.body],
+        [newId(), id, user.id, parentId, input.body],
       );
+      trackSafe(ctx.pool, { name: "comment_created", userId: user.id, properties: { entityType: "post", entityId: id } });
+
+      // Notify the post author, and the parent comment's author when replying.
+      // Each recipient's own opt-out is enforced inside notifyUsers.
+      const recipients = new Set<string>();
+      if (post.author_id !== user.id) recipients.add(post.author_id);
+      if (parentAuthorId && parentAuthorId !== user.id) recipients.add(parentAuthorId);
+      recipients.delete(user.id);
+      if (recipients.size > 0) {
+        await notifyUsers(
+          ctx.pool,
+          [...recipients],
+          parentId ? "comment.reply" : "comment.mention",
+          "post",
+          id,
+          { commentId: comment!.id, actorHandle: user.handle },
+        );
+      }
       reply.code(201);
-      return { id: comment!.id, createdAt: comment!.created_at };
+      return { id: comment!.id, createdAt: comment!.created_at, parentId };
+    });
+
+    /**
+     * Edit your own comment. The previous body is recorded first, mirroring
+     * post_revisions, so an edit is auditable rather than a silent overwrite.
+     */
+    app.patch("/v1/comments/:id", async (req) => {
+      const user = await requireUser(ctx, req);
+      const { id } = req.params as { id: string };
+      const input = parse(editCommentSchema, req.body);
+      const comment = await queryOne<{ author_id: string; body: string; deleted_at: Date | null }>(
+        ctx.pool,
+        "SELECT author_id, body, deleted_at FROM comments WHERE id = $1",
+        [id],
+      );
+      if (!comment) throw ApiError.notFound("Comment not found");
+      if (comment.author_id !== user.id) throw ApiError.forbidden("Only the author can edit a comment");
+      if (comment.deleted_at) throw ApiError.badRequest("A deleted comment cannot be edited");
+      if (comment.body === input.body) return { id, body: input.body, editedAt: null, unchanged: true };
+      const updated = await withTransaction(ctx.pool, async (tx) => {
+        await tx.query(
+          `INSERT INTO comment_revisions (id, comment_id, editor_id, previous_body, new_body)
+           VALUES ($1, $2, $3, $4, $5)`,
+          [newId(), id, user.id, comment.body, input.body],
+        );
+        return queryOne<{ edited_at: Date }>(
+          tx,
+          "UPDATE comments SET body = $2, edited_at = now() WHERE id = $1 RETURNING edited_at",
+          [id, input.body],
+        );
+      });
+      return { id, body: input.body, editedAt: updated!.edited_at };
+    });
+
+    /** Edit history for a comment you wrote. */
+    app.get("/v1/comments/:id/revisions", async (req) => {
+      const user = await requireUser(ctx, req);
+      const { id } = req.params as { id: string };
+      const comment = await queryOne<{ author_id: string }>(ctx.pool, "SELECT author_id FROM comments WHERE id = $1", [id]);
+      if (!comment) throw ApiError.notFound("Comment not found");
+      if (comment.author_id !== user.id && !user.isAdmin) {
+        throw ApiError.forbidden("Only the author can see edit history");
+      }
+      const rows = await queryMany(
+        ctx.pool,
+        `SELECT id, previous_body, new_body, created_at FROM comment_revisions
+          WHERE comment_id = $1 ORDER BY created_at DESC`,
+        [id],
+      );
+      return { revisions: rows };
+    });
+
+    /**
+     * Delete your own comment. Soft-delete with undo, matching the post
+     * lifecycle. A comment that has replies is kept as a placeholder so the
+     * replies below it survive.
+     */
+    app.delete("/v1/comments/:id", async (req, reply) => {
+      const user = await requireUser(ctx, req);
+      const { id } = req.params as { id: string };
+      const comment = await queryOne<{ author_id: string; deleted_at: Date | null }>(
+        ctx.pool,
+        "SELECT author_id, deleted_at FROM comments WHERE id = $1",
+        [id],
+      );
+      if (!comment) throw ApiError.notFound("Comment not found");
+      if (comment.author_id !== user.id && !user.isAdmin) throw ApiError.forbidden();
+      if (comment.deleted_at) {
+        reply.code(204);
+        return null;
+      }
+      await ctx.pool.query(
+        "UPDATE comments SET deleted_at_prev = deleted_at, deleted_at = now() WHERE id = $1",
+        [id],
+      );
+      await ctx.pool.query(
+        `INSERT INTO audit_events (actor_id, action, entity_type, entity_id)
+         VALUES ($1, 'comment.deleted', 'comment', $2)`,
+        [user.id, id],
+      );
+      reply.code(204);
+      return null;
+    });
+
+    /** Undo a comment deletion within the window. */
+    app.post("/v1/comments/:id/restore", async (req) => {
+      const user = await requireUser(ctx, req);
+      const { id } = req.params as { id: string };
+      const comment = await queryOne<{ author_id: string; deleted_at: Date | null; deleted_at_prev: Date | null }>(
+        ctx.pool,
+        "SELECT author_id, deleted_at, deleted_at_prev FROM comments WHERE id = $1",
+        [id],
+      );
+      if (!comment) throw ApiError.notFound("Comment not found");
+      if (comment.author_id !== user.id) throw ApiError.forbidden("Only the author can restore this comment");
+      if (!comment.deleted_at) return { id, restored: false };
+      if (Date.now() - new Date(comment.deleted_at).getTime() > UNDO_WINDOW_MS) {
+        throw ApiError.badRequest("The undo window has passed");
+      }
+      await ctx.pool.query("UPDATE comments SET deleted_at = deleted_at_prev, deleted_at_prev = NULL WHERE id = $1", [id]);
+      await ctx.pool.query(
+        `INSERT INTO audit_events (actor_id, action, entity_type, entity_id)
+         VALUES ($1, 'comment.restored', 'comment', $2)`,
+        [user.id, id],
+      );
+      return { id, restored: true };
     });
 
     app.post("/v1/users/:id/block", async (req, reply) => {
@@ -463,6 +798,7 @@ export function feedRoutes(ctx: AppContext) {
           [user.id, id],
         );
       });
+      trackSafe(ctx.pool, { name: "block_created", userId: user.id, properties: { entityType: "user", entityId: id } });
       reply.code(204);
       return null;
     });

@@ -17,6 +17,7 @@ import { newId } from "../ids.js";
 import { parse, requireUser, type AppContext } from "../http.js";
 import { requireCircleMember, requireCircleRole } from "./access.js";
 import { requireIdempotencyKey, runIdempotent } from "../idempotency.js";
+import { trackSafe } from "./analytics.js";
 
 /**
  * Shared expense tracker. V1 is a ledger of obligations and reported/verified
@@ -271,6 +272,9 @@ export function expensesRoutes(ctx: AppContext) {
         },
       );
 
+      if (result.statusCode === 201) {
+        trackSafe(ctx.pool, { name: "expense_created", userId: user.id, properties: { entityType: "expense", entityId: String((result.body as { id?: string }).id ?? "") } });
+      }
       reply.code(result.statusCode);
       return result.body;
     });
@@ -352,6 +356,7 @@ export function expensesRoutes(ctx: AppContext) {
             );
             return created!.id;
           });
+          trackSafe(ctx.pool, { name: "payment_reported", userId: user.id, properties: { entityType: "expense", entityId: id } });
           return {
             statusCode: 201,
             body: { reportId, status: "reported", verified: false, message: "Reported by participant — unverified" },
@@ -404,6 +409,7 @@ export function expensesRoutes(ctx: AppContext) {
           [newId(), id, user.id, "Verified", JSON.stringify({ verificationSource: input.verificationSource })],
         );
       });
+      trackSafe(ctx.pool, { name: "payment_verified", userId: user.id, properties: { entityType: "expense", entityId: id } });
       return { status: "verified" };
     });
 

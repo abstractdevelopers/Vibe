@@ -18,9 +18,16 @@ const schema = z.object({
   REDIS_URL: z.string().optional(),
   SESSION_TTL_SECONDS: z.coerce.number().int().positive().default(60 * 60 * 24 * 7),
   SESSION_SECRET: z.string().min(16).default("dev-session-secret-change-me-please"),
-  PAYMENTS_PROVIDER: z.enum(["stub"]).default("stub"),
+  PAYMENTS_PROVIDER: z.enum(["stub", "bachs"]).default("stub"),
   PAYMENTS_WEBHOOK_SECRET: z.string().min(1).default("dev-only-stub-secret"),
+  // Bachs integration boundary. The adapter is real: it calls the Bachs REST
+  // API and verifies webhook signatures. It is only selected when the operator
+  // supplies credentials, so an unconfigured deploy keeps using the stub.
+  BACHS_API_KEY: z.string().optional(),
+  BACHS_WEBHOOK_SECRET: z.string().optional(),
+  BACHS_BASE_URL: z.string().url().default("https://sandbox-api.bachs.io"),
   PUBLIC_API_URL: z.string().default("http://localhost:12000"),
+  PUBLIC_WEB_URL: z.string().default("http://localhost:12001"),
 });
 
 export type Config = z.infer<typeof schema> & { isProduction: boolean };
@@ -40,8 +47,14 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     }
     if (config.PAYMENTS_PROVIDER === "stub") {
       throw new Error(
-        "PAYMENTS_PROVIDER=stub is not permitted in production; a provider must be approved first",
+        "PAYMENTS_PROVIDER=stub is not permitted in production; set PAYMENTS_PROVIDER=bachs and supply BACHS_API_KEY",
       );
+    }
+    if (config.PAYMENTS_PROVIDER === "bachs" && !config.BACHS_API_KEY) {
+      throw new Error("BACHS_API_KEY must be set when PAYMENTS_PROVIDER=bachs");
+    }
+    if (config.PAYMENTS_PROVIDER === "bachs" && !config.BACHS_WEBHOOK_SECRET) {
+      throw new Error("BACHS_WEBHOOK_SECRET must be set when PAYMENTS_PROVIDER=bachs");
     }
   }
   return { ...config, isProduction: config.NODE_ENV === "production" };

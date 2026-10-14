@@ -16,7 +16,13 @@ export type Route =
   | { name: "settings" }
   | { name: "place"; placeId: string }
   | { name: "messages" }
-  | { name: "conversation"; conversationId: string };
+  | { name: "conversation"; conversationId: string }
+  | { name: "circle"; circleId: string }
+  | { name: "store"; merchantId: string }
+  | { name: "product"; productId: string }
+  | { name: "orders" }
+  | { name: "order"; orderId: string }
+  | { name: "advertising" };
 
 export interface Navigation {
   route: Route;
@@ -25,7 +31,6 @@ export interface Navigation {
 }
 
 export const NavContext = createContext<Navigation | null>(null);
-
 export function useNav(): Navigation {
   const nav = useContext(NavContext);
   if (!nav) throw new Error("useNav must be used inside NavContext");

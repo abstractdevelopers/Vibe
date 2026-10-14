@@ -5,6 +5,7 @@ import { queryMany, queryOne, withTransaction } from "../db.js";
 import { newId } from "../ids.js";
 import { parse, requireUser, type AppContext } from "../http.js";
 import { requireCircleMember } from "./access.js";
+import { trackSafe } from "./analytics.js";
 
 const createPollSchema = z.object({
   question: z.string().min(1).max(300),
@@ -87,6 +88,7 @@ export function activitiesRoutes(ctx: AppContext) {
         return activity!.id;
       });
 
+      trackSafe(ctx.pool, { name: "activity_created", userId: user.id, properties: { entityType: "activity", entityId: activityId, kind: "poll" } });
       reply.code(201);
       return await pollState(ctx.pool, activityId);
     });
@@ -131,6 +133,7 @@ export function activitiesRoutes(ctx: AppContext) {
         throw ApiError.conflict("You have already voted in this poll");
       }
 
+      trackSafe(ctx.pool, { name: "vote_submitted", userId: user.id, properties: { entityType: "activity", entityId: id } });
       const updated = await pollState(ctx.pool, id);
       const event = { type: "poll.results_updated", entityId: id, payload: updated };
       if (state.circleId) {
