@@ -1315,21 +1315,40 @@ select {
   border-radius: var(--radius-sm);
 }
 
-/* Action bar sits flush on the stream, not inside a box. */
+/* Action bar sits flush on the stream, not inside a box.
+
+   It must stay on one line. It used to wrap, which pushed the last actions onto
+   a second row and made the card look broken. Everything now shrinks instead:
+   the row never wraps, labels ellipsize, and icon-only buttons hold a fixed
+   square. The row is horizontally scrollable as a last resort, so nothing is
+   ever clipped off the card edge. */
 .post-actions {
   display: flex;
   align-items: center;
-  /* A post can carry up to seven actions (like, comment, photo, gift, share,
-     edit, delete). They cannot fit one 360px row without bleeding past the
-     card, so let them wrap instead of overflowing. */
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   gap: var(--space-1);
   margin-top: var(--space-1);
+  min-width: 0;
+  overflow-x: auto;
+  scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
 }
+.post-actions::-webkit-scrollbar { display: none; }
 .post-actions .react-btn {
   min-height: 44px;
   padding: 0 var(--space-2);
+  /* May shrink so the row fits; 44px stays the touch target height. */
+  flex: 0 1 auto;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
+/* Icon-only actions are square and never shrink, so the icons stay legible. */
+.post-actions .react-btn[aria-label] {
+  flex: 0 0 auto;
+}
+.post-actions .react-btn > svg { flex: 0 0 auto; }
 .post-actions .react-btn:hover {
   background: color-mix(in srgb, var(--surface-3) 55%, transparent);
 }
@@ -1790,4 +1809,74 @@ select {
     transition-duration: 0.01ms !important;
     scroll-behavior: auto !important;
   }
+}
+
+
+/* ============================================================
+   Switch — the settings toggles
+   ============================================================
+
+   Previously these were a bare checkbox with the browser default styling, so
+   there was no way to see at a glance whether a setting was on. This is a real
+   switch: a track, a knob that slides, and an explicit On/Off word so the state
+   does not depend on colour alone. The checkbox itself stays in the DOM as the
+   accessible control and the click target, visually hidden but focusable. */
+
+.switch-wrap { align-items: center; }
+
+.switch {
+  position: relative;
+  display: inline-block;
+  width: 44px;
+  height: 26px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--surface-3) 80%, transparent);
+  border: 1px solid var(--border-strong);
+  transition: background var(--motion-fast) var(--ease-out), border-color var(--motion-fast) var(--ease-out);
+  flex: 0 0 auto;
+}
+.switch.on {
+  background: var(--violet);
+  border-color: var(--violet);
+}
+.switch-knob {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.4);
+  transition: transform var(--motion-fast) var(--ease-out);
+}
+.switch.on .switch-knob { transform: translateX(18px); }
+
+.switch-state {
+  min-width: 22px;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+/* The real control: invisible but present, so screen readers and keyboard
+   focus work exactly as before. */
+.switch-input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
+/* Keyboard focus lands on the hidden input; show it on the track instead. */
+.switch-wrap:focus-within .switch {
+  outline: 2px solid var(--violet-soft);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .switch, .switch-knob { transition: none; }
 }

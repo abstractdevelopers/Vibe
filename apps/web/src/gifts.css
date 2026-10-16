@@ -207,3 +207,96 @@
   display: block;
 }
 .ad-banner:hover img { opacity: 0.94; }
+
+
+/* ============================================================
+   Gift burst — the TikTok-live style send animation
+   ============================================================
+
+   A hero emoji that punches in, a count, and a stream of emoji rising up the
+   screen. Pure CSS: no canvas, no library, nothing to load. Every animation is
+   behind prefers-reduced-motion, where it collapses to a brief static card so a
+   person who asked for less motion still gets confirmation that the gift sent.
+
+   This overlays the whole viewport and is pointer-events: none, so it can never
+   swallow a tap meant for the app underneath. */
+
+.gift-burst {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  pointer-events: none;
+  overflow: hidden;
+  display: grid;
+  place-items: center;
+}
+
+.gift-burst-hero {
+  position: relative;
+  display: grid;
+  place-items: center;
+  animation: gift-hero 1800ms cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+.gift-burst-hero-emoji {
+  font-size: clamp(96px, 34vw, 200px);
+  line-height: 1;
+  filter: drop-shadow(0 18px 40px rgba(0, 0, 0, 0.55));
+}
+.gift-burst-count {
+  position: absolute;
+  right: -0.1em;
+  bottom: 0.1em;
+  font-size: clamp(26px, 8vw, 48px);
+  font-weight: 800;
+  color: #fff;
+  text-shadow: 0 2px 12px rgba(0, 0, 0, 0.65);
+  letter-spacing: -0.02em;
+}
+
+@keyframes gift-hero {
+  0%   { transform: scale(0.3) rotate(-12deg); opacity: 0; }
+  18%  { transform: scale(1.18) rotate(6deg); opacity: 1; }
+  32%  { transform: scale(1) rotate(0deg); opacity: 1; }
+  75%  { transform: scale(1) rotate(0deg); opacity: 1; }
+  100% { transform: scale(1.35) translateY(-40px); opacity: 0; }
+}
+
+.gift-burst-float {
+  position: absolute;
+  bottom: -60px;
+  animation: gift-float 2000ms cubic-bezier(0.25, 0.8, 0.3, 1) forwards;
+  filter: drop-shadow(0 6px 14px rgba(0, 0, 0, 0.45));
+  will-change: transform, opacity;
+}
+@keyframes gift-float {
+  0%   { transform: translate(0, 0) scale(0.6); opacity: 0; }
+  15%  { opacity: 1; }
+  100% { transform: translate(var(--drift, 0px), -110vh) scale(1.1); opacity: 0; }
+}
+
+.gift-burst-label {
+  position: absolute;
+  bottom: 12%;
+  padding: 8px 16px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--surface-1) 82%, transparent);
+  border: 1px solid var(--border);
+  color: var(--text);
+  font-weight: 600;
+  animation: gift-label 2000ms var(--ease-out, ease) forwards;
+  backdrop-filter: blur(8px);
+}
+@keyframes gift-label {
+  0%   { transform: translateY(14px); opacity: 0; }
+  20%  { transform: translateY(0); opacity: 1; }
+  80%  { transform: translateY(0); opacity: 1; }
+  100% { transform: translateY(-8px); opacity: 0; }
+}
+
+/* Someone who asked for less motion still needs to know the gift sent: show
+   the hero briefly, no movement, no floaters. */
+@media (prefers-reduced-motion: reduce) {
+  .gift-burst-hero { animation: none; opacity: 1; }
+  .gift-burst-float { display: none; }
+  .gift-burst-label { animation: none; opacity: 1; }
+}

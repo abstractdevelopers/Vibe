@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { api, ApiError, idempotencyKey } from "../api";
 import { CloseIcon } from "./Icons";
+import { GiftBurst, type GiftBurstSpec } from "./GiftBurst";
 
 interface PaidGift {
   id: string;
@@ -63,6 +64,9 @@ export function PaidGiftSheet({
   const [quantity, setQuantity] = useState(1);
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState<PurchaseResult | null>(null);
+  const [burst, setBurst] = useState<GiftBurstSpec | null>(null);
+  // Kept so the redirect can be an explicit action rather than a surprise.
+  const [redirectUrl, setRedirectUrl] = useState<string | null>(null);
 
   useEffect(() => {
     void api<{ gifts: PaidGift[] }>("/v1/money/gifts")
@@ -84,8 +88,11 @@ export function PaidGiftSheet({
       });
       setResult(purchase);
       onPurchased?.();
-      // The provider's hosted checkout is where the money actually moves.
-      if (purchase.redirectUrl) window.location.assign(purchase.redirectUrl);
+      // Celebrate on this screen, then hand off to the provider's hosted
+      // checkout. Redirecting instantly meant the animation was never seen; the
+      // burst now plays first and the redirect is an explicit action.
+      setBurst({ id: Date.now(), emoji: chosen.emoji, label: chosen.label, count: quantity });
+      setRedirectUrl(purchase.redirectUrl);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Could not start that purchase");
     } finally {
@@ -96,6 +103,7 @@ export function PaidGiftSheet({
   return (
     <div className="sheet" role="dialog" aria-modal="true" aria-label="Send a gift" onClick={onClose}>
       <div className="sheet-inner paid-gift-sheet" onClick={(e) => e.stopPropagation()}>
+        {burst && <GiftBurst spec={burst} onDone={() => setBurst(null)} />}
         <div className="sheet-handle" aria-hidden="true" />
         <div className="row spread" style={{ marginBottom: "var(--space-4)" }}>
           <div>
@@ -131,6 +139,14 @@ export function PaidGiftSheet({
                 <strong>Waiting for the bank</strong>
               </div>
             </div>
+            {redirectUrl && (
+              <button
+                className="btn primary block"
+                onClick={() => window.location.assign(redirectUrl)}
+              >
+                Continue to payment
+              </button>
+            )}
           </div>
         ) : gifts === null ? (
           <p className="meta">Loading gifts…</p>

@@ -28,6 +28,7 @@ export const GIFT_CATALOGUE: CatalogueGift[] = [
   { id: "rose", label: "Rose", hint: "A small thank you", emoji: "🌹", tier: 1, priceMinor: 20_000, currency: "NGN", feeBps: GIFT_FEE_BPS, sortOrder: 10 },
   { id: "spark", label: "Spark", hint: "You lit this up", emoji: "✨", tier: 1, priceMinor: 50_000, currency: "NGN", feeBps: GIFT_FEE_BPS, sortOrder: 20 },
   { id: "heart", label: "Heart", hint: "Genuine love", emoji: "💖", tier: 1, priceMinor: 100_000, currency: "NGN", feeBps: GIFT_FEE_BPS, sortOrder: 30 },
+  { id: "clap", label: "Applause", hint: "Well deserved", emoji: "👏", tier: 1, priceMinor: 150_000, currency: "NGN", feeBps: GIFT_FEE_BPS, sortOrder: 35 },
   { id: "fire", label: "Fire", hint: "This is great", emoji: "🔥", tier: 2, priceMinor: 200_000, currency: "NGN", feeBps: GIFT_FEE_BPS, sortOrder: 40 },
   { id: "drum", label: "Talking drum", hint: "Make some noise", emoji: "🪘", tier: 2, priceMinor: 500_000, currency: "NGN", feeBps: GIFT_FEE_BPS, sortOrder: 50 },
   { id: "crown", label: "Crown", hint: "For royalty", emoji: "👑", tier: 2, priceMinor: 1_000_000, currency: "NGN", feeBps: GIFT_FEE_BPS, sortOrder: 60 },

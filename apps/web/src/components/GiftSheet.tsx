@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { api, ApiError } from "../api";
 import { CheckIcon, CloseIcon, GiftIcon } from "./Icons";
+import { GiftBurst, type GiftBurstSpec } from "./GiftBurst";
 
 interface GiftOption {
   id: string;
@@ -27,6 +28,7 @@ export function GiftSheet({
   const [gifts, setGifts] = useState<GiftOption[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
+  const [burst, setBurst] = useState<GiftBurstSpec | null>(null);
 
   useEffect(() => {
     void api<{ gifts: GiftOption[] }>(`/v1/posts/${postId}/gifts`)
@@ -52,6 +54,10 @@ export function GiftSheet({
           g.id === kind && !g.viewerSent ? { ...g, viewerSent: true, count: g.count + 1 } : g,
         ),
       );
+      // Play the burst only after the server accepted the gift, so the
+      // animation never claims something that did not happen.
+      const label = (gifts ?? []).find((g) => g.id === kind)?.label ?? "gift";
+      setBurst({ id: Date.now(), emoji: EMOJI[kind] ?? "🎁", label, count: 1 });
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Could not send that gift");
     } finally {
@@ -62,6 +68,7 @@ export function GiftSheet({
   return (
     <div className="sheet" role="dialog" aria-modal="true" aria-label="Send a gift" onClick={onClose}>
       <div className="sheet-inner" onClick={(e) => e.stopPropagation()}>
+        {burst && <GiftBurst spec={burst} onDone={() => setBurst(null)} />}
         <div className="sheet-handle" aria-hidden="true" />
         <div className="row spread" style={{ marginBottom: "var(--space-3)" }}>
           <div>

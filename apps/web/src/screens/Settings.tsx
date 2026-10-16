@@ -385,14 +385,23 @@ function Toggle({
         <span style={{ display: "block", fontWeight: 600 }}>{label}</span>
         <span className="meta">{hint}</span>
       </span>
-      <input
-        id={id}
-        type="checkbox"
-        checked={checked}
-        disabled={disabled}
-        onChange={(e) => onChange(e.target.checked)}
-        style={{ width: "auto", margin: 0 }}
-      />
+      {/* A real switch: the checkbox is the accessible control, the track and
+          knob are its visual. It carries an explicit On/Off word as well, so
+          state is readable without relying on colour alone. */}
+      <span className="row switch-wrap" style={{ gap: "var(--space-2)", flex: "0 0 auto" }}>
+        <span className={`switch${checked ? " on" : ""}`} aria-hidden="true">
+          <span className="switch-knob" />
+        </span>
+        <span className="switch-state meta" aria-hidden="true">{checked ? "On" : "Off"}</span>
+        <input
+          id={id}
+          type="checkbox"
+          checked={checked}
+          disabled={disabled}
+          onChange={(e) => onChange(e.target.checked)}
+          className="switch-input"
+        />
+      </span>
     </label>
   );
 }
