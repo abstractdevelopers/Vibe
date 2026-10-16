@@ -13,6 +13,12 @@ docker build -t vibe:<version> .
 The image runs migrations on boot (`npm run migrate`) and then starts the API.
 Migrations are append-only and idempotent, so a restart never re-applies one.
 
+The runtime stage copies the whole tree with `COPY . .`. Do not "tidy" that into
+`COPY apps packages scripts ./`: a multi-source COPY copies the *contents* of
+each directory into the destination, so the image would end up with `/app/api`
+and no `/app/apps/api`, migration would fail with `ERR_MODULE_NOT_FOUND`, and
+the node_modules workspace symlinks would dangle.
+
 ## Configuration
 
 The API reads configuration from environment variables (see `.env.example`).

@@ -108,10 +108,57 @@ configured.
 
 ### The HTTPS requirement for GPS
 
-Browser geolocation only works in a **secure context**. On Coolify's temporary
-plain-HTTP host, the "Use my location" button in Explore will silently do
-nothing — the browser blocks it. Everything else works. Test GPS after you
-attach your real domain with a TLS certificate.
+Browser geolocation only works in a **secure context**. Set the app's domain to
+`https://<host>.sslip.io` rather than `http://…` and Coolify's Traefik will get a
+Let's Encrypt certificate for that host over the HTTP-01 challenge, so you can
+exercise the "Use my location" button in Explore before any real DNS exists.
+Verified working. On a plain-HTTP host the button silently does nothing —
+everything else still works.
+
+Note: the domain is edited through the API's `domains` field. `fqdn` is
+read-only and returns "This field is not allowed".
+
+## Server hardening
+
+Do this before the server holds anything real. The first two items are not
+optional polish: on a fresh box, Docker and ufw together leave the whole
+container surface exposed.
+
+**1. Docker publishes ports past ufw.** ufw only filters the host `INPUT`
+chain. A published container port is DNAT-ed in the `nat` table and then passes
+through `FORWARD`, which never touches `INPUT`, so it stays reachable no matter
+what `ufw status` claims. Coolify publishes 80, 443, 6001, 6002, 8000 and
+Traefik's dashboard on 8080; the last one is a live admin UI you do not want on
+the public internet. Restrict them in `DOCKER-USER`, the supported hook, and
+persist the rules with a systemd unit so they survive a reboot.
+
+Match on the **original** destination port, not `--dport`. Docker rewrites
+`8000 -> 8080` during DNAT, so `--dport 8000` never matches and `--dport 8080`
+would also let the dashboard in:
+
+```
+iptables -A DOCKER-USER -i eth0 -m conntrack --ctstate RELATED,ESTABLISHED -j RETURN
+iptables -A DOCKER-USER -i eth0 -p tcp -m conntrack --ctorigdstport 80 -j RETURN
+iptables -A DOCKER-USER -i eth0 -p tcp -m conntrack --ctorigdstport 443 -j RETURN
+iptables -A DOCKER-USER -i eth0 -p tcp -m conntrack --ctorigdstport 8000 -j RETURN
+iptables -A DOCKER-USER -i eth0 -p tcp -m conntrack --ctorigdstport 6001 -j RETURN
+iptables -A DOCKER-USER -i eth0 -p tcp -m conntrack --ctorigdstport 6002 -j RETURN
+iptables -A DOCKER-USER -i eth0 -p udp -m conntrack --ctorigdstport 443 -j RETURN
+iptables -A DOCKER-USER -i eth0 -j DROP
+```
+
+**2. SSH: keys only.** `PermitRootLogin prohibit-password`,
+`PasswordAuthentication no`. Keep an existing session open while you reload
+sshd, and verify a *new* key-based connection before closing it.
+
+**3. Rotate any credential that was shared over chat.** A password pasted into
+a conversation should be treated as compromised.
+
+**4. The container needs `curl`.** Coolify's rolling deploy probes the
+container with curl. `node:22-slim` does not ship one, so the deploy is marked
+unhealthy and rolled back even when the app started and migrated correctly. The
+runtime stage installs it.
+
 
 ## Post-deploy checks
 
