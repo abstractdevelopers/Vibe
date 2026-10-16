@@ -34,6 +34,8 @@ export type JournalKind =
   | "gift_refund"
   | "creator_payout"
   | "payout_reversal"
+  | "ticket_purchase"
+  | "ticket_refund"
   | "adjustment";
 
 interface Entry {
@@ -227,6 +229,66 @@ export async function postPayoutReversal(
     currency: input.currency,
     reference: input.reference,
     memo: "Payout failed; earnings restored",
+    entries,
+  });
+}
+
+/**
+ * A paid ticket to a live room. Structurally identical to a gift purchase:
+ * cash comes in, the platform keeps its cut, the host earns the rest. The
+ * difference is only what it buys — entry, not a gift.
+ */
+export async function postTicketPurchase(
+  tx: pg.PoolClient,
+  input: {
+    reference: string;
+    hostId: string;
+    amountMinor: number;
+    feeMinor: number;
+    currency: string;
+  },
+): Promise<string> {
+  const clearing = await accountId(tx, "provider_clearing", input.currency, null);
+  const revenue = await accountId(tx, "platform_revenue", input.currency, null);
+  const entries: Entry[] = [
+    { accountId: clearing, direction: "debit", amountMinor: input.amountMinor },
+  ];
+  if (input.feeMinor > 0) entries.push({ accountId: revenue, direction: "credit", amountMinor: input.feeMinor });
+  const hostMinor = input.amountMinor - input.feeMinor;
+  if (hostMinor > 0) {
+    const earnings = await accountId(tx, "creator_earnings", input.currency, input.hostId);
+    entries.push({ accountId: earnings, direction: "credit", amountMinor: hostMinor });
+  }
+  return writeJournal(tx, {
+    kind: "ticket_purchase",
+    currency: input.currency,
+    reference: input.reference,
+    memo: "Live room ticket",
+    entries,
+  });
+}
+
+/** The exact mirror of a ticket purchase, for a refunded entry. */
+export async function postTicketRefund(
+  tx: pg.PoolClient,
+  input: { reference: string; hostId: string; amountMinor: number; feeMinor: number; currency: string },
+): Promise<string> {
+  const clearing = await accountId(tx, "provider_clearing", input.currency, null);
+  const revenue = await accountId(tx, "platform_revenue", input.currency, null);
+  const entries: Entry[] = [
+    { accountId: clearing, direction: "credit", amountMinor: input.amountMinor },
+  ];
+  if (input.feeMinor > 0) entries.push({ accountId: revenue, direction: "debit", amountMinor: input.feeMinor });
+  const hostMinor = input.amountMinor - input.feeMinor;
+  if (hostMinor > 0) {
+    const earnings = await accountId(tx, "creator_earnings", input.currency, input.hostId);
+    entries.push({ accountId: earnings, direction: "debit", amountMinor: hostMinor });
+  }
+  return writeJournal(tx, {
+    kind: "ticket_refund",
+    currency: input.currency,
+    reference: input.reference,
+    memo: "Live room ticket refund",
     entries,
   });
 }

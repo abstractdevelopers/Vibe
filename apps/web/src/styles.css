@@ -346,6 +346,73 @@ h4 {
 }
 
 /* ============================================================
+   Live rooms — banner, now-playing, tickets
+   ============================================================ */
+
+.truncate {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.room-banner {
+  display: block;
+  width: 100%;
+  max-height: 200px;
+  object-fit: cover;
+  border-radius: var(--radius-card);
+  border: 1px solid var(--hairline);
+  margin-bottom: var(--space-3);
+}
+
+/* The now-playing bar. The equaliser is the one moving thing on the screen,
+   so a live room reads as occupied even before you join. */
+.now-playing {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  margin: 0 var(--space-4) var(--space-3);
+  padding: var(--space-3);
+  border-radius: var(--radius-card);
+  background: linear-gradient(
+    100deg,
+    color-mix(in srgb, var(--violet) 22%, transparent),
+    color-mix(in srgb, var(--coral) 18%, transparent)
+  );
+  border: 1px solid color-mix(in srgb, var(--violet) 35%, transparent);
+}
+.eq {
+  display: inline-flex;
+  align-items: flex-end;
+  gap: 3px;
+  height: 18px;
+  flex: 0 0 auto;
+}
+.eq i {
+  width: 3px;
+  height: 100%;
+  background: var(--text);
+  border-radius: 2px;
+  transform-origin: bottom;
+  animation: eq-bounce 900ms ease-in-out infinite;
+}
+.eq i:nth-child(2) { animation-delay: 160ms; }
+.eq i:nth-child(3) { animation-delay: 320ms; }
+@keyframes eq-bounce {
+  0%, 100% { transform: scaleY(0.3); }
+  50% { transform: scaleY(1); }
+}
+
+.ticket-card {
+  margin: 0 var(--space-4) var(--space-3);
+  border-color: color-mix(in srgb, var(--violet) 45%, transparent);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .eq i { animation: none; transform: scaleY(0.6); }
+}
+
+/* ============================================================
    Bottom navigation
    ============================================================ */
 

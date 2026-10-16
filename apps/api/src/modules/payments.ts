@@ -11,6 +11,9 @@ import {
   refundGiftPurchase,
   settlePayout,
   reversePayout,
+  settleTicketPurchase,
+  failTicketPurchase,
+  refundTicketPurchase,
 } from "../money/settlement.js";
 
 /**
@@ -98,6 +101,22 @@ export function paymentsRoutes(ctx: AppContext) {
           gift = await refundGiftPurchase(ctx.pool, { reference: event.orderReference });
         }
       }
+      // A ticket reference is `TKT-...`; it grants entry to a live room and
+      // posts the same 70/30 journal a gift does.
+      let ticket: { applied: boolean; reason?: string } | null = null;
+      if (event.orderReference?.startsWith("TKT-")) {
+        if (event.type === "payment_succeeded") {
+          ticket = await settleTicketPurchase(ctx.pool, {
+            reference: event.orderReference,
+            providerRef: event.providerRef,
+            paidAmountMinor: event.amount.amount > 0 ? event.amount.amount : null,
+          });
+        } else if (event.type === "payment_failed") {
+          ticket = await failTicketPurchase(ctx.pool, event.orderReference);
+        } else if (event.type === "refund_succeeded") {
+          ticket = await refundTicketPurchase(ctx.pool, { reference: event.orderReference });
+        }
+      }
       // A payout reference is `WD-...`; it is the same provider webhook channel
       // as a collection. Without this branch a payout would stay `requested`
       // forever and the creator's earnings would never be debited.
@@ -126,7 +145,7 @@ export function paymentsRoutes(ctx: AppContext) {
         [event.provider, event.eventId],
       );
       reply.code(202);
-      return { status: "accepted", eventId: event.eventId, type: event.type, orderUpdated: applied, gift, payout };
+      return { status: "accepted", eventId: event.eventId, type: event.type, orderUpdated: applied, gift, ticket, payout };
     });
 
     app.get("/v1/payments/attempts/:providerRef", async (req) => {

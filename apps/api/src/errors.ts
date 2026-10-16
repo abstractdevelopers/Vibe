@@ -7,6 +7,7 @@ export type ErrorCode =
   | "validation_error"
   | "unauthorized"
   | "forbidden"
+  | "payment_required"
   | "not_found"
   | "conflict"
   | "rate_limited"
@@ -19,6 +20,7 @@ const STATUS: Record<ErrorCode, number> = {
   validation_error: 422,
   unauthorized: 401,
   forbidden: 403,
+  payment_required: 402,
   not_found: 404,
   conflict: 409,
   rate_limited: 429,
@@ -59,6 +61,11 @@ export class ApiError extends Error {
 
   static notFound(message = "Not found"): ApiError {
     return new ApiError("not_found", message);
+  }
+
+  /** The action needs a paid, granted entitlement (a live-room ticket). */
+  static paymentRequired(message = "Payment required"): ApiError {
+    return new ApiError("payment_required", message);
   }
 
   static conflict(message: string): ApiError {

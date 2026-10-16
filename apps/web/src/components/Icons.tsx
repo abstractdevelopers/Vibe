@@ -76,6 +76,8 @@ import {
   X,
   Radio,
   Music,
+  Mic,
+  Headphones,
   Film,
   Goal,
   CalendarPlus,
@@ -155,6 +157,8 @@ export const ClickIcon = icon(MousePointerClick);
 export const GaugeIcon = icon(Gauge);
 export const RadioIcon = icon(Radio);
 export const MusicIcon = icon(Music);
+export const MicIcon = icon(Mic);
+export const HeadphonesIcon = icon(Headphones);
 export const FilmIcon = icon(Film);
 export const GoalIcon = icon(Goal);
 export const CalendarPlusIcon = icon(CalendarPlus);

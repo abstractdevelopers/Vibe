@@ -6,6 +6,8 @@ import { newId, newToken } from "../ids.js";
 import { parse, requireUser, type AppContext } from "../http.js";
 import { requireCircleMember } from "./access.js";
 import { trackSafe } from "./analytics.js";
+import { requireIdempotencyKey, runIdempotent } from "../idempotency.js";
+import { splitGift } from "../money/catalogue.js";
 
 /**
  * Immersive activities: Live Now, sports rooms, movie clubs, listening parties
@@ -49,6 +51,11 @@ interface RoomRow {
   is_sponsored: boolean;
   sponsor_label: string | null;
   recurrence: string | null;
+  audio_track: unknown;
+  audio_started_at: Date | null;
+  cohost_id: string | null;
+  ticket_price_minor: string;
+  banner_url: string | null;
   host_handle?: string;
   host_name?: string;
   host_kind?: string;
@@ -106,11 +113,23 @@ function serializeRoom(room: RoomRow, now = new Date()) {
     isSponsored: room.is_sponsored,
     sponsorLabel: room.sponsor_label,
     recurrence: room.recurrence,
+    bannerUrl: room.banner_url,
+    audioTrack: room.audio_track ?? null,
+    audioStartedAt: room.audio_started_at,
+    cohostId: room.cohost_id,
+    // A room is paid when its ticket price is above zero. The client shows the
+    // price; the server enforces it on join.
+    ticketPriceMinor: Number(room.ticket_price_minor ?? 0),
+    isTicketed: Number(room.ticket_price_minor ?? 0) > 0,
   };
 }
 
+/** The audience fee the platform keeps on a ticket, in basis points (30%). */
+const TICKET_FEE_BPS = 3000;
+
 const createRoomSchema = z.object({
-  kind: z.enum(["sports", "movie", "music", "other"]),
+  // voice = open audio stage; listen = music-forward listening room.
+  kind: z.enum(["sports", "movie", "music", "other", "voice", "listen"]),
   title: z.string().min(1).max(160),
   topic: z.string().max(400).optional(),
   startsAt: z.coerce.date(),
@@ -125,7 +144,20 @@ const createRoomSchema = z.object({
   playbackMode: z.enum(["coordinated", "synchronized"]).default("coordinated"),
   spoilerPolicy: z.enum(["open", "spoiler_safe"]).default("open"),
   rules: z.string().max(2000).optional(),
-  recurrence: z.enum(["weekly", "fortnightly", "monthly"]).optional(),
+  // A creator can go live on any day, including every day.
+  recurrence: z.enum(["daily", "weekly", "fortnightly", "monthly"]).optional(),
+  // Zero is free entry. Anything above zero is a paid ticket.
+  ticketPriceMinor: z.coerce.number().int().min(0).max(100_000_000).default(0),
+  currency: z.string().length(3).default("NGN"),
+  bannerUrl: z.string().max(500).optional(),
+  audioTrack: z
+    .object({
+      title: z.string().min(1).max(200),
+      artist: z.string().max(200).optional(),
+      url: z.string().url().max(500).optional(),
+      artworkUrl: z.string().url().max(500).optional(),
+    })
+    .optional(),
 });
 
 /**
@@ -135,7 +167,9 @@ const createRoomSchema = z.object({
  * code rather than prose.
  */
 function assertRoomHonest(input: z.infer<typeof createRoomSchema>): void {
-  if (input.playbackMode === "synchronized" && !input.externalUrl) {
+  // A voice or listen room is hosted audio, not retransmitted media, so it is
+  // exempt from the synchronized-service rule.
+  if (input.playbackMode === "synchronized" && !input.externalUrl && input.kind !== "voice" && input.kind !== "listen") {
     throw ApiError.badRequest(
       "A synchronized room must link the licensed service it plays through; Vibe does not retransmit media.",
     );
@@ -209,14 +243,16 @@ export function activityRoutes(ctx: AppContext) {
           `INSERT INTO activity_rooms
              (id, kind, title, topic, starts_at, ends_at, city, area, visibility, host_id,
               circle_id, data_source, data_source_url, external_url, playback_mode,
-              spoiler_policy, rules, recurrence)
-           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18)`,
+              spoiler_policy, rules, recurrence, ticket_price_minor, banner_url, audio_track)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21)`,
           [
             id, input.kind, input.title, input.topic ?? null, startsAt, endsAt,
             input.city ?? null, input.area ?? null, input.visibility, user.id,
             input.circleId ?? null, input.dataSource ?? null, input.dataSourceUrl ?? null,
             input.externalUrl ?? null, input.playbackMode, input.spoilerPolicy,
             input.rules ?? null, input.recurrence ?? null,
+            input.ticketPriceMinor, input.bannerUrl ?? null,
+            input.audioTrack ? JSON.stringify(input.audioTrack) : null,
           ],
         );
         await client.query(
@@ -271,6 +307,18 @@ export function activityRoutes(ctx: AppContext) {
       const { id } = req.params as { id: string };
       const room = await loadRoom(ctx, id, user.id);
       if (!room) throw ApiError.notFound("Room not found");
+      // A ticketed room needs a granted ticket first. A host is always allowed
+      // in. Entry is a grant, never a balance.
+      if (room.isTicketed && room.host.id !== user.id) {
+        const ticket = await queryOne<{ status: string }>(
+          ctx.pool,
+          "SELECT status FROM room_tickets WHERE room_id = $1 AND user_id = $2",
+          [id, user.id],
+        );
+        if (!ticket || ticket.status !== "granted") {
+          throw ApiError.paymentRequired("This room needs a ticket");
+        }
+      }
       await ctx.pool.query(
         `INSERT INTO room_members (room_id, user_id) VALUES ($1,$2)
          ON CONFLICT (room_id, user_id) DO NOTHING`,
@@ -278,6 +326,97 @@ export function activityRoutes(ctx: AppContext) {
       );
       trackSafe(ctx.pool, { name: "room_joined", userId: user.id, properties: { kind: room.kind, entityType: "room", entityId: id } });
       return { room: await loadRoom(ctx, id, user.id), joined: true };
+    });
+
+    // ---- Tickets: a paid live room ----
+    //
+    // A ticket is a provider checkout plus a ledger journal on the verified
+    // webhook, exactly like a paid gift. Nothing is granted here; the grant
+    // happens in settleTicketPurchase. Vibe never holds the money as a balance.
+    app.post("/v1/activities/rooms/:id/ticket", async (req, reply) => {
+      const user = await requireUser(ctx, req);
+      const { id } = req.params as { id: string };
+      const key = requireIdempotencyKey(req.headers["idempotency-key"] as string | undefined);
+      const room = await loadRoom(ctx, id, user.id);
+      if (!room) throw ApiError.notFound("Room not found");
+      if (!room.isTicketed) throw ApiError.badRequest("This room is free to join");
+      if (room.host.id === user.id) throw ApiError.badRequest("You host this room");
+      const existing = await queryOne<{ status: string }>(
+        ctx.pool,
+        "SELECT status FROM room_tickets WHERE room_id = $1 AND user_id = $2",
+        [id, user.id],
+      );
+      if (existing?.status === "granted") {
+        return { status: "granted", alreadyTickets: true };
+      }
+      const result = await runIdempotent(
+        ctx.pool,
+        { userId: user.id, route: "POST /v1/activities/rooms/:id/ticket", key, requestBody: { roomId: id } },
+        async () => {
+          const priceMinor = room.ticketPriceMinor;
+          const { feeMinor, recipientMinor } = splitGift(priceMinor, TICKET_FEE_BPS);
+          const reference = `TKT-${newId()}`;
+          const purchaseId = newId();
+          await ctx.pool.query(
+            `INSERT INTO gift_purchases
+               (id, buyer_id, recipient_id, gift_id, quantity, unit_price_minor,
+                fee_bps, amount_minor, fee_minor, recipient_minor, currency, reference, provider, room_id)
+             VALUES ($1,$2,$3,'live_ticket',1,$4,$5,$6,$7,$8,$9,$10,$11,$12)`,
+            [
+              purchaseId, user.id, room.host.id, priceMinor, TICKET_FEE_BPS, priceMinor,
+              feeMinor, recipientMinor, "NGN", reference, ctx.provider.name, id,
+            ],
+          );
+          const session = await ctx.provider.createCheckout({
+            amount: { amount: priceMinor, currency: "NGN" },
+            reference,
+            description: `Vibe live ticket: ${room.title}`,
+          });
+          await ctx.pool.query(
+            "UPDATE gift_purchases SET provider_ref = $2, updated_at = now() WHERE id = $1",
+            [purchaseId, session.providerRef],
+          );
+          return {
+            statusCode: 202,
+            body: {
+              purchaseId,
+              reference,
+              amountMinor: priceMinor,
+              feeMinor,
+              hostMinor: recipientMinor,
+              currency: "NGN",
+              // Only the verified webhook grants the ticket.
+              status: "pending",
+              redirectUrl: session.redirectUrl,
+            },
+          };
+        },
+      );
+      reply.code(result.statusCode);
+      return result.body;
+    });
+
+    app.get("/v1/activities/rooms/:id/ticket", async (req) => {
+      const user = await requireUser(ctx, req);
+      const { id } = req.params as { id: string };
+      const ticket = await queryOne(
+        ctx.pool,
+        `SELECT id, status, price_minor, currency, reference, granted_at
+           FROM room_tickets WHERE room_id = $1 AND user_id = $2`,
+        [id, user.id],
+      );
+      return {
+        ticket: ticket
+          ? {
+              id: ticket.id,
+              status: ticket.status,
+              priceMinor: Number(ticket.price_minor),
+              currency: ticket.currency,
+              reference: ticket.reference,
+              grantedAt: ticket.granted_at,
+            }
+          : null,
+      };
     });
 
     app.post("/v1/activities/rooms/:id/leave", async (req) => {
