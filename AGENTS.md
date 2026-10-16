@@ -496,4 +496,12 @@ that is confirmed with Bachs and a lawyer.
   whole verified-webhook and ledger path; `settleTicketPurchase` grants
   `room_tickets` on the webhook. Never grant entry from the request. Journal
   kinds are `ticket_purchase` / `ticket_refund`; `splitGift` gives the 70/30 cut.
+- **Invite links are handled in the client, not by a router.** The app routes in
+  memory (`nav.ts`), so `App.tsx` reads `/invite/<token>` (or `?invite=`) at
+  boot, strips it from the address bar, and either shows `InviteLanding` above
+  sign-in or auto-accepts once `me` loads. `GET /v1/invites/:token` is public
+  and previews the Circle's name only — never members or posts.
+- **`Live` is reached from the Explore card.** The `live` route has no tab of its
+  own; if you move that entry point, the whole voice/ticketed-room surface
+  becomes unreachable.
 
