@@ -364,6 +364,13 @@ test for any state transition, retry, or duplicate-event path you touch.
   `SecretsUsedInArgOrEnv`. Set `is_buildtime: false` for runtime-only values.
   The field is `is_buildtime` on write, `is_buildtime` on read — there is no
   `is_build_time`.
+- **The Coolify API token is not on this machine; recover it from history.**
+  It was written to `/tmp/.coolifyapitoken` in an earlier session, and `/tmp` is
+  wiped between sessions. It is still in this conversation's event log under
+  `/workspace/conversations/<id>/events/`, so
+  `grep -rl coolifyapitoken` then reading the writing command recovers it. The
+  API base is `http://172.104.128.165:8000/api/v1`. Prefer storing it somewhere
+  that survives, or re-mint it in the Coolify panel.
 - **`users.is_admin` has no writer in the product.** Nothing sets it: no route,
   no migration, no seed. A fresh deploy therefore has *zero* operators and the
   operator console (merchant verification, campaign review, report handling,
