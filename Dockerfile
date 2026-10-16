@@ -13,6 +13,10 @@ RUN npm run build
 
 FROM node:22-slim AS runtime
 WORKDIR /app
+# Coolify probes the container with curl; slim images do not ship one.
+RUN apt-get update \
+  && apt-get install -y --no-install-recommends curl \
+  && rm -rf /var/lib/apt/lists/*
 COPY package.json package-lock.json ./
 COPY apps/api/package.json apps/api/
 COPY apps/web/package.json apps/web/
