@@ -21,6 +21,7 @@ import { EventsScreen } from "./screens/Events";
 import { LiveScreen, RoomScreen } from "./screens/Live";
 import { PassScreen } from "./screens/Pass";
 import { AdminScreen } from "./screens/Admin";
+import { Wallet } from "./screens/Wallet";
 import { AssistScreen } from "./screens/Assist";
 import { CreateSheet } from "./components/CreateSheet";
 import { CreateSomethingSheet } from "./components/CreateSomething";
@@ -38,6 +39,7 @@ import {
   ReceiptIcon,
   SettingsIcon,
   SparklesIcon,
+  WalletIcon,
   ShieldIcon,
   TicketIcon,
   RadioIcon,
@@ -229,6 +231,7 @@ export function App() {
             {route.name === "room" && <RoomScreen roomId={route.roomId} onBack={back} />}
             {route.name === "pass" && <PassScreen onBack={back} />}
             {route.name === "admin" && <AdminScreen onBack={back} />}
+            {route.name === "wallet" && <Wallet onClose={back} />}
             {route.name === "assist" && <AssistScreen onBack={back} />}
           </main>
 
@@ -453,6 +456,16 @@ function AccountMenu({
               <ShieldIcon width={17} height={17} /> Operator console
             </button>
           )}
+          <button
+            className="menu-item"
+            role="menuitem"
+            onClick={() => {
+              setOpen(false);
+              nav.push({ name: "wallet" });
+            }}
+          >
+            <WalletIcon width={17} height={17} /> Wallet
+          </button>
           <button
             className="menu-item"
             role="menuitem"

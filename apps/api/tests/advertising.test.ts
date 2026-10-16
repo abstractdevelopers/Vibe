@@ -42,6 +42,26 @@ describe("advertising manager", () => {
     expect(res.json().error.message).toMatch(/not supported/i);
   });
 
+  it("accepts a banner image on a campaign and returns it", async () => {
+    const res = await h.app.inject({
+      method: "POST", url: "/v1/campaigns", headers: auth(advertiser.token),
+      payload: { ...base(), creativeImageUrl: "/v1/media/abc123.png" },
+    });
+    expect(res.statusCode).toBe(201);
+    const detail = await h.app.inject({
+      method: "GET", url: `/v1/campaigns/${res.json().id}`, headers: auth(advertiser.token),
+    });
+    expect(detail.json().creativeImageUrl).toBe("/v1/media/abc123.png");
+  });
+
+  it("refuses a creative image that is not an image URL or media path", async () => {
+    const res = await h.app.inject({
+      method: "POST", url: "/v1/campaigns", headers: auth(advertiser.token),
+      payload: { ...base(), creativeImageUrl: "javascript:alert(1)" },
+    });
+    expect(res.statusCode).toBe(422);
+  });
+
   it("moves a draft through submission and only a reviewer can approve", async () => {
     const created = await h.app.inject({ method: "POST", url: "/v1/campaigns", headers: auth(advertiser.token), payload: base() });
     const id = created.json().id;

@@ -33,6 +33,8 @@ export interface SponsoredAd {
   title: string;
   body: string;
   cta: string;
+  /** Banner image, or null for a text-only creative. */
+  imageUrl: string | null;
   destinationUrl: string;
   advertiserName: string;
   advertiserId: string;
@@ -56,6 +58,7 @@ export async function selectAdForViewer(
     creative_title: string | null;
     creative_body: string | null;
     creative_cta: string | null;
+    creative_image_url: string | null;
     creative: string;
     destination_url: string;
     frequency_cap: number;
@@ -63,7 +66,7 @@ export async function selectAdForViewer(
   }>(
     pool,
     `SELECT c.id, c.advertiser_id, c.creative_title, c.creative_body, c.creative_cta,
-            c.creative, c.destination_url, c.frequency_cap,
+            c.creative_image_url, c.creative, c.destination_url, c.frequency_cap,
             COALESCE(m.name, u.display_name) AS advertiser_name
        FROM campaigns c
        JOIN users u ON u.id = c.advertiser_id
@@ -101,6 +104,7 @@ export async function selectAdForViewer(
     cta: ad.creative_cta ?? "Learn more",
     destinationUrl: ad.destination_url,
     advertiserName: ad.advertiser_name,
+    imageUrl: ad.creative_image_url,
     advertiserId: ad.advertiser_id,
     placementId,
   };

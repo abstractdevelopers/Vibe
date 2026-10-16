@@ -26,6 +26,9 @@ const schema = z.object({
   BACHS_API_KEY: z.string().optional(),
   BACHS_WEBHOOK_SECRET: z.string().optional(),
   BACHS_BASE_URL: z.string().url().default("https://sandbox-api.bachs.io"),
+  // Payouts move money OUT. They are off unless explicitly enabled, so a
+  // deployment whose payout flow has not been reviewed cannot pay anyone.
+  PAYOUTS_PROVIDER: z.enum(["disabled", "bachs"]).default("disabled"),
   PUBLIC_API_URL: z.string().default("http://localhost:12000"),
   PUBLIC_WEB_URL: z.string().default("http://localhost:12001"),
   // Transactional email. Unset means the log mailer, which prints messages to

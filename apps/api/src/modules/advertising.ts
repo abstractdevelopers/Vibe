@@ -22,6 +22,14 @@ const campaignSchema = z.object({
   creativeTitle: z.string().max(120).optional(),
   creativeBody: z.string().max(400).optional(),
   creativeCta: z.string().max(40).optional(),
+  // A banner image: the same contract as a profile avatar, so it reuses the
+  // media upload path rather than trusting a new one.
+  creativeImageUrl: z
+    .string()
+    .max(1000)
+    .regex(/^(https?:\/\/|\/v1\/media\/[A-Za-z0-9._-]+)/, "Must be an image URL or an uploaded media path")
+    .nullable()
+    .optional(),
   destinationUrl: z.string().url().max(1000),
   // Delivery only happens for a verified business, so a campaign must name the
   // merchant it lands on.
@@ -67,12 +75,14 @@ export function advertisingRoutes(ctx: AppContext) {
       const created = await queryOne<{ id: string }>(
         ctx.pool,
         `INSERT INTO campaigns (id, advertiser_id, merchant_id, landing_merchant_id, name, objective, creative,
-                                creative_title, creative_body, creative_cta, destination_url, audience,
+                                creative_title, creative_body, creative_cta, creative_image_url,
+                                destination_url, audience,
                                 geography, budget_minor, currency, schedule_start, schedule_end, frequency_cap, category)
-         VALUES ($1,$2,$3,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18) RETURNING id`,
+         VALUES ($1,$2,$3,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19) RETURNING id`,
         [
           newId(), user.id, input.merchantId, input.name, input.objective, input.creative,
           input.creativeTitle ?? null, input.creativeBody ?? null, input.creativeCta ?? null,
+          input.creativeImageUrl ?? null,
           input.destinationUrl, JSON.stringify(input.audience), input.geography ?? null,
           input.budgetMinor, input.currency.toUpperCase(),
           input.scheduleStart ?? null, input.scheduleEnd ?? null, input.frequencyCap, input.category,
@@ -191,6 +201,7 @@ export function advertisingRoutes(ctx: AppContext) {
       const c = await queryOne<{
         id: string; advertiser_id: string; name: string; status: string; objective: string;
         creative: string; creative_title: string | null; creative_body: string | null; creative_cta: string | null;
+        creative_image_url: string | null;
         destination_url: string; geography: string | null; budget_minor: number;
         currency: string; frequency_cap: number; category: string; moderation_reason: string | null;
         landing_merchant_id: string | null;
@@ -206,6 +217,7 @@ export function advertisingRoutes(ctx: AppContext) {
         creativeTitle: c.creative_title,
         creativeBody: c.creative_body,
         creativeCta: c.creative_cta,
+        creativeImageUrl: c.creative_image_url,
         destinationUrl: c.destination_url,
         geography: c.geography,
         budgetMinor: c.budget_minor,

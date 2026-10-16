@@ -3,6 +3,7 @@ import { createPool } from "./db.js";
 import { buildApp } from "./app.js";
 import { RealtimeHub } from "./realtime.js";
 import { createPaymentProvider } from "./payments/provider.js";
+import { createPayoutProvider } from "./payments/payouts.js";
 import { createMailer, drainOutbox } from "./modules/mailer.js";
 import { prune as pruneRateLimits } from "./modules/ratelimit.js";
 
@@ -17,15 +18,20 @@ async function main(): Promise<void> {
     apiUrl: config.PUBLIC_API_URL,
   });
 
+  const payouts = createPayoutProvider(config.PAYOUTS_PROVIDER, {
+    apiKey: config.BACHS_API_KEY,
+    baseUrl: config.BACHS_BASE_URL,
+  });
+
   const mailer = createMailer({
     apiKey: config.EMAIL_API_KEY,
     from: config.EMAIL_FROM,
     baseUrl: config.EMAIL_BASE_URL,
   });
 
-  const app = await buildApp({ pool, config, hub, provider, mailer });
+  const app = await buildApp({ pool, config, hub, provider, payouts, mailer });
   await app.listen({ port: config.PORT, host: "0.0.0.0" });
-  app.log.info({ mailer: mailer.name }, "mailer selected");
+  app.log.info({ mailer: mailer.name, payouts: payouts.name }, "providers selected");
 
   // Drain the email outbox and prune old rate-limit windows. On a single
   // instance a small interval timer is enough; a multi-instance deployment

@@ -374,8 +374,58 @@ test for any state transition, retry, or duplicate-event path you touch.
   reported, but no code debits it — there is no spend ledger and no
   authorization at review time. A campaign can run indefinitely at no cost. The
   order path is different and real: it goes through Bachs.
-- **Ad creatives are text-only.** A campaign has `creative_title`,
-  `creative_body`, `creative_cta` and `creative` (all text) plus
-  `destination_url`. There is no image, video or banner column, and the feed
-  renders text. This is deliberate — the spec's V1 scope — not an oversight, but
-  it means a "banner" is not something the schema can hold yet.
+- **Ad creatives were text-only; a banner image is now supported.**
+  `campaigns.creative_image_url` (migration 0013) holds an absolute http(s) URL
+  or a `/v1/media/<id>` path, the same contract as `users.avatar_url`, so the
+  existing upload path is reused rather than a new one trusted. The feed renders
+  it as `.ad-banner` and the whole image is the tap target. It is nullable, so a
+  text-only campaign still renders.
+
+## Money
+
+The gift feature grew from a free gesture into paid gifts, a creator balance,
+bank accounts and payouts. What is worth knowing:
+
+- **The ledger is double-entry and a balance is a SUM, never a column.**
+  `apps/api/src/money/ledger.ts` writes journals whose entries must sum to zero;
+  a deferred constraint trigger (`ledger_entries_balanced`) enforces it at
+  COMMIT. `creatorBalance()` derives everything from `ledger_entries`. Do not add
+  a `balance` column: it is the one change that would let a bug silently create
+  or destroy money.
+- **A purchase is not a payment.** `gift_purchases` starts `pending`. Only a
+  signature-verified webhook (`settleGiftPurchase`) marks it `paid` *and* writes
+  the journal, in one transaction. The reference prefix is the dispatch key:
+  `GIFT-` for gifts, `WD-` for payouts.
+- **Idempotency is a constraint, not a code path.** `paid_gifts.purchase_id` is
+  UNIQUE, so a redelivered webhook cannot double-deliver; the webhook inbox
+  primary key `(provider, event_id)` already dedupes. Rely on both.
+- **A refund reverses; it never edits.** Post the mirror journal. Getting this
+  wrong is easy and the test catches it: the first version posted to a separate
+  `gift_refunds` account *and* credited cash, which does not balance. A refund is
+  simply the purchase journal with every direction flipped.
+- **Bachs does payouts, and it is confirmed live.** `GET /v1/payouts` returns a
+  completed payout, and `POST /v1/payouts/destinations` registers a bank account
+  (NUBAN, 10 digits, plus a bank code) that must reach `approved` before it can
+  be paid. A payout takes `destination` (a `pd_...` id) plus `amount` and
+  `currency`. See `apps/api/src/payments/payouts.ts`.
+- **Payouts are OFF by default.** `PAYOUTS_PROVIDER` defaults to `disabled` and
+  the disabled provider throws on every call, so a deployment whose payout flow
+  has not been reviewed cannot pay anyone. Set it to `bachs` deliberately.
+- **Vibe does not store full account numbers.** Only the provider's opaque
+  destination id and the last four digits are kept, for display.
+- **The fee split is per-gift data, not a constant.** `gift_catalogue.fee_bps`
+  is stored on the purchase, so the split is reproducible after the fee changes.
+  Vibe keeps 30%; the creator earns 70%, held 7 days, minimum payout N1,000.
+- **`MEDIA_DIR` must point at a mounted volume or uploads die on deploy.** The
+  disk media store wrote to the container layer, so every redeploy wiped every
+  uploaded image and avatar, which looks exactly like "upload is broken". A
+  Coolify persistent storage (`type: persistent`, mount `/app/media`) plus
+  `MEDIA_DIR=/app/media` fixes it. Check this first when a media bug is reported.
+
+## Licensing, read before switching payouts on
+
+Holding a user's balance and paying it out to a bank account is a regulated
+activity (in Nigeria, a CBN licence covers disbursing other people's money at
+scale). The engineering is complete and tested; the legal basis is not
+established by code. Do not set `PAYOUTS_PROVIDER=bachs` in production until
+that is confirmed with Bachs and a lawyer.

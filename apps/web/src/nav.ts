@@ -23,6 +23,7 @@ export type Route =
   | { name: "orders" }
   | { name: "order"; orderId: string }
   | { name: "advertising" }
+  | { name: "wallet" }
   | { name: "events" }
   | { name: "event"; eventId: string }
   | { name: "pass" }

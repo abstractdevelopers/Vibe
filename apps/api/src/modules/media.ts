@@ -22,7 +22,9 @@ import { parse, requireUser, type AppContext } from "../http.js";
 const MAX_BYTES = 5 * 1024 * 1024; // 5 MB per image, matching the client-side cap.
 const ALLOWED = new Set(["image/jpeg", "image/png", "image/webp", "image/gif"]);
 
-const dataDir = resolve(dirname(fileURLToPath(import.meta.url)), "../../.data/media");
+const dataDir = resolve(
+  process.env.MEDIA_DIR ?? join(dirname(fileURLToPath(import.meta.url)), "../../.data/media"),
+);
 
 const uploadSchema = z.object({
   // A data URL keeps the boundary dependency-free. A signed-URL flow replaces
@@ -41,7 +43,7 @@ export interface MediaStore {
   get(id: string): Promise<StoredMedia | null>;
 }
 
-/** Local-disk stub. Not for production; real deployments use object storage. */
+/** Local-disk store. Durable only if MEDIA_DIR points at a mounted volume. */
 class DiskMediaStore implements MediaStore {
   async put({ contentType, bytes }: { contentType: string; bytes: Buffer }) {
     const ext = contentType.split("/")[1] ?? "bin";

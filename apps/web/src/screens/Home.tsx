@@ -13,12 +13,14 @@ import {
   ReplyIcon,
   SendIcon,
   ShareIcon,
+  SparklesIcon,
   TrashIcon,
 } from "../components/Icons";
 import { EmptyState } from "../components/EmptyState";
 import { useNav } from "../nav";
 import { ReportSheet } from "../components/ReportSheet";
 import { GiftSheet } from "../components/GiftSheet";
+import { PaidGiftSheet } from "../components/PaidGiftSheet";
 import { Avatar } from "../components/Avatar";
 import { Toast, type ToastState } from "../components/Toast";
 
@@ -33,6 +35,8 @@ interface SponsoredAd {
   advertiserName: string;
   advertiserId: string;
   placementId: string;
+  /** Banner image, or null for a text-only creative. */
+  imageUrl: string | null;
 }
 
 interface Props {
@@ -283,6 +287,7 @@ function FeedCard({
   const [commentsOpen, setCommentsOpen] = useState(false);
   const [reporting, setReporting] = useState(false);
   const [gifting, setGifting] = useState(false);
+  const [paidGifting, setPaidGifting] = useState(false);
   const [editing, setEditing] = useState(false);
   const [editBody, setEditBody] = useState(item.body ?? "");
   const [editError, setEditError] = useState<string | null>(null);
@@ -409,9 +414,18 @@ function FeedCard({
         <button className="react-btn" onClick={() => onCreate("media")} aria-label="Add a photo">
           <ImageIcon />
         </button>
-        <button className="react-btn" onClick={() => setGifting(true)} aria-label="Send a gift">
+        <button className="react-btn" onClick={() => setGifting(true)} aria-label="Send a free gift">
           <GiftIcon />
         </button>
+        {!isMine && (
+          <button
+            className="react-btn"
+            onClick={() => setPaidGifting(true)}
+            aria-label="Send a paid gift"
+          >
+            <SparklesIcon />
+          </button>
+        )}
         <button className="react-btn" onClick={() => void copyPostLink()} aria-label="Copy link">
           <ShareIcon />
         </button>
@@ -459,6 +473,14 @@ function FeedCard({
       )}
 
       {gifting && <GiftSheet postId={item.id} authorName={item.author.displayName} onClose={() => setGifting(false)} />}
+      {paidGifting && (
+        <PaidGiftSheet
+          recipientId={item.author.id}
+          recipientName={item.author.handle}
+          postId={item.id}
+          onClose={() => setPaidGifting(false)}
+        />
+      )}
 
       {reporting && <ReportSheet targetType="post" targetId={item.id} onClose={() => setReporting(false)} />}
     </article>
@@ -793,6 +815,13 @@ function SponsoredCard({ ad, onHide }: { ad: SponsoredAd; onHide: () => void }) 
           This appears because the advertiser chose a broad audience. Vibe does not target ads using
           your private messages or sensitive traits.
         </p>
+      )}
+      {/* A banner creative. The image is served from our own media path, so it
+          is same-origin and needs no remote allow-list. */}
+      {ad.imageUrl && (
+        <button className="ad-banner" onClick={open} aria-label={`${ad.cta}: ${ad.title}`}>
+          <img src={ad.imageUrl} alt="" loading="lazy" />
+        </button>
       )}
       <p style={{ marginTop: "var(--space-2)" }}>{ad.body}</p>
       <button className="btn primary" style={{ marginTop: "var(--space-3)" }} onClick={open}>

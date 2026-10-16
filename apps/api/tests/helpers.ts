@@ -4,6 +4,7 @@ import { buildApp } from "../src/app.js";
 import { RealtimeHub } from "../src/realtime.js";
 import { createPaymentProvider, type PaymentProvider } from "../src/payments/provider.js";
 import { LogMailer } from "../src/modules/mailer.js";
+import { createPayoutProvider } from "../src/payments/payouts.js";
 import type { Config } from "../src/config.js";
 import type pg from "pg";
 
@@ -20,6 +21,7 @@ export const testConfig: Config = {
   BACHS_API_KEY: undefined,
   BACHS_WEBHOOK_SECRET: undefined,
   BACHS_BASE_URL: "https://sandbox-api.bachs.io",
+  PAYOUTS_PROVIDER: "disabled",
   PUBLIC_API_URL: "http://localhost:12000",
   PUBLIC_WEB_URL: "http://localhost:12001",
   EMAIL_API_KEY: undefined,
@@ -39,7 +41,8 @@ export async function createHarness(providerOverride?: PaymentProvider): Promise
   const pool = createPool(testConfig.DATABASE_URL);
   const hub = new RealtimeHub();
   const provider = providerOverride ?? createPaymentProvider("stub", testConfig.PAYMENTS_WEBHOOK_SECRET);
-  const app = await buildApp({ pool, config: testConfig, hub, provider, mailer: new LogMailer() });
+  const payouts = createPayoutProvider(testConfig.PAYOUTS_PROVIDER);
+  const app = await buildApp({ pool, config: testConfig, hub, provider, payouts, mailer: new LogMailer() });
   await app.ready();
   return {
     app,
@@ -67,7 +70,9 @@ export async function resetDb(pool: pg.Pool): Promise<void> {
              device_tokens, ai_suggestions,
              activity_rooms, room_members, room_posts, room_polls, room_poll_votes,
              activity_reminders, activity_links, room_moderation_actions, activity_link_visits,
-             password_resets, email_outbox, rate_limit_counters
+             password_resets, email_outbox, rate_limit_counters,
+             paid_gifts, gift_purchases, payouts, payout_events, payout_destinations,
+             money_audit, ledger_entries, ledger_journals, ledger_accounts
     RESTART IDENTITY CASCADE
   `);
 }

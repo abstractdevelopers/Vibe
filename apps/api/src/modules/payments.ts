@@ -5,6 +5,11 @@ import { queryOne } from "../db.js";
 import { parse, requireUser, type AppContext } from "../http.js";
 import { requireIdempotencyKey, runIdempotent } from "../idempotency.js";
 import { applyProviderEvent } from "./commerce.js";
+import {
+  settleGiftPurchase,
+  failGiftPurchase,
+  refundGiftPurchase,
+} from "../money/settlement.js";
 
 /**
  * Payment boundary endpoints. No order/checkout product ships in V1's first
@@ -75,12 +80,28 @@ export function paymentsRoutes(ctx: AppContext) {
       // A verified event can advance the order it references. Unmatched events
       // are recorded but not applied (they may belong to a different system).
       const applied = await applyProviderEvent(ctx.pool, event);
+      // A gift reference is `GIFT-...`; settle it in the same request so a paid
+      // charge and its ledger journal either both happen or neither does.
+      let gift: { applied: boolean; reason?: string } | null = null;
+      if (event.orderReference?.startsWith("GIFT-")) {
+        if (event.type === "payment_succeeded") {
+          gift = await settleGiftPurchase(ctx.pool, {
+            reference: event.orderReference,
+            providerRef: event.providerRef,
+            paidAmountMinor: event.amount.amount > 0 ? event.amount.amount : null,
+          });
+        } else if (event.type === "payment_failed") {
+          gift = await failGiftPurchase(ctx.pool, event.orderReference);
+        } else if (event.type === "refund_succeeded") {
+          gift = await refundGiftPurchase(ctx.pool, { reference: event.orderReference });
+        }
+      }
       await ctx.pool.query(
         `UPDATE provider_webhook_events SET processed_at = now() WHERE provider = $1 AND event_id = $2`,
         [event.provider, event.eventId],
       );
       reply.code(202);
-      return { status: "accepted", eventId: event.eventId, type: event.type, orderUpdated: applied };
+      return { status: "accepted", eventId: event.eventId, type: event.type, orderUpdated: applied, gift };
     });
 
     app.get("/v1/payments/attempts/:providerRef", async (req) => {
