@@ -337,3 +337,16 @@ test for any state transition, retry, or duplicate-event path you touch.
 - **`npm test` from the repo root, not `npx vitest`.** The single-fork setting
   lives in `apps/api/vitest.config.ts`; running vitest from the root skips it
   and the integration tests stampede the shared database.
+- **Losing the deploy key is survivable, but only through Coolify.** Coolify
+  reaches its own host over the Docker socket, not SSH, so it keeps working when
+  SSH is locked down. To get back in: generate a keypair, then
+  `POST /api/v1/applications/<uuid>/storages` with
+  `{"type":"file","mount_path":"/app/.vibe-host-authorized-keys",
+  "fs_path":"/root/.ssh/authorized_keys","content":"<pubkey>\n"}`, deploy,
+  then delete the storage and redeploy. The `pre_deployment_command` hook does
+  **not** help: it runs inside the app container (`docker exec … sh -c`), so it
+  cannot reach the host.
+- **A file mount to `/root/.ssh/authorized_keys` overwrites, it does not
+  append.** There is one entry unless you write the whole file. It also lands
+  with odd permissions (711), so fix it to 600 and make sure it ends in a
+  newline.
