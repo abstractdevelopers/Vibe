@@ -3,14 +3,15 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "Vibe API — modular monolith (Fastify + PostgreSQL).",
+  "description": "Vibe API \u2014 modular monolith (Fastify + PostgreSQL).",
   "scripts": {
     "dev": "tsx watch src/server.ts",
     "start": "tsx src/server.ts",
     "migrate": "tsx src/migrate.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "operator": "tsx src/operator.ts"
   },
   "dependencies": {
     "@fastify/cors": "^10.0.1",
