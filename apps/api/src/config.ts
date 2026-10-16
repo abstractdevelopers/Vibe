@@ -75,3 +75,18 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
   }
   return { ...config, isProduction: config.NODE_ENV === "production" };
 }
+
+/**
+ * The secret used to verify inbound payment webhooks.
+ *
+ * Bachs signs with its endpoint secret (`BACHS_WEBHOOK_SECRET`); the stub signs
+ * with `PAYMENTS_WEBHOOK_SECRET`. These are different values, and wiring the
+ * wrong one makes every genuine webhook fail verification — silently, because
+ * a rejected webhook just returns 401. Keep this in one place so the choice is
+ * testable.
+ */
+export function webhookSecretFor(config: Config): string {
+  return config.PAYMENTS_PROVIDER === "bachs"
+    ? (config.BACHS_WEBHOOK_SECRET ?? "")
+    : config.PAYMENTS_WEBHOOK_SECRET;
+}

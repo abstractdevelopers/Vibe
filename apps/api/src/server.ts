@@ -1,4 +1,4 @@
-import { loadConfig } from "./config.js";
+import { loadConfig, webhookSecretFor } from "./config.js";
 import { createPool } from "./db.js";
 import { buildApp } from "./app.js";
 import { RealtimeHub } from "./realtime.js";
@@ -10,7 +10,7 @@ async function main(): Promise<void> {
   const config = loadConfig();
   const pool = createPool(config.DATABASE_URL, config.PGPOOL_MAX);
   const hub = new RealtimeHub();
-  const provider = createPaymentProvider(config.PAYMENTS_PROVIDER, config.PAYMENTS_WEBHOOK_SECRET, {
+  const provider = createPaymentProvider(config.PAYMENTS_PROVIDER, webhookSecretFor(config), {
     apiKey: config.BACHS_API_KEY,
     baseUrl: config.BACHS_BASE_URL,
     webUrl: config.PUBLIC_WEB_URL,

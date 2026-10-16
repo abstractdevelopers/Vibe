@@ -3,6 +3,7 @@ import { createHmac } from "node:crypto";
 import { createHarness, resetDb, registerUser, auth, type Harness, type TestUser } from "./helpers.js";
 import { createPaymentProvider } from "../src/payments/provider.js";
 import { canTransition, ORDER_TRANSITIONS } from "../src/modules/commerce.js";
+import { loadConfig, webhookSecretFor } from "../src/config.js";
 
 /**
  * Commerce + Bachs payment boundary.
@@ -301,5 +302,53 @@ describe("webhook → order application (stub provider)", () => {
     expect(res.json().orderUpdated).toBe(false);
     const after = (await h.pool.query("SELECT status FROM orders WHERE id = $1", [order.id])).rows[0];
     expect(after.status).toBe("cancelled");
+  });
+});
+
+describe("webhook secret selection", () => {
+  // Regression: the bachs provider must verify with BACHS_WEBHOOK_SECRET.
+  // Wiring PAYMENTS_WEBHOOK_SECRET instead made every genuine Bachs webhook
+  // fail verification, and the failure was silent (a 401 on a webhook nobody
+  // was watching). The adapter tests above could not catch it because they
+  // construct the provider directly and never go through loadConfig.
+  const base = {
+    NODE_ENV: "production",
+    DATABASE_URL: "postgres://u:p@h:5432/vibe",
+    SESSION_SECRET: "a-sufficiently-long-session-secret",
+    CORS_ORIGIN: "https://vibe.example",
+    EMAIL_API_KEY: "re_test",
+    PUBLIC_API_URL: "https://vibe.example",
+    PUBLIC_WEB_URL: "https://vibe.example",
+  };
+
+  it("uses the Bachs endpoint secret when the bachs provider is selected", () => {
+    const config = loadConfig({
+      ...base,
+      PAYMENTS_PROVIDER: "bachs",
+      BACHS_API_KEY: "sk_test",
+      BACHS_WEBHOOK_SECRET: "whsec_bachs",
+      PAYMENTS_WEBHOOK_SECRET: "stub-secret",
+    } as NodeJS.ProcessEnv);
+    expect(webhookSecretFor(config)).toBe("whsec_bachs");
+  });
+
+  it("uses the stub secret when the stub provider is selected", () => {
+    const config = loadConfig({
+      ...base,
+      NODE_ENV: "development",
+      PAYMENTS_PROVIDER: "stub",
+      PAYMENTS_WEBHOOK_SECRET: "stub-secret",
+    } as NodeJS.ProcessEnv);
+    expect(webhookSecretFor(config)).toBe("stub-secret");
+  });
+
+  it("refuses a production bachs deploy without the webhook secret", () => {
+    expect(() =>
+      loadConfig({
+        ...base,
+        PAYMENTS_PROVIDER: "bachs",
+        BACHS_API_KEY: "sk_test",
+      } as NodeJS.ProcessEnv),
+    ).toThrow(/BACHS_WEBHOOK_SECRET/);
   });
 });
