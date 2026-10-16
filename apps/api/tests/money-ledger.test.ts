@@ -305,8 +305,32 @@ describe("payout guards", () => {
       headers: { ...auth(creator.token), "idempotency-key": "po-1" },
       payload: { destinationId: "00000000-0000-0000-0000-000000000000" },
     });
-    // No such destination, so it is refused before any money is considered.
-    expect(res.statusCode).toBe(404);
+    // Payouts are disabled in the test harness, so the guard fires before any
+    // destination lookup. Either way, no money moves.
+    expect([404, 503]).toContain(res.statusCode);
+  });
+
+  it("refuses a payout request cleanly when payouts are disabled", async () => {
+    const res = await h.app.inject({
+      method: "POST",
+      url: "/v1/money/payouts",
+      headers: { ...auth(creator.token), "idempotency-key": "po-disabled" },
+      payload: { destinationId: "00000000-0000-0000-0000-000000000000" },
+    });
+    // A clear 503, not a 500 from the disabled provider throwing.
+    expect(res.statusCode).toBe(503);
+    expect(res.json().error.message).toMatch(/not switched on/i);
+  });
+
+  it("refuses adding a bank account cleanly when payouts are disabled", async () => {
+    const res = await h.app.inject({
+      method: "POST",
+      url: "/v1/money/destinations",
+      headers: auth(creator.token),
+      payload: { accountName: "Test Creator", accountNumber: "8110470104", bankCode: "305" },
+    });
+    expect(res.statusCode).toBe(503);
+    expect(res.json().error.message).toMatch(/not switched on/i);
   });
 
   it("reports payouts as disabled when no provider is configured", async () => {

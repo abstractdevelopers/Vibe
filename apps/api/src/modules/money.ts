@@ -44,6 +44,21 @@ const payoutSchema = z.object({
   destinationId: z.string().uuid(),
 });
 
+/**
+ * Payouts are off unless an operator switches them on. Refuse clearly rather
+ * than letting the disabled provider throw and surface as a 500 — a creator
+ * tapping "Add bank account" should be told withdrawals are not open, not that
+ * "something went wrong".
+ */
+function requirePayoutsEnabled(ctx: AppContext): void {
+  if (ctx.payouts.name === "disabled") {
+    throw new ApiError(
+      "provider_unavailable",
+      "Withdrawals are not switched on yet. Your earnings are safe and will be payable soon.",
+    );
+  }
+}
+
 function serializeCatalogue() {
   return GIFT_CATALOGUE.map((g) => ({
     id: g.id,
@@ -198,6 +213,7 @@ export function moneyRoutes(ctx: AppContext) {
 
     app.post("/v1/money/destinations", async (req, reply) => {
       const user = await requireUser(ctx, req);
+      requirePayoutsEnabled(ctx);
       const input = parse(destinationSchema, req.body);
       const destination = await ctx.payouts.createDestination({
         accountName: input.accountName,
@@ -255,6 +271,7 @@ export function moneyRoutes(ctx: AppContext) {
 
     app.post("/v1/money/payouts", async (req, reply) => {
       const user = await requireUser(ctx, req);
+      requirePayoutsEnabled(ctx);
       const key = requireIdempotencyKey(req.headers["idempotency-key"] as string | undefined);
       const input = parse(payoutSchema, req.body);
       const result = await runIdempotent(
