@@ -280,28 +280,31 @@ function Toggle({
   onChange: (value: boolean) => void;
 }) {
   return (
-    <div className="row spread" style={{ padding: "var(--space-3) 0", borderBottom: "1px solid var(--hairline)" }}>
-      <div className="grow" style={{ paddingRight: "var(--space-3)" }}>
-        <label htmlFor={id} style={{ marginBottom: 0, color: "var(--text)" }}>
-          {label}
-        </label>
-        <div className="meta">{hint}</div>
-      </div>
-      <input
-        id={id}
-        type="checkbox"
-        checked={checked}
-        onChange={(e) => onChange(e.target.checked)}
-        style={{
-          width: 46,
-          minHeight: 26,
-          height: 26,
-          marginBottom: 0,
-          accentColor: "var(--coral)",
-          cursor: "pointer",
-          flex: "0 0 auto",
-        }}
-      />
-    </div>
+    <label
+      htmlFor={id}
+      className="row spread"
+      style={{ padding: "var(--space-3) 0", borderBottom: "1px solid var(--hairline)", cursor: "pointer" }}
+    >
+      <span className="grow" style={{ paddingRight: "var(--space-3)" }}>
+        <span style={{ display: "block", fontWeight: 600 }}>{label}</span>
+        <span className="meta">{hint}</span>
+      </span>
+      {/* Same switch as the Settings screen: a track and knob plus an explicit
+          On/Off word. The bare checkbox that used to be here gave no visible
+          state — it looked identical on and off. */}
+      <span className="row switch-wrap" style={{ gap: "var(--space-2)", flex: "0 0 auto" }}>
+        <span className={`switch${checked ? " on" : ""}`} aria-hidden="true">
+          <span className="switch-knob" />
+        </span>
+        <span className="switch-state meta" aria-hidden="true">{checked ? "On" : "Off"}</span>
+        <input
+          id={id}
+          type="checkbox"
+          checked={checked}
+          onChange={(e) => onChange(e.target.checked)}
+          className="switch-input"
+        />
+      </span>
+    </label>
   );
 }

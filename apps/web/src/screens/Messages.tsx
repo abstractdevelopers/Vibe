@@ -168,7 +168,10 @@ export function MessagesScreen({ me, refreshKey }: Props) {
             </span>
             <span className="grow" style={{ minWidth: 0 }}>
               <span className="row spread">
-                <span style={{ fontWeight: c.unreadCount > 0 ? 700 : 600 }}>{title}</span>
+                <span className="row" style={{ gap: "var(--space-2)", minWidth: 0 }}>
+                  <span style={{ fontWeight: c.unreadCount > 0 ? 700 : 600 }}>{title}</span>
+                  {c.circleId && <span className="chip tiny">Circle</span>}
+                </span>
                 <span className="meta">{relativeTime(c.lastMessageAt)}</span>
               </span>
               <span className="row spread" style={{ gap: "var(--space-2)" }}>

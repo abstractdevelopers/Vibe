@@ -16,7 +16,7 @@ import {
   ChatIcon,
   UsersIcon,
 } from "../components/Icons";
-import { useImageUpload } from "../media";
+import { useMediaUpload } from "../media";
 
 export type CreateMode = "post" | "poll" | "plan" | "expense" | "media";
 
@@ -156,17 +156,17 @@ function PostForm({
   const [body, setBody] = useState("");
   const [circleId, setCircleId] = useState("");
   const [busy, setBusy] = useState(false);
-  const media = useImageUpload();
+  const media = useMediaUpload();
 
   async function submit() {
     setBusy(true);
     setError(null);
     try {
-      const mediaUrls = media.images.length > 0 ? await media.upload() : [];
+      const mediaUrls = media.items.length > 0 ? await media.upload() : [];
       await api("/v1/posts", {
         body: {
           body: body.trim() || undefined,
-          type: mediaUrls.length > 0 ? "image" : "text",
+          type: media.hasVideo ? "video" : mediaUrls.length > 0 ? "image" : "text",
           audience: circleId ? "circle" : "connections",
           ...(circleId ? { circleId } : {}),
           ...(mediaUrls.length > 0 ? { mediaUrls } : {}),
@@ -180,7 +180,7 @@ function PostForm({
     }
   }
 
-  const canSubmit = (body.trim().length > 0 || media.images.length > 0) && !busy && !media.busy;
+  const canSubmit = (body.trim().length > 0 || media.items.length > 0) && !busy && !media.busy;
 
   return (
     <form
@@ -197,7 +197,7 @@ function PostForm({
             value={body}
             onChange={(e) => setBody(e.target.value)}
             autoFocus
-            required={media.images.length === 0}
+            required={media.items.length === 0}
           />
         </>
       ) : (
@@ -208,37 +208,41 @@ function PostForm({
             value={body}
             onChange={(e) => setBody(e.target.value)}
             autoFocus
-            placeholder="Say something about this photo…"
+            placeholder="Say something about this…"
             maxLength={2200}
           />
           <p className="meta" style={{ marginTop: "-6px" }}>
-            Optional. A caption shows with your photo in the feed.
+            Optional. A caption shows with your media in the feed.
           </p>
         </>
       )}
 
       {allowMedia || mediaOnly ? (
         <div style={{ marginBottom: "var(--space-4)" }}>
-          {media.images.length > 0 && (
+          {media.items.length > 0 && (
             <div className="thumb-row" style={{ marginBottom: "var(--space-2)" }}>
-              {media.images.map((image, index) => (
-                <div className="thumb" key={image.preview}>
-                  <img src={image.preview} alt={`Attachment ${index + 1}`} />
-                  <button type="button" onClick={() => media.remove(index)} aria-label={`Remove photo ${index + 1}`}>
+              {media.items.map((item, index) => (
+                <div className="thumb" key={item.preview}>
+                  {item.kind === "video" ? (
+                    <video src={item.preview} muted playsInline />
+                  ) : (
+                    <img src={item.preview} alt={`Attachment ${index + 1}`} />
+                  )}
+                  <button type="button" onClick={() => media.remove(index)} aria-label={`Remove attachment ${index + 1}`}>
                     <CloseIcon width={13} height={13} />
                   </button>
                 </div>
               ))}
             </div>
           )}
-          {media.images.length < 4 && (
+          {media.items.length < 4 && (
             <label className="dropzone">
               <UploadIcon width={22} height={22} />
-              <span>{media.busy ? "Preparing…" : "Add a photo"}</span>
-              <span className="meta">JPEG, PNG, WebP or GIF · up to 4 · resized before upload</span>
+              <span>{media.busy ? "Preparing…" : "Add a photo or video"}</span>
+              <span className="meta">Photos: JPEG, PNG, WebP, GIF · up to 4. Video: MP4, WebM, MOV · one, up to 25 MB.</span>
               <input
                 type="file"
-                accept="image/*"
+                accept="image/*,video/mp4,video/webm,video/quicktime"
                 multiple
                 hidden
                 onChange={(e) => {

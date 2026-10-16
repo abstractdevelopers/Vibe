@@ -2,7 +2,7 @@ import { useState } from "react";
 import { api, ApiError } from "../api";
 import type { Me } from "../types";
 import { ArrowLeftIcon, CheckIcon, CloseIcon, ImageIcon, UploadIcon } from "../components/Icons";
-import { useImageUpload, uploadImageFile } from "../media";
+import { useMediaUpload, uploadImageFile } from "../media";
 
 interface Props {
   me: Me;
@@ -34,7 +34,7 @@ export function EditProfileScreen({ me, onBack, onSaved }: Props) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState(false);
-  const media = useImageUpload();
+  const media = useMediaUpload();
 
   function toggleInterest(topic: string) {
     setInterests((prev) => (prev.includes(topic) ? prev.filter((t) => t !== topic) : [...prev, topic]));

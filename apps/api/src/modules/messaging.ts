@@ -4,6 +4,7 @@ import { queryMany, queryOne } from "../db.js";
 import { ApiError } from "../errors.js";
 import { parse, publicUser, requireUser, type AppContext } from "../http.js";
 import { trackSafe } from "./analytics.js";
+import { syncCircleChat } from "./circles.js";
 
 /**
  * Direct messaging.
@@ -69,7 +70,7 @@ export function messagingRoutes(ctx: AppContext) {
       const user = await requireUser(ctx, req);
       const rows = await queryMany(
         ctx.pool,
-        `SELECT c.id, c.kind, c.title, c.last_message_at,
+        `SELECT c.id, c.kind, c.title, c.circle_id, c.last_message_at,
                 m.last_read_at,
                 (SELECT count(*) FROM conversation_members cm WHERE cm.conversation_id = c.id) AS member_count,
                 (SELECT count(*) FROM messages msg
@@ -121,6 +122,7 @@ export function messagingRoutes(ctx: AppContext) {
           id: row.id,
           kind: row.kind,
           title: row.title,
+          circleId: row.circle_id ?? null,
           memberCount: Number(row.member_count ?? 0),
           unreadCount: Number(row.unread_count ?? 0),
           lastMessageAt: row.last_message_at,
@@ -208,12 +210,18 @@ export function messagingRoutes(ctx: AppContext) {
       const { id } = req.params as { id: string };
       await requireMember(ctx, id, user.id);
 
-      const conversation = await queryOne(
+      const conversation = await queryOne<{
+        id: string; kind: string; title: string | null; circle_id: string | null;
+        created_by: string; created_at: Date; last_message_at: Date;
+      }>(
         ctx.pool,
-        "SELECT id, kind, title, created_by, created_at, last_message_at FROM conversations WHERE id = $1",
+        "SELECT id, kind, title, circle_id, created_by, created_at, last_message_at FROM conversations WHERE id = $1",
         [id],
       );
       if (!conversation) throw ApiError.notFound("Conversation not found");
+      // A circle chat must always contain every circle member, even one who
+      // joined after the chat was created.
+      if (conversation.circle_id) await syncCircleChat(ctx.pool, conversation.circle_id);
 
       const members = await queryMany(
         ctx.pool,
@@ -228,6 +236,7 @@ export function messagingRoutes(ctx: AppContext) {
           id: conversation.id,
           kind: conversation.kind,
           title: conversation.title,
+          circleId: conversation.circle_id,
           createdBy: conversation.created_by,
           createdAt: conversation.created_at,
           lastMessageAt: conversation.last_message_at,

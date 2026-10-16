@@ -325,6 +325,26 @@ h4 {
   box-shadow: 0 0 0 3px var(--void), var(--shadow-coral);
 }
 
+/* A small inline label, e.g. the "Circle" marker on a conversation row. Not a
+   button, so it does not inherit the pill's tap target. */
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 1px 8px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  background: color-mix(in srgb, var(--violet) 18%, transparent);
+  border: 1px solid color-mix(in srgb, var(--violet) 40%, transparent);
+  border-radius: var(--radius-pill);
+  white-space: nowrap;
+}
+.chip.tiny {
+  font-size: 10px;
+  padding: 0 6px;
+}
+
 /* ============================================================
    Bottom navigation
    ============================================================ */
@@ -1483,6 +1503,17 @@ select {
   max-height: 560px;
   object-fit: cover;
 }
+
+/* A video fills its frame like an image but keeps its own aspect ratio and
+   controls. object-fit: cover would crop a portrait clip, so video uses
+   contain and a black letterbox instead. */
+.media-video {
+  display: block;
+  width: 100%;
+  max-height: 560px;
+  background: #000;
+  object-fit: contain;
+}
 .post-media-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -1528,6 +1559,11 @@ select {
   height: 100%;
   object-fit: cover;
 }
+.thumb video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
 .thumb button {
   position: absolute;
   top: 4px;
@@ -1551,6 +1587,13 @@ select {
   right: 0;
   z-index: 60;
   min-width: 220px;
+  /* The menu carries thirteen items and is ~617px tall. On a short phone
+     (320x568) that ran 111px past the bottom of the screen, so "Log out" — the
+     last item — could not be reached. Cap it to the space below the top bar and
+     let it scroll; overscroll-behavior stops the page behind it from moving. */
+  max-height: calc(100vh - 96px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
   padding: var(--space-2);
   background: var(--surface-2);
   border: 1px solid var(--border-strong);

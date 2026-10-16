@@ -25,6 +25,91 @@ const memberUpdateSchema = z.object({
   role: z.enum(["owner", "admin", "moderator", "member"]),
 });
 
+/**
+ * The circle's conversation, created on first use.
+ *
+ * A circle and its chat are one thing: the chat is where the circle talks and
+ * where a plan or expense comes from. Rather than keep two membership lists in
+ * step by hand, every member of the circle is made a member of the conversation
+ * whenever the chat is touched (`syncCircleChat`). The conversation row is
+ * created lazily so a circle that never opens its chat costs nothing.
+ */
+export async function ensureCircleConversation(
+  pool: { query: (text: string, params?: unknown[]) => Promise<{ rows: any[] }> },
+  circleId: string,
+  createdBy: string,
+): Promise<string> {
+  const existing = await queryOne<{ id: string }>(
+    pool as never,
+    "SELECT id FROM conversations WHERE circle_id = $1",
+    [circleId],
+  );
+  if (existing) return existing.id;
+  // Title the thread with the circle's name so the chat reads as the circle.
+  const circle = await queryOne<{ name: string }>(
+    pool as never,
+    "SELECT name FROM circles WHERE id = $1",
+    [circleId],
+  );
+  const created = await queryOne<{ id: string }>(
+    pool as never,
+    `INSERT INTO conversations (kind, title, created_by, circle_id)
+     VALUES ('group', $3, $1, $2)
+     ON CONFLICT (circle_id) WHERE circle_id IS NOT NULL DO NOTHING
+     RETURNING id`,
+    [createdBy, circleId, circle?.name ?? "Circle chat"],
+  );
+  if (created) return created.id;
+  // A concurrent create won the race; read the winner.
+  const winner = await queryOne<{ id: string }>(
+    pool as never,
+    "SELECT id FROM conversations WHERE circle_id = $1",
+    [circleId],
+  );
+  return winner!.id;
+}
+
+/** Make every circle member a member of the circle's conversation. */
+export async function syncCircleChat(pool: { query: (t: string, p?: unknown[]) => Promise<unknown> }, circleId: string): Promise<void> {
+  await pool.query(
+    `INSERT INTO conversation_members (conversation_id, user_id)
+     SELECT c.id, cm.user_id
+       FROM conversations c
+       JOIN circle_members cm ON cm.circle_id = c.circle_id
+      WHERE c.circle_id = $1
+     ON CONFLICT (conversation_id, user_id) DO NOTHING`,
+    [circleId],
+  );
+}
+
+/** Add one member to the circle's conversation, if the chat exists yet. */
+export async function addMemberToCircleChat(
+  pool: { query: (t: string, p?: unknown[]) => Promise<unknown> },
+  circleId: string,
+  userId: string,
+): Promise<void> {
+  await pool.query(
+    `INSERT INTO conversation_members (conversation_id, user_id)
+     SELECT id, $2 FROM conversations WHERE circle_id = $1
+     ON CONFLICT (conversation_id, user_id) DO NOTHING`,
+    [circleId, userId],
+  );
+}
+
+/** Remove one member from the circle's conversation. */
+export async function removeMemberFromCircleChat(
+  pool: { query: (t: string, p?: unknown[]) => Promise<unknown> },
+  circleId: string,
+  userId: string,
+): Promise<void> {
+  await pool.query(
+    `DELETE FROM conversation_members
+      WHERE user_id = $2
+        AND conversation_id IN (SELECT id FROM conversations WHERE circle_id = $1)`,
+    [circleId, userId],
+  );
+}
+
 export function circlesRoutes(ctx: AppContext) {
   return async function register(app: FastifyInstance): Promise<void> {
     app.post("/v1/circles", async (req, reply) => {
@@ -98,8 +183,13 @@ export function circlesRoutes(ctx: AppContext) {
           WHERE circle_id = $1 ORDER BY starts_at LIMIT 20`,
         [id],
       );
+      // Opening a circle opens its chat: create it if needed and make sure every
+      // member is in it, then hand the client the conversation to open.
+      const conversationId = await ensureCircleConversation(ctx.pool, id, user.id);
+      await syncCircleChat(ctx.pool, id);
       return {
         circle,
+        conversationId,
         viewerRole: role,
         members: members.map((m) => ({ ...publicUser(m), role: m.role, joinedAt: m.joined_at })),
         plans,
@@ -169,6 +259,8 @@ export function circlesRoutes(ctx: AppContext) {
         );
         await tx.query("UPDATE circle_invites SET uses = uses + 1 WHERE id = $1", [invite.id]);
       });
+      // If the circle already has a chat, the new member joins it.
+      await addMemberToCircleChat(ctx.pool, invite.circle_id, user.id);
       trackSafe(ctx.pool, { name: "circle_invite_accepted", userId: user.id, properties: { entityType: "circle", entityId: invite.circle_id } });
       return { circleId: invite.circle_id, role: invite.role };
     });
@@ -206,6 +298,8 @@ export function circlesRoutes(ctx: AppContext) {
       const targetRole = await requireCircleMember(ctx.pool, id, userId);
       if (targetRole === "owner") throw ApiError.forbidden("The owner cannot be removed");
       await ctx.pool.query("DELETE FROM circle_members WHERE circle_id = $1 AND user_id = $2", [id, userId]);
+      // Removal from the circle is removal from its chat.
+      await removeMemberFromCircleChat(ctx.pool, id, userId);
       await ctx.pool.query(
         `INSERT INTO audit_events (actor_id, action, entity_type, entity_id, metadata)
          VALUES ($1, 'circle.member_removed', 'circle', $2, $3)`,
@@ -223,6 +317,7 @@ export function circlesRoutes(ctx: AppContext) {
         throw ApiError.conflict("Transfer ownership before leaving this Circle");
       }
       await ctx.pool.query("DELETE FROM circle_members WHERE circle_id = $1 AND user_id = $2", [id, user.id]);
+      await removeMemberFromCircleChat(ctx.pool, id, user.id);
       reply.code(204);
       return null;
     });

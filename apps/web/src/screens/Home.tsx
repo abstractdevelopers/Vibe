@@ -22,6 +22,7 @@ import { ReportSheet } from "../components/ReportSheet";
 import { GiftSheet } from "../components/GiftSheet";
 import { PaidGiftSheet } from "../components/PaidGiftSheet";
 import { Avatar } from "../components/Avatar";
+import { MediaGrid } from "../components/MediaView";
 import { Toast, type ToastState } from "../components/Toast";
 
 export type CreateMode = "post" | "poll" | "plan" | "expense" | "media";
@@ -393,7 +394,7 @@ function FeedCard({
       ) : (
         item.body && <p className="post-body">{item.body}</p>
       )}
-      {item.mediaUrls && item.mediaUrls.length > 0 && <PostMedia urls={item.mediaUrls} />}
+      {item.mediaUrls && item.mediaUrls.length > 0 && <MediaGrid urls={item.mediaUrls} />}
       {item.activity && <PollCard activity={item.activity} onChanged={onChanged} />}
 
       <div className="post-actions">
@@ -413,13 +414,18 @@ function FeedCard({
         <button className="react-btn" onClick={() => onCreate("media")} aria-label="Add a photo">
           <ImageIcon />
         </button>
-        <button
-          className="react-btn"
-          onClick={() => (isMine ? setGifting(true) : setPaidGifting(true))}
-          aria-label={isMine ? "Send a free cheer" : "Send a gift"}
-        >
-          <GiftIcon />
-        </button>
+        {/* Gifting yourself makes no sense — the API refuses it. The primary
+            gift action on someone else's post is the paid picker (real money,
+            Bachs checkout); the free cheer is the secondary sparkle action. */}
+        {!isMine && (
+          <button
+            className="react-btn"
+            onClick={() => setPaidGifting(true)}
+            aria-label="Send a gift"
+          >
+            <GiftIcon />
+          </button>
+        )}
         {!isMine && (
           <button
             className="react-btn"
@@ -490,22 +496,6 @@ function FeedCard({
   );
 }
 
-function PostMedia({ urls }: { urls: string[] }) {
-  if (urls.length === 1) {
-    return (
-      <div className="post-media">
-        <img src={urls[0]} alt="" loading="lazy" />
-      </div>
-    );
-  }
-  return (
-    <div className="post-media post-media-grid">
-      {urls.slice(0, 4).map((url) => (
-        <img key={url} src={url} alt="" loading="lazy" />
-      ))}
-    </div>
-  );
-}
 
 function CommentThread({
   postId,

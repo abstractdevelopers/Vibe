@@ -5,6 +5,7 @@ import type { ExpenseSummary, PlanSummary } from "../types";
 import {
   ArrowLeftIcon,
   CalendarIcon,
+  ChatIcon,
   CheckIcon,
   ChevronRightIcon,
   PlusIcon,
@@ -22,6 +23,8 @@ interface Props {
 
 interface CircleDetail {
   circle: { id: string; name: string; description: string | null; privacy: string };
+  /** The circle's chat. Every member is in it; it is created on first open. */
+  conversationId: string;
   viewerRole: string;
   members: Array<{ id: string; handle: string; displayName: string; role: string }>;
   plans: PlanSummary[];
@@ -92,6 +95,16 @@ export function CircleDetailScreen({ circleId, refreshKey, onBack, onChanged }: 
             </button>
           </div>
           <p className="muted">{detail.circle.description ?? "No description yet."}</p>
+
+          {/* The circle's chat is the circle. Plans and money below are what the
+              conversation turns into. */}
+          <button
+            className="btn primary block"
+            style={{ marginBottom: "var(--space-4)" }}
+            onClick={() => nav.push({ name: "conversation", conversationId: detail.conversationId })}
+          >
+            <ChatIcon width={18} height={18} /> Open Circle chat
+          </button>
 
           <Section icon={<CalendarIcon width={16} height={16} />} title="Plans">
             {detail.plans.length === 0 ? (

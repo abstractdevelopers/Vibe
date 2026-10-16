@@ -162,6 +162,8 @@ export interface ConversationSummary {
   id: string;
   kind: "direct" | "group";
   title: string | null;
+  /** Set when this thread is a Circle's chat. */
+  circleId?: string | null;
   memberCount: number;
   unreadCount: number;
   lastMessageAt: string;
@@ -193,6 +195,8 @@ export interface ConversationDetail {
     id: string;
     kind: "direct" | "group";
     title: string | null;
+    /** Set when this thread is a Circle's chat. */
+    circleId?: string | null;
     createdBy: string;
     createdAt: string;
     lastMessageAt: string;

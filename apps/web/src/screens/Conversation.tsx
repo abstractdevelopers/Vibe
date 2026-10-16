@@ -10,7 +10,8 @@ import {
   TrashIcon,
   UploadIcon,
 } from "../components/Icons";
-import { useImageUpload } from "../media";
+import { useMediaUpload } from "../media";
+import { MediaView } from "../components/MediaView";
 import { useNav } from "../nav";
 import { useRealtime } from "../realtime";
 
@@ -39,7 +40,7 @@ export function ConversationScreen({ conversationId, me, onChanged }: Props) {
   const [body, setBody] = useState("");
   const [sending, setSending] = useState(false);
   const [pending, setPending] = useState<Array<{ clientId: string; body: string }>>([]);
-  const media = useImageUpload();
+  const media = useMediaUpload();
   const endRef = useRef<HTMLDivElement>(null);
 
   const loadHead = useCallback(async () => {
@@ -106,7 +107,7 @@ export function ConversationScreen({ conversationId, me, onChanged }: Props) {
 
   async function send() {
     const text = body.trim();
-    const hasMedia = media.images.length > 0;
+    const hasMedia = media.items.length > 0;
     if (!text && !hasMedia) return;
     const clientId = crypto.randomUUID();
     setPending((prev) => [...prev, { clientId, body: text }]);
@@ -125,7 +126,7 @@ export function ConversationScreen({ conversationId, me, onChanged }: Props) {
       setBody(text);
     } finally {
       setSending(false);
-      media.images.forEach((_, i) => media.remove(i));
+      media.items.forEach((_, i) => media.remove(i));
     }
   }
 
@@ -142,6 +143,7 @@ export function ConversationScreen({ conversationId, me, onChanged }: Props) {
     endRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
   }, [messages.length, pending.length]);
 
+  const isCircleChat = Boolean(detail?.conversation.circleId);
   const title =
     detail?.conversation.kind === "group"
       ? detail.conversation.title ?? "Group chat"
@@ -157,8 +159,14 @@ export function ConversationScreen({ conversationId, me, onChanged }: Props) {
         <button
           className="row"
           style={{ gap: "var(--space-3)", minWidth: 0 }}
-          onClick={() => other && nav.push({ name: "profile", userId: other.id })}
-          disabled={!other}
+          onClick={() => {
+            if (isCircleChat && detail?.conversation.circleId) {
+              nav.push({ name: "circle", circleId: detail.conversation.circleId });
+            } else if (other) {
+              nav.push({ name: "profile", userId: other.id });
+            }
+          }}
+          disabled={!isCircleChat && !other}
         >
           <span className="avatar sm" aria-hidden="true">
             {title.slice(0, 1).toUpperCase()}
@@ -166,9 +174,11 @@ export function ConversationScreen({ conversationId, me, onChanged }: Props) {
           <span style={{ minWidth: 0 }}>
             <span style={{ display: "block", fontWeight: 700 }}>{title}</span>
             <span className="meta">
-              {detail?.conversation.kind === "group"
-                ? `${detail.members.length} members`
-                : `@${other?.handle ?? "unknown"}`}
+              {isCircleChat
+                ? `Circle chat · ${detail?.members.length ?? 0} members`
+                : detail?.conversation.kind === "group"
+                  ? `${detail.members.length} members`
+                  : `@${other?.handle ?? "unknown"}`}
             </span>
           </span>
         </button>
@@ -220,12 +230,16 @@ export function ConversationScreen({ conversationId, me, onChanged }: Props) {
           void send();
         }}
       >
-        {media.images.length > 0 && (
+        {media.items.length > 0 && (
           <div className="thumb-row" style={{ marginBottom: "var(--space-2)" }}>
-            {media.images.map((image, index) => (
-              <div className="thumb" key={image.preview}>
-                <img src={image.preview} alt={`Attachment ${index + 1}`} />
-                <button type="button" onClick={() => media.remove(index)} aria-label={`Remove photo ${index + 1}`}>
+            {media.items.map((item, index) => (
+              <div className="thumb" key={item.preview}>
+                {item.kind === "video" ? (
+                  <video src={item.preview} muted playsInline />
+                ) : (
+                  <img src={item.preview} alt={`Attachment ${index + 1}`} />
+                )}
+                <button type="button" onClick={() => media.remove(index)} aria-label={`Remove attachment ${index + 1}`}>
                   <CloseIcon width={13} height={13} />
                 </button>
               </div>
@@ -233,11 +247,11 @@ export function ConversationScreen({ conversationId, me, onChanged }: Props) {
           </div>
         )}
         <div className="row" style={{ gap: "var(--space-2)" }}>
-          <label className="icon-button" aria-label="Attach a photo" style={{ cursor: "pointer" }}>
+          <label className="icon-button" aria-label="Attach a photo or video" style={{ cursor: "pointer" }}>
             <ImageIcon width={19} height={19} />
             <input
               type="file"
-              accept="image/*"
+              accept="image/*,video/mp4,video/webm,video/quicktime"
               hidden
               onChange={(e) => {
                 if (e.target.files) void media.add(e.target.files);
@@ -252,7 +266,7 @@ export function ConversationScreen({ conversationId, me, onChanged }: Props) {
             onChange={(e) => setBody(e.target.value)}
             style={{ marginBottom: 0 }}
           />
-          <button className="btn primary" type="submit" disabled={sending || (!body.trim() && media.images.length === 0)} aria-label="Send">
+          <button className="btn primary" type="submit" disabled={sending || (!body.trim() && media.items.length === 0)} aria-label="Send">
             <SendIcon width={18} height={18} />
           </button>
         </div>
@@ -292,7 +306,7 @@ function MessageBubble({
             {mediaUrls.length > 0 && (
               <div className="bubble-media">
                 {mediaUrls.map((url) => (
-                  <img key={url} src={url} alt="Shared attachment" loading="lazy" />
+                  <MediaView key={url} url={url} alt="Shared attachment" />
                 ))}
               </div>
             )}

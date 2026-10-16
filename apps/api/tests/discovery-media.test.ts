@@ -45,6 +45,39 @@ describe("media boundary", () => {
     expect(upload.statusCode).toBe(400);
   });
 
+  it("stores a video, serves it with the right type, and marks it seekable", async () => {
+    const user = await registerUser(h.app, "filmer");
+    // A tiny but structurally valid MP4 header is not needed: the boundary
+    // trusts the declared MIME type, as it does for images.
+    const mp4 = "data:video/mp4;base64," + Buffer.from("fake-mp4-bytes-for-a-test").toString("base64");
+    const upload = await h.app.inject({
+      method: "POST",
+      url: "/v1/media",
+      headers: auth(user.token),
+      payload: { dataUrl: mp4 },
+    });
+    expect(upload.statusCode).toBe(201);
+    const { url, contentType } = upload.json();
+    expect(contentType).toBe("video/mp4");
+    expect(url).toMatch(/\.mp4$/);
+
+    const fetched = await h.app.inject({ method: "GET", url });
+    expect(fetched.statusCode).toBe(200);
+    expect(fetched.headers["content-type"]).toBe("video/mp4");
+    expect(fetched.headers["accept-ranges"]).toBe("bytes");
+  });
+
+  it("rejects an unsupported video container", async () => {
+    const user = await registerUser(h.app, "avi");
+    const upload = await h.app.inject({
+      method: "POST",
+      url: "/v1/media",
+      headers: auth(user.token),
+      payload: { dataUrl: "data:video/x-msvideo;base64," + Buffer.from("nope").toString("base64") },
+    });
+    expect(upload.statusCode).toBe(400);
+  });
+
   it("requires authentication", async () => {
     const upload = await h.app.inject({
       method: "POST",
