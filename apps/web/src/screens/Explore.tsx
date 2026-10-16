@@ -54,6 +54,8 @@ export function ExploreScreen({ me }: { me: Me }) {
   const [posts, setPosts] = useState<Array<{ id: string; body: string | null; author: { id: string; displayName: string; handle: string } }>>([]);
   const [shops, setShops] = useState<Array<{ id: string; name: string; category: string | null }> | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [locating, setLocating] = useState(false);
+  const [locatedNote, setLocatedNote] = useState<string | null>(null);
 
   useEffect(() => {
     (async () => {
@@ -65,6 +67,7 @@ export function ExploreScreen({ me }: { me: Me }) {
       }
     })();
   }, []);
+
 
   const load = useCallback(async () => {
     setResults(null);
@@ -103,6 +106,37 @@ export function ExploreScreen({ me }: { me: Me }) {
       setPosts([]);
     }
   }, [query, category, kind]);
+
+  // Ask the device for a position, send it, and let the server round it. The
+  // browser prompt is the consent; nothing is read without it.
+  const useMyLocation = useCallback(async () => {
+    if (!("geolocation" in navigator)) {
+      setLocatedNote("This device has no location support.");
+      return;
+    }
+    setLocating(true);
+    setLocatedNote(null);
+    navigator.geolocation.getCurrentPosition(
+      async (pos) => {
+        try {
+          await api("/v1/me/location", {
+            body: { lat: pos.coords.latitude, lng: pos.coords.longitude },
+          });
+          setLocatedNote("Ranking by your area (~1 km). Vibe only keeps a rounded spot, never your exact location.");
+          await load();
+        } catch (e) {
+          setLocatedNote(e instanceof ApiError ? e.message : "Could not use your location.");
+        } finally {
+          setLocating(false);
+        }
+      },
+      () => {
+        setLocatedNote("Location permission denied. Explore still works from your saved city.");
+        setLocating(false);
+      },
+      { enableHighAccuracy: false, maximumAge: 600000, timeout: 10000 },
+    );
+  }, [load]);
 
   // Debounce so typing does not fire a request per keystroke.
   useEffect(() => {
@@ -157,18 +191,17 @@ export function ExploreScreen({ me }: { me: Me }) {
         ))}
       </div>
 
-      {me.city || me.area ? (
-        <p className="meta" style={{ marginBottom: "var(--space-3)" }}>
-          <MapPinIcon width={13} height={13} style={{ verticalAlign: "-2px" }} /> Ranking for{" "}
-          {[me.area, me.city].filter(Boolean).join(", ")}. Change it in You. Explore never reads your
-          device location.
-        </p>
-      ) : (
-        <p className="meta" style={{ marginBottom: "var(--space-3)" }}>
-          <MapPinIcon width={13} height={13} style={{ verticalAlign: "-2px" }} /> Set your city and area in
-          You to rank by where you are. Explore works without any location permission.
-        </p>
-      )}
+      <div className="row" style={{ gap: "var(--space-2)", marginBottom: "var(--space-3)", flexWrap: "wrap" }}>
+        <button className="btn small ghost" onClick={useMyLocation} disabled={locating}>
+          <MapPinIcon width={14} height={14} /> {locating ? "Locating…" : "Use my location"}
+        </button>
+        <span className="meta">
+          {[me.area, me.city].filter(Boolean).join(", ")
+            ? `Ranking for ${[me.area, me.city].filter(Boolean).join(", ")}`
+            : "Add a city in You, or share a rounded position"}
+        </span>
+      </div>
+      {locatedNote && <p className="meta" style={{ marginBottom: "var(--space-3)" }}>{locatedNote}</p>}
 
       {error && <div className="notice danger">{error}</div>}
 

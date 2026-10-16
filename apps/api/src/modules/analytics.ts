@@ -66,6 +66,17 @@ export const ANALYTICS_EVENTS = [
   "comment_deleted",
   "comment_restored",
   "comment_edited",
+  // Immersive activities addendum: the viral loop and repeat engagement.
+  "activity_link_opened",
+  "activity_link_converted",
+  "room_joined",
+  "room_left",
+  "room_message_sent",
+  "room_reminder_set",
+  "host_post_created",
+  "spoiler_revealed",
+  "location_enabled",
+  "location_cleared",
 ] as const;
 
 export type AnalyticsEventName = (typeof ANALYTICS_EVENTS)[number];

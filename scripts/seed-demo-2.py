@@ -85,3 +85,30 @@ if st in (200, 201) and conv:
     call(f"/v1/conversations/{convid}/messages", {"body": "Perfect. I'll get the tickets tonight.", "clientId": "seed-3"}, zara_t)
 
 print("seed2 complete", {"circle": cid})
+
+# ---- Immersive activities addendum: a live room and a scheduled one ----
+now = datetime.datetime.utcnow().replace(microsecond=0)
+st, live_room = call("/v1/activities/rooms", {
+    "kind": "sports",
+    "title": "E2E Matchday: Eagles vs Ghana",
+    "topic": "Live match room with fan polls.",
+    "startsAt": (now - datetime.timedelta(minutes=10)).isoformat() + "Z",
+    "durationMinutes": 180,
+    "city": "Lagos",
+    "dataSource": "E2E fixtures feed (authorized source required)",
+}, zara_t)
+print("live room", st)
+if st in (200, 201) and live_room:
+    rid = live_room["room"]["id"]
+    call(f"/v1/activities/rooms/{rid}/posts", {"body": "Kick-off! Who is watching?"}, zara_t)
+    call(f"/v1/activities/rooms/{rid}/polls", {"question": "Who wins?", "options": ["Eagles", "Ghana"]}, zara_t)
+
+st, sched_room = call("/v1/activities/rooms", {
+    "kind": "movie",
+    "title": "E2E Film Club: Friday pick",
+    "startsAt": (now + datetime.timedelta(hours=6)).isoformat() + "Z",
+    "durationMinutes": 150,
+    "spoilerPolicy": "spoiler_safe",
+    "externalUrl": "https://example.com/authorized-stream",
+}, zara_t)
+print("scheduled room", st)

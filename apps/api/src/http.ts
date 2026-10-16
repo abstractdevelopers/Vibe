@@ -20,6 +20,8 @@ export interface UserLike {
   display_name: string;
   bio?: string | null;
   avatar_url?: string | null;
+  host_kind?: string | null;
+  host_disclosure?: string | null;
 }
 
 export async function authenticate(ctx: AppContext, req: FastifyRequest): Promise<AuthUser | null> {
@@ -62,6 +64,10 @@ export function publicUser(row: UserLike) {
     displayName: row.display_name,
     bio: row.bio ?? null,
     avatarUrl: row.avatar_url ?? null,
+    // Always tell the client whether this account is a real person or an
+    // official/automated host. There is no way to hide it.
+    hostKind: row.host_kind ?? "person",
+    hostDisclosure: row.host_disclosure ?? null,
   };
 }
 

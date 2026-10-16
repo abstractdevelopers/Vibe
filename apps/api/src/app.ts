@@ -32,6 +32,9 @@ import { passRoutes } from "./modules/pass.js";
 import { aiRoutes } from "./modules/ai.js";
 import { pushRoutes } from "./modules/push.js";
 import { searchRoutes } from "./modules/search.js";
+import { activityRoutes } from "./modules/activities-live.js";
+import { locationRoutes } from "./modules/location.js";
+import { launchRoutes } from "./modules/launch.js";
 import { resolveSession } from "./auth.js";
 import { bearerToken } from "./auth.js";
 import { circleIdsFor } from "./modules/access.js";
@@ -144,6 +147,9 @@ export async function buildApp(ctx: AppContext): Promise<FastifyInstance> {
   await app.register(aiRoutes(ctx));
   await app.register(pushRoutes(ctx));
   await app.register(searchRoutes(ctx));
+  await app.register(activityRoutes(ctx));
+  await app.register(locationRoutes(ctx));
+  await app.register(launchRoutes(ctx));
 
   // Realtime: chat/poll/plan updates for the circles the user belongs to.
   app.get("/v1/realtime", { websocket: true }, async (socket, req) => {

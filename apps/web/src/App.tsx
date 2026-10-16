@@ -18,6 +18,7 @@ import { ConversationScreen } from "./screens/Conversation";
 import { StorefrontScreen, ProductScreen, OrdersScreen, OrderScreen } from "./screens/Commerce";
 import { AdvertisingScreen } from "./screens/Advertising";
 import { EventsScreen } from "./screens/Events";
+import { LiveScreen, RoomScreen } from "./screens/Live";
 import { PassScreen } from "./screens/Pass";
 import { AdminScreen } from "./screens/Admin";
 import { AssistScreen } from "./screens/Assist";
@@ -38,6 +39,7 @@ import {
   SparklesIcon,
   ShieldIcon,
   TicketIcon,
+  RadioIcon,
   UserIcon,
 } from "./components/Icons";
 import { NavContext, useNav, type Route } from "./nav";
@@ -216,6 +218,8 @@ export function App() {
             {route.name === "order" && <OrderScreen orderId={route.orderId} onBack={back} />}
             {route.name === "advertising" && <AdvertisingScreen onBack={back} />}
             {route.name === "events" && <EventsScreen onBack={back} />}
+            {route.name === "live" && <LiveScreen onBack={back} />}
+            {route.name === "room" && <RoomScreen roomId={route.roomId} onBack={back} />}
             {route.name === "pass" && <PassScreen onBack={back} />}
             {route.name === "admin" && <AdminScreen onBack={back} />}
             {route.name === "assist" && <AssistScreen onBack={back} />}
@@ -375,6 +379,16 @@ function AccountMenu({
             }}
           >
             <TicketIcon width={17} height={17} /> Events
+          </button>
+          <button
+            className="menu-item"
+            role="menuitem"
+            onClick={() => {
+              setOpen(false);
+              nav.push({ name: "live" });
+            }}
+          >
+            <RadioIcon width={17} height={17} /> Live Now
           </button>
           <button
             className="menu-item"

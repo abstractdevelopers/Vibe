@@ -64,6 +64,10 @@ export class ApiError extends Error {
   static conflict(message: string): ApiError {
     return new ApiError("conflict", message);
   }
+
+  static tooManyRequests(message = "Too many requests"): ApiError {
+    return new ApiError("rate_limited", message);
+  }
 }
 
 export interface ErrorBody {

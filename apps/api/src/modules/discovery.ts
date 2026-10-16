@@ -3,6 +3,7 @@ import type { FastifyInstance } from "fastify";
 import { ApiError } from "../errors.js";
 import { queryMany, queryOne } from "../db.js";
 import { parse, requireUser, type AppContext } from "../http.js";
+import { distanceBand, haversineKm } from "./location.js";
 
 /**
  * Explore / discovery.
@@ -26,6 +27,9 @@ const WEIGHTS = {
   engagement: 12, // real, measured engagement (votes, RSVPs) — capped
   freshness: 15, // recency, decaying over 14 days
   verified: 6, // a verified business identity
+  // Device-distance term. Applied only when both the viewer and the item have
+  // a coarse band; it never reveals either point, just orders by proximity.
+  nearby: 30,
 } as const;
 
 export interface Scored {
@@ -68,6 +72,8 @@ interface PlaceRow {
   image_url: string | null;
   is_verified: boolean;
   is_sample: boolean;
+  lat: number | null;
+  lng: number | null;
 }
 
 interface EventRow {
@@ -92,9 +98,12 @@ export function discoveryRoutes(ctx: AppContext) {
       const user = await requireUser(ctx, req);
       const query = parse(searchSchema, req.query);
 
-      const me = await queryOne<{ interests: string[] | null; city: string | null; area: string | null }>(
+      const me = await queryOne<{
+        interests: string[] | null; city: string | null; area: string | null;
+        lat_band: number | null; lng_band: number | null;
+      }>(
         ctx.pool,
-        "SELECT interests, city, area FROM users WHERE id = $1",
+        "SELECT interests, city, area, lat_band, lng_band FROM users WHERE id = $1",
         [user.id],
       );
       const interests = (me?.interests ?? []).map((i) => i.toLowerCase());
@@ -103,7 +112,8 @@ export function discoveryRoutes(ctx: AppContext) {
       const area = query.area ?? me?.area ?? undefined;
       const scoped = { ...query, city, area };
 
-      const places = query.kind === "event" ? [] : await loadPlaces(ctx, scoped, interests);
+      const here = me?.lat_band != null && me?.lng_band != null ? { lat: me.lat_band, lng: me.lng_band } : null;
+      const places = query.kind === "event" ? [] : await loadPlaces(ctx, scoped, interests, here);
       const events = query.kind === "place" ? [] : await loadEvents(ctx, user.id, scoped, interests);
 
       const results = [...events, ...places]
@@ -160,11 +170,12 @@ async function loadPlaces(
   ctx: AppContext,
   query: z.infer<typeof searchSchema>,
   interests: string[],
+  here: { lat: number; lng: number } | null,
 ): Promise<Scored[]> {
   const rows = await queryMany<PlaceRow>(
     ctx.pool,
     `SELECT id, name, kind, category, city, area, description, address_hint,
-            price_band, image_url, is_verified, is_sample
+            price_band, image_url, is_verified, is_sample, lat, lng
        FROM places
       WHERE ($1::text IS NULL OR lower(name) LIKE '%' || lower($1) || '%'
              OR lower(category) LIKE '%' || lower($1) || '%'
@@ -190,6 +201,12 @@ async function loadPlaces(
     if (interests.includes(place.category.toLowerCase())) {
       score += WEIGHTS.interestMatch;
       reasons.push("matches your interests");
+    }
+    if (here && place.lat != null && place.lng != null) {
+      const km = haversineKm(here.lat, here.lng, place.lat, place.lng);
+      // Closer is better; the band is shown instead of a raw distance.
+      score += WEIGHTS.nearby * Math.pow(0.5, km / 5);
+      reasons.push(distanceBand(km));
     }
     if (place.is_verified) {
       score += WEIGHTS.verified;

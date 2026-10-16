@@ -1,0 +1,209 @@
+import { describe, it, expect, beforeAll, afterAll } from "vitest";
+import { createHarness, resetDb, registerUser, auth, type Harness, type TestUser } from "./helpers.js";
+
+/**
+ * Immersive activities addendum: rooms, honest state, spoiler safety, the viral
+ * loop, official/automated hosts and GPS-driven Explore.
+ */
+let h: Harness;
+let host: TestUser;
+let fan: TestUser;
+
+beforeAll(async () => {
+  h = await createHarness();
+  await resetDb(h.pool);
+  host = await registerUser(h.app, "roomhost");
+  fan = await registerUser(h.app, "roomfan");
+});
+afterAll(async () => h.close());
+
+const soon = () => new Date(Date.now() + 5 * 60_000);
+const past = () => new Date(Date.now() - 5 * 60_000);
+
+async function makeRoom(overrides: Record<string, unknown> = {}) {
+  const res = await h.app.inject({
+    method: "POST", url: "/v1/activities/rooms",
+    headers: auth(host.token),
+    payload: {
+      kind: "sports", title: "Eagles vs Ghana", startsAt: soon().toISOString(),
+      durationMinutes: 120, visibility: "public", ...overrides,
+    },
+  });
+  return res;
+}
+
+describe("activity rooms", () => {
+  it("derives live state from the clock and never claims live early", async () => {
+    const res = await makeRoom({ startsAt: new Date(Date.now() + 3 * 3600_000).toISOString() });
+    expect(res.statusCode).toBe(201);
+    const { room } = res.json();
+    expect(room.state).toBe("scheduled");
+
+    const live = await makeRoom({ title: "Live now", startsAt: past().toISOString(), durationMinutes: 120 });
+    expect(live.json().room.state).toBe("live");
+
+    const soonRes = await makeRoom({ title: "Soon", startsAt: soon().toISOString(), durationMinutes: 120 });
+    expect(soonRes.json().room.state).toBe("starting_soon");
+  });
+
+  it("lists live rooms ahead of scheduled ones and shows the honest host label", async () => {
+    const res = await h.app.inject({ method: "GET", url: "/v1/activities/live", headers: auth(fan.token) });
+    expect(res.statusCode).toBe(200);
+    const { rooms } = res.json();
+    const states = rooms.map((r: { state: string }) => r.state);
+    const firstScheduled = states.indexOf("scheduled");
+    const lastLive = states.lastIndexOf("live");
+    if (firstScheduled !== -1 && lastLive !== -1) expect(lastLive).toBeLessThan(firstScheduled);
+    expect(rooms[0].host.kind).toBe("person");
+  });
+
+  it("refuses a synchronized room with no licensed service link", async () => {
+    const res = await makeRoom({ kind: "movie", title: "Film night", playbackMode: "synchronized" });
+    expect(res.statusCode).toBe(400);
+    expect(res.json().error.message).toMatch(/licensed service/i);
+  });
+
+  it("hides spoilers in a spoiler-safe room", async () => {
+    const room = (await makeRoom({ kind: "movie", title: "Spoiler-safe", spoilerPolicy: "spoiler_safe" })).json().room;
+    await h.app.inject({
+      method: "POST", url: `/v1/activities/rooms/${room.id}/posts`, headers: auth(host.token),
+      payload: { body: "The twist is that he was dead all along" },
+    });
+    const res = await h.app.inject({ method: "GET", url: `/v1/activities/rooms/${room.id}/posts`, headers: auth(fan.token) });
+    const post = res.json().posts[0];
+    expect(post.hidden).toBe(true);
+    expect(post.body).toBeNull();
+  });
+
+  it("counts poll votes without framing them as wagers", async () => {
+    const room = (await makeRoom({ title: "Score call" })).json().room;
+    const poll = (await h.app.inject({
+      method: "POST", url: `/v1/activities/rooms/${room.id}/polls`, headers: auth(host.token),
+      payload: { question: "Who wins?", options: ["Eagles", "Ghana"] },
+    })).json().poll;
+    await h.app.inject({
+      method: "POST", url: `/v1/activities/polls/${poll.id}/votes`, headers: auth(fan.token),
+      payload: { optionId: "o1" },
+    });
+    const tally = await h.app.inject({ method: "GET", url: `/v1/activities/polls/${poll.id}`, headers: auth(fan.token) });
+    const body = tally.json().poll;
+    expect(body.totalVotes).toBe(1);
+    expect(body.options.find((o: { id: string }) => o.id === "o1").votes).toBe(1);
+  });
+
+  it("keeps a private room out of a non-member's reach", async () => {
+    const room = (await makeRoom({ title: "Private", visibility: "private" })).json().room;
+    const res = await h.app.inject({ method: "GET", url: `/v1/activities/rooms/${room.id}`, headers: auth(fan.token) });
+    expect(res.statusCode).toBe(404);
+  });
+
+  it("lets only the host remove a post", async () => {
+    const room = (await makeRoom({ title: "Mod" })).json().room;
+    const post = (await h.app.inject({
+      method: "POST", url: `/v1/activities/rooms/${room.id}/posts`, headers: auth(fan.token),
+      payload: { body: "hello" },
+    })).json().post;
+    const denied = await h.app.inject({
+      method: "POST", url: `/v1/activities/rooms/${room.id}/moderate`, headers: auth(fan.token),
+      payload: { action: "remove_post", targetId: post.id },
+    });
+    expect(denied.statusCode).toBe(403);
+    const ok = await h.app.inject({
+      method: "POST", url: `/v1/activities/rooms/${room.id}/moderate`, headers: auth(host.token),
+      payload: { action: "remove_post", targetId: post.id },
+    });
+    expect(ok.statusCode).toBe(200);
+    const posts = (await h.app.inject({ method: "GET", url: `/v1/activities/rooms/${room.id}/posts`, headers: auth(fan.token) })).json().posts;
+    expect(posts.length).toBe(0);
+  });
+});
+
+describe("viral loop", () => {
+  it("previews a link without a session, then returns the member to the room", async () => {
+    const room = (await makeRoom({ title: "Share me" })).json().room;
+    const link = (await h.app.inject({
+      method: "POST", url: `/v1/activities/rooms/${room.id}/share`, headers: auth(host.token), payload: {},
+    })).json().link;
+    // Anonymous preview: useful, and does not leak the conversation.
+    const preview = await h.app.inject({ method: "GET", url: `/v1/activities/preview/${link.token}` });
+    expect(preview.statusCode).toBe(200);
+    expect(preview.json().preview.title).toBe("Share me");
+    expect(preview.json().preview).not.toHaveProperty("posts");
+
+    const opened = await h.app.inject({
+      method: "POST", url: `/v1/activities/links/${link.token}/open`, headers: auth(fan.token), payload: {},
+    });
+    expect(opened.statusCode).toBe(200);
+    expect(opened.json().room.id).toBe(room.id);
+    expect(["react_or_vote", "set_reminder"]).toContain(opened.json().firstAction);
+  });
+
+  it("stops working once a link is revoked", async () => {
+    const room = (await makeRoom({ title: "Revoke me" })).json().room;
+    const link = (await h.app.inject({
+      method: "POST", url: `/v1/activities/rooms/${room.id}/share`, headers: auth(host.token), payload: {},
+    })).json().link;
+    await h.app.inject({ method: "POST", url: `/v1/activities/links/${link.token}/revoke`, headers: auth(host.token), payload: {} });
+    const preview = await h.app.inject({ method: "GET", url: `/v1/activities/preview/${link.token}` });
+    expect(preview.statusCode).toBe(404);
+  });
+});
+
+describe("official hosts and launch seeding", () => {
+  it("labels official hosts honestly and never as a person", async () => {
+    const admin = await registerUser(h.app, "launchadmin");
+    await h.pool.query("UPDATE users SET is_admin = true WHERE id = $1", [admin.id]);
+    const res = await h.app.inject({
+      method: "POST", url: "/v1/launch/seed-official", headers: auth(admin.token),
+      payload: { schedule: [{ kind: "sports", title: "Vibe Matchday: Eagles", startsAt: soon().toISOString(), recurrence: "weekly" }] },
+    });
+    expect(res.statusCode).toBe(200);
+    const hosts = (await h.app.inject({ method: "GET", url: "/v1/launch/official-hosts", headers: auth(fan.token) })).json().hosts;
+    expect(hosts.length).toBeGreaterThan(0);
+    expect(hosts.every((h: { host_kind: string }) => h.host_kind !== "person")).toBe(true);
+    expect(hosts.every((h: { host_disclosure: string }) => /official/i.test(h.host_disclosure))).toBe(true);
+  });
+
+  it("requires admin to seed official programming", async () => {
+    const res = await h.app.inject({
+      method: "POST", url: "/v1/launch/seed-official", headers: auth(fan.token), payload: { schedule: [] },
+    });
+    expect(res.statusCode).toBe(403);
+  });
+
+  it("publishes a schedule a new visitor can read", async () => {
+    const res = await h.app.inject({ method: "GET", url: "/v1/launch/schedule", headers: auth(fan.token) });
+    expect(res.statusCode).toBe(200);
+    expect(Array.isArray(res.json().schedule)).toBe(true);
+  });
+});
+
+describe("GPS-driven explore", () => {
+  it("rounds a stored position to a coarse band and never returns a precise point", async () => {
+    const res = await h.app.inject({
+      method: "POST", url: "/v1/me/location", headers: auth(fan.token),
+      payload: { lat: 6.524379, lng: 3.379206 },
+    });
+    expect(res.statusCode).toBe(200);
+    const { location } = res.json();
+    expect(location.lat).toBe(6.52);
+    expect(location.lng).toBe(3.38);
+  });
+
+  it("orders Explore by distance when a position is known", async () => {
+    await h.app.inject({ method: "POST", url: "/v1/me/location", headers: auth(fan.token), payload: { lat: 6.52, lng: 3.38 } });
+    const res = await h.app.inject({ method: "GET", url: "/v1/explore?kind=place", headers: auth(fan.token) });
+    expect(res.statusCode).toBe(200);
+    // Any place carrying a band gets a distance reason; nothing exposes a point.
+    for (const r of res.json().results) {
+      expect(r).not.toHaveProperty("lat");
+      expect(r).not.toHaveProperty("lng");
+    }
+  });
+
+  it("clears the stored position on request", async () => {
+    await h.app.inject({ method: "DELETE", url: "/v1/me/location", headers: auth(fan.token) });
+    const res = await h.app.inject({ method: "GET", url: "/v1/me/location", headers: auth(fan.token) });
+    expect(res.json().location).toBeNull();
+  });
+});

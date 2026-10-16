@@ -367,6 +367,40 @@ t = await bodyText();
 check("Campaign review queue resolves to a real state", /No campaigns awaiting review|Approve|Reject/i.test(t), t.replace(/\n/g, " ").slice(0, 70));
 await shot("e2e-admin");
 
+// ---- Immersive activities: Live Now and a room ----
+await rpc(ws, "Page.navigate", { url: WEB }, sessionId); await sleep(1600);
+await ev(`document.querySelector('[aria-label="Account menu"]')?.click()`); await sleep(400);
+await clickText("Live Now", false); await sleep(1200);
+t = await bodyText();
+check("Live Now lists a live room and a scheduled one", /Live Now/.test(t) && /E2E Matchday/.test(t) && /E2E Film Club/.test(t), t.replace(/\n/g, " ").slice(0, 80));
+check("Live and scheduled states are shown distinctly", /Live/.test(t) && /(Scheduled|Starting soon)/.test(t), t.replace(/\n/g, " ").slice(0, 80));
+await shot("e2e-live");
+
+// Open the live room and drive the real interaction.
+await clickText("E2E Matchday", false); await sleep(1200);
+t = await bodyText();
+check("Room opens with its derived state and a message box", /E2E Matchday/.test(t) && (await ev(`!!document.querySelector('[aria-label="Message"]')`)), t.replace(/\n/g, " ").slice(0, 80));
+check("Room states where its data comes from", /Data:/i.test(t) || /authorized source/i.test(t), t.replace(/\n/g, " ").slice(0, 80));
+const postsBefore = await ev(`document.querySelectorAll('.room-post').length`);
+await ev(`(()=>{const i=document.querySelector('[aria-label="Message"]');const s=Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,"value").set;s.call(i,"E2E hello from the room");i.dispatchEvent(new Event("input",{bubbles:true}));})()`);
+await sleep(200);
+await clickText("Send", false); await sleep(1200);
+const postsAfter = await ev(`document.querySelectorAll('.room-post').length`);
+check("Posting to a room works and appears", postsAfter > postsBefore, `${postsBefore} -> ${postsAfter}`);
+// Share link is real and revocable.
+await clickText("Share", false); await sleep(1000);
+t = await bodyText();
+check("Sharing a room produces a context-preserving link", /Link ready/.test(t), t.replace(/\n/g, " ").slice(0, 80));
+await shot("e2e-room");
+
+// A spoiler-safe room hides its messages until revealed.
+await rpc(ws, "Page.navigate", { url: WEB }, sessionId); await sleep(1400);
+await ev(`document.querySelector('[aria-label="Account menu"]')?.click()`); await sleep(400);
+await clickText("Live Now", false); await sleep(1000);
+await clickText("E2E Film Club", false); await sleep(1200);
+t = await bodyText();
+check("A spoiler-safe room says so", /Spoiler-safe/i.test(t), t.replace(/\n/g, " ").slice(0, 80));
+
 await adminPool.end();
 
 console.log("\n==== SUMMARY ====");

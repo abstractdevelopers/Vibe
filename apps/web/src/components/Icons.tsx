@@ -74,6 +74,12 @@ import {
   Vote,
   Wallet,
   X,
+  Radio,
+  Music,
+  Film,
+  Goal,
+  CalendarPlus,
+  Link2,
 } from "lucide-react";
 
 /** Sensible optical defaults; callers override size/stroke when needed. */
@@ -147,4 +153,10 @@ export const ClipboardIcon = icon(ClipboardList);
 export const EyeIcon = icon(Eye);
 export const ClickIcon = icon(MousePointerClick);
 export const GaugeIcon = icon(Gauge);
+export const RadioIcon = icon(Radio);
+export const MusicIcon = icon(Music);
+export const FilmIcon = icon(Film);
+export const GoalIcon = icon(Goal);
+export const CalendarPlusIcon = icon(CalendarPlus);
+export const LinkIcon = icon(Link2);
 

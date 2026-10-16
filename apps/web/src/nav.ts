@@ -28,7 +28,9 @@ export type Route =
   | { name: "pass" }
   | { name: "admin" }
   | { name: "assist" }
-  | { name: "merchant"; merchantId: string };
+  | { name: "merchant"; merchantId: string }
+  | { name: "live" }
+  | { name: "room"; roomId: string };
 
 export interface Navigation {
   route: Route;

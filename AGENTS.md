@@ -255,6 +255,28 @@ test for any state transition, retry, or duplicate-event path you touch.
   directly. Use the native setter
   (`Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,"value").set`).
 
+## Immersive activities addendum (rooms, location, launch seeding)
+
+- Migration `0010_activities_live.sql`; modules `activities-live.ts`,
+  `location.ts`, `launch.ts`. Web screen `screens/Live.tsx`.
+- **Live state is derived, never stored.** `effectiveRoomState` is the only
+  place that decides live / starting soon / scheduled / ended; `state_override`
+  holds only a terminal `ended`/`cancelled`. Do not add a boolean `is_live`.
+- **Coordinates are rounded before storage.** `roundBand` (~1.1 km) is the only
+  writer of `users.lat_band/lng_band`. Never store or return a precise point;
+  never return any point to another member. Explore falls back to city/area.
+- **Hosts are always labelled.** `users.host_kind` has no "undisclosed" value
+  and `publicUser` always exposes it. Official hosts cannot be signed into by a
+  human (password is `!disabled`) and cannot post as a personal account.
+- **Vibe coordinates, it does not retransmit.** A `synchronized` room must link
+  a licensed service (`assertRoomHonest`); `playback_mode` states which it is.
+- **No stakes anywhere.** Room polls are fan polls; there is no wager field.
+  Do not add one.
+- **Covert population is refused.** Do not build undisclosed accounts that
+  imitate people, and do not remove the label. `scripts/synthetic-traffic.mjs`
+  is staging-only and refuses a production target. Full reasoning lives in
+  `docs/spec-coverage.md` under "Why covert accounts were not built".
+
 ## Do not
 
 - Introduce floating-point money arithmetic.

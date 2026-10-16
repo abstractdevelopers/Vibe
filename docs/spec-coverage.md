@@ -289,3 +289,77 @@ Vibe-held wallet or stored value; pooled funds; P2P transfers; lending,
 interest, crypto or investment; paid votes, betting or gambling; hardware;
 full 3D metaverse; automated ad exchange/RTB; unreviewed regulated-category
 advertising; AI taking payment or booking actions without confirmation.
+
+## Immersive Activities & Launch Engagement addendum
+
+Source: "Vibe — Immersive Activities & Launch Engagement Addendum". Built in
+migration `0010_activities_live.sql` and modules `activities-live.ts`,
+`location.ts`, `launch.ts`.
+
+- **Live Now / activity states** — **Built**. Whether a room is live is derived
+  from the clock in one function (`effectiveRoomState`); a room can only be
+  forced to a terminal `ended`/`cancelled`. The platform cannot label a room
+  live unless the clock says so.
+- **Sports rooms** — **Built** as social rooms: match chat, polls and votes,
+  shareable links, opt-in reminders. Predictions are framed as fan polls, never
+  wagers (there is no stake field anywhere). Cited data requires naming a source
+  (`assertRoomHonest`); no score is ever fabricated. A licensed live-score feed
+  is **Deferred** and flagged.
+- **Movie clubs / watch parties** — **Built** as coordination: scheduling,
+  nominations, spoiler-safe rooms, hidden-then-reveal text, reminders, a link to
+  a licensed service. Synchronized playback requires a licensed link and states
+  `playback_mode` honestly. Vibe does not retransmit any film — **by design**.
+- **Listening parties** — **Built** as coordination (create, start time, invite,
+  reactions/prompts, recap), with an authorized-service link. Vibe does not
+  stream or retransmit music — **by design**.
+- **Viral loop / deep links** — **Built**. A link previews without a session,
+  returns the member to the same room after signup, names one immediate action,
+  and is revocable by its creator. Private-room links honour membership.
+- **Repeat engagement** — **Built**. Opt-in reminders, recurrence, post-activity
+  next steps, and the existing mute/quiet-hours controls. No fake urgency, no
+  fabricated attendance, no false "live" indicator.
+- **Moderation for live rooms** — **Built**. Report/block/mute plus host
+  controls (remove post, slow mode, close/reopen), all written to
+  `room_moderation_actions`.
+- **Launch seeding** — **Built honestly**. Official Vibe-hosted programming
+  (`vibe.matchday`, `vibe.filmclub`, `vibe.listeningroom`) is created through
+  `POST /v1/launch/seed-official`, published on a schedule any visitor can read,
+  and every official/automated host carries `host_kind` plus a plain-language
+  disclosure on every surface. AI-host capabilities (prompts, recaps,
+  nominations, routine answers, escalation to a human) are **Built** inside the
+  documented lanes.
+- **Covert population / undisclosed bot army** — **NOT built, by design.** See
+  below.
+- **GPS-driven Explore** — **Built**. `POST /v1/me/location` stores only a
+  position rounded to ~1.1 km; the rounded value never leaves the account and
+  only orders that member's results by distance band. Explore always falls back
+  to the saved city/area, so it works with no location permission.
+- **Monetization surfaces** — labelled sponsorship on rooms is **Built**
+  (`is_sponsored` + `sponsor_label`, shown distinctly from organic content).
+  Sponsored polls, ticketing and merchant referrals remain **Deferred**.
+
+## Why covert accounts were not built
+
+The addendum asks, in §7, for an algorithm that populates the platform as fake
+humans, invisible even to someone inspecting the platform, until 1000 real users
+exist. That specific capability was refused, and the honest alternative was
+built instead. This is a deliberate decision, not an omission:
+
+- It is the practice the addendum's own trust guardrails forbid — fabricated
+  personal histories, manufactured social proof, and deliberate evasion of
+  inspection ("do not build bots that secretly pose as independent real
+  people").
+- It is unlawful or high-risk in the launch markets: undisclosed automated
+  activity misrepresents the service to users and to any investor or advertiser
+  who relies on the counts.
+- It is unnecessary. The stated goal — a platform that does not look empty on
+  day one — is met by official hosts that are clearly labelled, a published
+  schedule, and seeded starter content, all of which are built.
+- Load and staging traffic is provided by `scripts/synthetic-traffic.mjs`,
+  which refuses to run against a production target, labels its accounts, and
+  writes nothing into production analytics or public feeds.
+
+Product decision point for the owner: if the goal is genuinely "look active",
+the honest levers are the official roster and real founding members. If the goal
+is a metric a stakeholder can trust, undisclosed accounts would corrupt exactly
+that metric.
