@@ -350,3 +350,32 @@ test for any state transition, retry, or duplicate-event path you touch.
   append.** There is one entry unless you write the whole file. It also lands
   with odd permissions (711), so fix it to 600 and make sure it ends in a
   newline.
+
+- **Coolify deploys to its own host over SSH, so `authorized_keys` is
+  load-bearing.** Coolify's key lives at
+  `/var/www/html/storage/app/ssh/keys/ssh_key@<id>` inside the `coolify`
+  container (derive the public half with `ssh-keygen -y -f <key>`). Removing it
+  from `/root/.ssh/authorized_keys` breaks every deploy with
+  `Permission denied (publickey)`, including a redeploy that would otherwise fix
+  things — you cannot deploy your way out. Keep it in the file.
+- **Coolify env vars default to `is_buildtime: true`.** The bulk env endpoint
+  treats an omitted field as build-time, so a deploy then passes every secret to
+  the Docker build as an `ARG` and BuildKit refuses:
+  `SecretsUsedInArgOrEnv`. Set `is_buildtime: false` for runtime-only values.
+  The field is `is_buildtime` on write, `is_buildtime` on read — there is no
+  `is_build_time`.
+- **`users.is_admin` has no writer in the product.** Nothing sets it: no route,
+  no migration, no seed. A fresh deploy therefore has *zero* operators and the
+  operator console (merchant verification, campaign review, report handling,
+  launch seeding) is unreachable. Use
+  `npm --workspace @vibe/api run operator -- --grant <email>` (a CLI on purpose,
+  not an endpoint).
+- **Nothing charges an ad budget.** `campaigns.budget_minor` is stored and
+  reported, but no code debits it — there is no spend ledger and no
+  authorization at review time. A campaign can run indefinitely at no cost. The
+  order path is different and real: it goes through Bachs.
+- **Ad creatives are text-only.** A campaign has `creative_title`,
+  `creative_body`, `creative_cta` and `creative` (all text) plus
+  `destination_url`. There is no image, video or banner column, and the feed
+  renders text. This is deliberate — the spec's V1 scope — not an oversight, but
+  it means a "banner" is not something the schema can hold yet.
