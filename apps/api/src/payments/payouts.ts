@@ -11,6 +11,8 @@
  * signature-verified provider webhook can do that, exactly like a charge.
  */
 
+import { formatMinorUnits, parseToMinorUnits } from "@vibe/shared";
+
 export interface PayoutDestination {
   providerDestinationId: string;
   /** Provider-side review state. A destination is unusable until approved. */
@@ -162,7 +164,7 @@ class BachsPayoutProvider implements PayoutProvider {
       body: JSON.stringify({
         destination: input.providerDestinationId,
         // Bachs takes a decimal string ("1000.00"); the conversion is exact.
-        amount: (input.amountMinor / 100).toFixed(2),
+        amount: formatMinorUnits(input.amountMinor, input.currency),
         currency: input.currency.toUpperCase(),
         reference: input.reference,
         narration: input.narration,
@@ -172,7 +174,7 @@ class BachsPayoutProvider implements PayoutProvider {
     return {
       providerRef: json.id ?? input.reference,
       status: raw === "paid" || raw === "completed" ? "paid" : raw === "failed" ? "failed" : "processing",
-      feeMinor: json.fee ? Math.round(Number(json.fee) * 100) : null,
+      feeMinor: json.fee ? parseToMinorUnits(String(json.fee), input.currency) : null,
       failureReason: json.failure_reason ?? null,
     };
   }
@@ -182,13 +184,15 @@ class BachsPayoutProvider implements PayoutProvider {
       id?: string;
       status?: string;
       fee?: string;
+      currency?: string;
       failure_reason?: string | null;
     };
     const raw = (json.status ?? "").toLowerCase();
     return {
       providerRef: json.id ?? providerRef,
       status: raw === "paid" || raw === "completed" ? "paid" : raw === "failed" ? "failed" : "processing",
-      feeMinor: json.fee ? Math.round(Number(json.fee) * 100) : null,
+      // The provider reports its fee in the payout's currency; convert exactly.
+      feeMinor: json.fee ? parseToMinorUnits(String(json.fee), json.currency ?? "NGN") : null,
       failureReason: json.failure_reason ?? null,
     };
   }

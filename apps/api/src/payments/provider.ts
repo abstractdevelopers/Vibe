@@ -147,18 +147,21 @@ class BachsPaymentProvider implements PaymentProvider {
 
   async createCheckout(input: { amount: Money; reference: string; description: string }): Promise<CheckoutSession> {
     const body = {
-      // Bachs charges a raw amount via `pricing`, with no catalog product.
+      // Bachs charges a raw amount via `pricing`, with no catalog product:
+      // exactly `{ currency, amount }`. There is no `type` field, and the
+      // webhook URL is registered on the endpoint, not sent per checkout.
       pricing: {
-        type: "fixed",
-        amount: formatMinorUnits(input.amount.amount, input.amount.currency),
         currency: input.amount.currency.toUpperCase(),
+        amount: formatMinorUnits(input.amount.amount, input.amount.currency),
       },
+      // A public https URL is required; Bachs refuses localhost. Vibe appends
+      // nothing — Bachs appends `?checkout_id=` to the success redirect.
       success_url: `${this.webUrl}/payments/return?reference=${encodeURIComponent(input.reference)}`,
       cancel_url: `${this.webUrl}/payments/cancel?reference=${encodeURIComponent(input.reference)}`,
+      // Our own order id, echoed on the collection webhook. Max 128 chars.
       reference: input.reference,
       description: input.description,
-      // Where Bachs delivers state changes. Fulfilment happens on this webhook.
-      webhook_url: `${this.apiUrl}/v1/webhooks/payments`,
+      metadata: { reference: input.reference },
     };
 
     const res = await fetch(`${this.baseUrl}/v1/checkout-sessions`, {
@@ -188,16 +191,38 @@ class BachsPaymentProvider implements PaymentProvider {
     };
   }
 
+  /**
+   * Verify a Bachs delivery.
+   *
+   * `X-Bachs-Signature-V2` is `t={timestamp},v1={signature}` and may carry
+   * several `v1=` values during a secret rotation; the delivery is genuine if
+   * ANY of them matches. `X-Bachs-Signature` is the bare digest and carries no
+   * timestamp of its own, so it is checked against the `X-Bachs-Timestamp`
+   * header. Both sign `"{timestamp}.{raw_body}"` with HMAC-SHA256, hex.
+   */
   verifyWebhook(rawBody: string, signature: string | undefined, timestamp?: string): boolean {
-    if (!signature || !timestamp) return false;
-    const ts = Number.parseInt(timestamp, 10);
-    if (!Number.isFinite(ts)) return false;
+    if (!signature) return false;
+    const parts = new Map(
+      signature
+        .split(",")
+        .map((p) => p.split("=", 2))
+        .filter((p): p is [string, string] => p.length === 2),
+    );
+    const v1s = signature
+      .split(",")
+      .map((p) => p.split("=", 2))
+      .filter((p): p is [string, string] => p.length === 2 && p[0] === "v1")
+      .map(([, v]) => v);
+    const ts = parts.get("t") ?? timestamp;
+    if (!ts) return false;
+    const tsNum = Number.parseInt(ts, 10);
+    if (!Number.isFinite(tsNum)) return false;
     // Reject stale deliveries to blunt replay (§4.7: webhook replay).
-    if (Math.abs(Date.now() / 1000 - ts) > 300) return false;
-    // Bachs signs "{timestamp}.{raw_body}" with HMAC-SHA256, hex.
-    const expected = hmacHex(this.webhookSecret, `${timestamp}.${rawBody}`);
-    const provided = signature.includes("v1=") ? (signature.split("v1=")[1]?.split(",")[0] ?? "") : signature;
-    return safeEqual(provided, expected);
+    if (Math.abs(Date.now() / 1000 - tsNum) > 300) return false;
+    const expected = hmacHex(this.webhookSecret, `${ts}.${rawBody}`);
+    // A V2 header names the scheme; a bare header is the digest itself.
+    const candidates = v1s.length > 0 ? v1s : [signature];
+    return candidates.some((c) => safeEqual(c, expected));
   }
 
   parseWebhook(rawBody: string): ProviderPaymentEvent {
@@ -210,10 +235,14 @@ class BachsPaymentProvider implements PaymentProvider {
         amount?: string | number;
         currency?: string;
         checkout_id?: string;
+        withdrawal_id?: string;
+        // Uppercase charge state: SUCCEEDED, ACCEPTED or OVERPAID.
+        status?: string;
         metadata?: { reference?: string };
       };
     };
     const type = parsed.type ?? "unknown";
+    // The payload fields live under `data`; the envelope carries `id`/`type`.
     const amountRaw = parsed.data?.amount;
     const currency = (parsed.data?.currency ?? "NGN").toUpperCase();
     let amount: Money = { amount: 0, currency };
@@ -221,12 +250,22 @@ class BachsPaymentProvider implements PaymentProvider {
       // Bachs reports a decimal string; parse it into minor units exactly.
       amount = { amount: parseToMinorUnits(String(amountRaw), currency), currency };
     }
-    const mapped: ProviderPaymentEvent["type"] = mapProviderEventType(type);
+    // `data.status` can be ACCEPTED or OVERPAID, not only SUCCEEDED. Treat an
+    // overpayment as a success for fulfilment; the amount check downstream
+    // still rejects anything that is not what we asked for.
+    const mapped: ProviderPaymentEvent["type"] =
+      mapProviderEventType(type) === "payment_succeeded" &&
+      parsed.data?.status &&
+      parsed.data.status.toUpperCase() !== "SUCCEEDED" &&
+      parsed.data.status.toUpperCase() !== "OVERPAID"
+        ? "unknown"
+        : mapProviderEventType(type);
     return {
       provider: this.name,
       eventId: parsed.id ?? "unknown",
       type: mapped,
-      providerRef: parsed.data?.checkout_id ?? parsed.data?.id ?? "unknown",
+      // A collection names the checkout; a payout names the withdrawal.
+      providerRef: parsed.data?.checkout_id ?? parsed.data?.withdrawal_id ?? parsed.data?.id ?? "unknown",
       amount,
       orderReference: parsed.data?.reference ?? parsed.data?.metadata?.reference ?? null,
     };

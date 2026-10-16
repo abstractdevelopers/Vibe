@@ -481,4 +481,19 @@ that is confirmed with Bachs and a lawyer.
   `PaidGiftSheet` is the real-money picker (Bachs checkout, 70/30 split). The
   post's gift button opens the paid picker on someone else's post and the free
   sheet on your own. Do not put price copy in the free sheet.
+- **Bachs is the live payment provider, and its API is documented.** The adapter
+  in `apps/api/src/payments/provider.ts` follows `docs.bachs.io`: the checkout
+  body is `pricing: { currency, amount }` (a decimal string, no `type`, no
+  per-request `webhook_url`), the collection webhook nests fields under `data`
+  (`checkout_id`, `reference`, `status`, `amount`, `currency`), and a payout
+  webhook carries `withdrawal_id`. Verification must accept
+  `X-Bachs-Signature-V2` (`t=...,v1=...`, any `v1` may match during a rotation)
+  as well as the bare `X-Bachs-Signature` with `X-Bachs-Timestamp`. `success_url`
+  must be a public https URL — Bachs refuses localhost, so a local checkout
+  cannot be walked end to end without a tunnel.
+- **A ticket is a purchase, not a balance.** A paid live room reuses
+  `gift_purchases` (with a `room_id`) and the `TKT-` reference so it inherits the
+  whole verified-webhook and ledger path; `settleTicketPurchase` grants
+  `room_tickets` on the webhook. Never grant entry from the request. Journal
+  kinds are `ticket_purchase` / `ticket_refund`; `splitGift` gives the 70/30 cut.
 
