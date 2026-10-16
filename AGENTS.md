@@ -436,3 +436,30 @@ activity (in Nigeria, a CBN licence covers disbursing other people's money at
 scale). The engineering is complete and tested; the legal basis is not
 established by code. Do not set `PAYOUTS_PROVIDER=bachs` in production until
 that is confirmed with Bachs and a lawyer.
+
+## Verification and environment gotchas
+
+- **The sign-up limiter is 10 per IP per hour.** `register:` is keyed on the
+  client IP, so a burst of test accounts returns 429, not a bug. The counter
+  lives in `rate_limit_counters`; `DELETE FROM rate_limit_counters` resets it.
+  `scripts/e2e_launch_test.py` does this automatically against localhost.
+- **A malformed `:id` is a 404, not a 500.** Routes pass `:id` straight to
+  Postgres, so a non-UUID raises SQLSTATE `22P02`. The central error handler in
+  `apps/api/src/app.ts` maps that to `not_found`. Add new error mappings there,
+  not at each call site.
+- **`NODE_ENV=development` in your shell poisons the web build.** Vite inlines
+  React's development build, which roughly doubles the bundle (370kB to 830kB)
+  and blows the budget. Run `env -u NODE_ENV npm run build` if you have been
+  running the API in dev mode in the same shell.
+- **Posts default to the `connections` audience.** A new post is visible to its
+  author but not to a stranger's For You feed. Use `audience: "public"` when a
+  test needs a post to be widely visible.
+- **The Coolify API token is not on this machine.** It was written to
+  `/tmp/.coolifyapitoken`, and `/tmp` is wiped between sessions. Recover it from
+  this conversation's event log under `/workspace/conversations/<id>/events/`
+  (`grep -rl coolifyapitoken`), then rewrite the file before deploying.
+- **Docker is not always running.** If Postgres refuses connections
+  (`ECONNREFUSED 127.0.0.1:5432`), start the daemon (`sudo dockerd &`, then
+  `sudo chmod 666 /var/run/docker.sock`) and `docker compose up -d postgres`,
+  then re-run migrations.
+
