@@ -19,8 +19,10 @@ COPY apps/web/package.json apps/web/
 COPY packages/shared/package.json packages/shared/
 # tsx is the API runtime, so the production image keeps dev dependencies.
 RUN npm ci
+# Copy the whole tree: the workspaces have to keep their real paths, because
+# `@vibe/shared` resolves through the node_modules symlink that `npm ci` created.
 COPY --from=build /app/apps/web/dist apps/web/dist
-COPY apps packages scripts ./
+COPY . .
 EXPOSE 12000
 HEALTHCHECK --interval=15s --timeout=5s --retries=5 \
   CMD node -e "fetch('http://localhost:12000/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
