@@ -23,6 +23,7 @@ import { PassScreen } from "./screens/Pass";
 import { AdminScreen } from "./screens/Admin";
 import { AssistScreen } from "./screens/Assist";
 import { CreateSheet } from "./components/CreateSheet";
+import { CreateSomethingSheet } from "./components/CreateSomething";
 import {
   ChatIcon,
   CirclesIcon,
@@ -58,6 +59,7 @@ export function App() {
   const [unread, setUnread] = useState(0);
   const [createOpen, setCreateOpen] = useState(false);
   const [createMode, setCreateMode] = useState<CreateMode>("post");
+  const [startOpen, setStartOpen] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
 
   const openCreate = (mode: CreateMode) => {
@@ -167,7 +169,12 @@ export function App() {
               <button className="icon-button" aria-label="Messages" onClick={() => push({ name: "messages" })}>
                 <ChatIcon width={20} height={20} />
               </button>
-              <AccountMenu me={me} onMeChanged={loadMe} onOpenProfile={() => push({ name: "profile", userId: me.id })} />
+              <AccountMenu
+                me={me}
+                onMeChanged={loadMe}
+                onOpenProfile={() => push({ name: "profile", userId: me.id })}
+                onStartSomething={() => setStartOpen(true)}
+              />
             </div>
           </header>
 
@@ -239,6 +246,18 @@ export function App() {
         </>
       )}
 
+      {startOpen && me && (
+        <CreateSomethingSheet
+          onClose={() => setStartOpen(false)}
+          onCreated={() => {
+            setStartOpen(false);
+            setRoute({ name: "tabs" });
+            setTab("explore");
+            bump();
+          }}
+        />
+      )}
+
       {createOpen && me && (
         <CreateSheet
           me={me}
@@ -299,10 +318,12 @@ function AccountMenu({
   me,
   onMeChanged,
   onOpenProfile,
+  onStartSomething,
 }: {
   me: Me;
   onMeChanged: () => void | Promise<void>;
   onOpenProfile: () => void;
+  onStartSomething: () => void;
 }) {
   const nav = useNav();
   const [open, setOpen] = useState(false);
@@ -369,6 +390,16 @@ function AccountMenu({
             }}
           >
             <EditIcon width={17} height={17} /> Edit profile
+          </button>
+          <button
+            className="menu-item"
+            role="menuitem"
+            onClick={() => {
+              setOpen(false);
+              onStartSomething();
+            }}
+          >
+            <PlusIcon width={17} height={17} /> Start something
           </button>
           <button
             className="menu-item"

@@ -1319,6 +1319,10 @@ select {
 .post-actions {
   display: flex;
   align-items: center;
+  /* A post can carry up to seven actions (like, comment, photo, gift, share,
+     edit, delete). They cannot fit one 360px row without bleeding past the
+     card, so let them wrap instead of overflowing. */
+  flex-wrap: wrap;
   gap: var(--space-1);
   margin-top: var(--space-1);
 }
