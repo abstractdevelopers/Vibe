@@ -310,3 +310,30 @@ test for any state transition, retry, or duplicate-event path you touch.
   order paid. Custody/stored-value and regulated-category advertising stay out.
   A provider name alone is not an approval; do not weaken the production config
   guard (`SESSION_SECRET`, `PAYMENTS_PROVIDER`) on the strength of one.
+
+## Deployment (Coolify, single server)
+
+- **`COPY . .` in the Dockerfile runtime stage is load-bearing.** A multi-source
+  `COPY apps packages scripts ./` copies directory *contents*, so `/app/apps/api`
+  disappears, migration dies with `ERR_MODULE_NOT_FOUND`, and the workspace
+  symlinks under `node_modules/@vibe/` dangle.
+- **The runtime image needs `curl`.** Coolify's rolling deploy probes the
+  container with curl; `node:22-slim` has none, so deploys get marked unhealthy
+  and rolled back even though the app booted fine. The in-image `HEALTHCHECK`
+  uses `node`'s fetch and was never the issue.
+- **Docker publishes ports past ufw.** ufw only filters `INPUT`; published
+  container ports traverse `FORWARD` via DNAT. Restrict them in `DOCKER-USER`
+  and match the **pre-DNAT** port with `-m conntrack --ctorigdstport`
+  (`--dport` sees the rewritten port, so `--dport 8000` misses and
+  `--dport 8080` would also expose Traefik's dashboard). Persist with a
+  systemd unit. Without this, the Coolify panel and the Traefik dashboard are
+  on the public internet.
+- **Coolify API:** the app domain is set through `domains` (a string); `fqdn`
+  is read-only and rejects writes. `POST /api/v1/deploy?uuid=<app>` triggers a
+  deploy and returns a `deployment_uuid` to poll.
+- **Test the image locally before pushing.** Build it, boot it against a
+  throwaway Postgres, and check `/health` plus `/` — that is what caught both
+  Dockerfile bugs.
+- **`npm test` from the repo root, not `npx vitest`.** The single-fork setting
+  lives in `apps/api/vitest.config.ts`; running vitest from the root skips it
+  and the integration tests stampede the shared database.
