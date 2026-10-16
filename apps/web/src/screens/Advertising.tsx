@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { api, ApiError } from "../api";
 import { ArrowLeftIcon, BarChartIcon, MegaphoneIcon, EyeIcon, ClickIcon } from "../components/Icons";
 import { EmptyState } from "../components/EmptyState";
+import { ScreenHeader } from "../components/ScreenHeader";
 
 interface Campaign {
   id: string;
@@ -107,11 +108,11 @@ export function AdvertisingScreen({ onBack }: { onBack: () => void }) {
       <button className="btn ghost" onClick={onBack} style={{ paddingLeft: 0, marginBottom: "var(--space-3)" }}>
         <ArrowLeftIcon width={18} height={18} /> Back
       </button>
-      <h1 className="screen-title">Advertising</h1>
-      <p className="meta">
-        Campaigns are reviewed before they run, and only for a verified business. Every placement is
-        labelled Sponsored, and regulated categories are not available.
-      </p>
+      <ScreenHeader
+        eyebrow="Reach"
+        title="Advertising"
+        subtitle="Campaigns are reviewed before they run, and only for a verified business. Every placement is labelled Sponsored, and regulated categories are not available."
+      />
 
       {error && <div className="notice danger">{error}</div>}
 

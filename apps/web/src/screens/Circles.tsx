@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { api, ApiError } from "../api";
 import type { CircleSummary, Me } from "../types";
 import { EmptyState } from "../components/EmptyState";
+import { ScreenHeader } from "../components/ScreenHeader";
 import { CheckIcon, CirclesIcon, LockIcon, PlusIcon } from "../components/Icons";
 import { useNav } from "../nav";
 
@@ -51,14 +52,16 @@ export function CirclesScreen({ refreshKey, onChanged }: Props) {
 
   return (
     <div>
-      <div className="row spread" style={{ marginBottom: "var(--space-4)" }}>
-        <h1 className="screen-title" style={{ margin: 0 }}>
-          Circles
-        </h1>
-        <button className="btn" onClick={() => setShowCreate((v) => !v)} aria-expanded={showCreate}>
-          <PlusIcon width={18} height={18} /> New
-        </button>
-      </div>
+      <ScreenHeader
+        eyebrow="Your people"
+        title="Circles"
+        subtitle="Small groups where talk turns into plans, money and memories."
+        action={
+          <button className="btn" onClick={() => setShowCreate((v) => !v)} aria-expanded={showCreate}>
+            <PlusIcon width={18} height={18} /> New
+          </button>
+        }
+      />
 
       {notice && (
         <div className="notice success">

@@ -504,4 +504,19 @@ that is confirmed with Bachs and a lawyer.
 - **`Live` is reached from the Explore card.** The `live` route has no tab of its
   own; if you move that entry point, the whole voice/ticketed-room surface
   becomes unreachable.
+- **A Circle delete is a soft delete.** `DELETE /v1/circles/:id` sets
+  `archived_at` (owner only); every list and the detail route filter on
+  `archived_at IS NULL`. Editing is admin-level (`PATCH /v1/circles/:id`). Do not
+  turn this into a hard delete: plans, expenses and chat history belong to the
+  members, not the owner.
+- **Seller fulfilment lives at `POST /v1/orders/:id/transition`.** The seller
+  drives `seller_confirmed → fulfilling → completed`; the buyer may cancel an
+  unpaid order or raise a dispute. `refunded` is deliberately not an accepted
+  target — only a verified provider webhook marks money returned, so a seller
+  can at most set `refund_pending`. The seller's inbox is `GET /v1/seller/orders`
+  (optionally `?open=true`), surfaced as Sales in Settings.
+- **Every top-level screen uses `ScreenHeader`** (`eyebrow` / `title` /
+  `subtitle` / `action`) so a screen never opens as a bare word. The Home
+  greeting is time-aware and the line under it rotates daily — both are pure
+  presentation and carry no state.
 

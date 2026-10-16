@@ -352,3 +352,104 @@ describe("webhook secret selection", () => {
     ).toThrow(/BACHS_WEBHOOK_SECRET/);
   });
 });
+
+describe("merchant fulfilment", () => {
+  let h: Harness;
+  let owner: TestUser;
+  let buyer: TestUser;
+  let merchantId: string;
+  let orderId: string;
+
+  beforeAll(async () => {
+    h = await createHarness();
+    await resetDb(h.pool);
+    owner = await registerUser(h.app, "fulfilowner");
+    buyer = await registerUser(h.app, "fulfilbuyer");
+
+    const m = await h.app.inject({
+      method: "POST", url: "/v1/merchants", headers: auth(owner.token),
+      payload: { name: "Fulfilment Co", category: "general" },
+    });
+    merchantId = m.json().id;
+    await h.pool.query("UPDATE merchants SET verification_status = 'verified' WHERE id = $1", [merchantId]);
+    const p = await h.app.inject({
+      method: "POST", url: `/v1/merchants/${merchantId}/products`, headers: auth(owner.token),
+      payload: { name: "Hoodie", priceMinor: 8000, currency: "NGN", status: "active" },
+    });
+    const order = await h.app.inject({
+      method: "POST", url: "/v1/orders", headers: { ...auth(buyer.token), "idempotency-key": "fulfil-1" },
+      payload: { merchantId, items: [{ productId: p.json().id, quantity: 1 }] },
+    });
+    orderId = order.json().id;
+    // Drive it to paid the way reality does: a provider webhook.
+    await h.pool.query("UPDATE orders SET status = 'paid' WHERE id = $1", [orderId]);
+  });
+  afterAll(async () => h.close());
+
+  function transition(token: string, to: string) {
+    return h.app.inject({
+      method: "POST", url: `/v1/orders/${orderId}/transition`, headers: auth(token), payload: { to },
+    });
+  }
+
+  it("shows the order to the seller as a seller order, and hides it from a stranger", async () => {
+    const seller = await h.app.inject({ method: "GET", url: "/v1/seller/orders", headers: auth(owner.token) });
+    expect(seller.json().orders.map((o: { id: string }) => o.id)).toContain(orderId);
+
+    const stranger = await registerUser(h.app, "fulfilstranger");
+    const theirs = await h.app.inject({ method: "GET", url: "/v1/seller/orders", headers: auth(stranger.token) });
+    expect(theirs.json().orders).toHaveLength(0);
+  });
+
+  it("moves an order through confirm → fulfil → complete as the seller", async () => {
+    expect((await transition(owner.token, "seller_confirmed")).json().status).toBe("seller_confirmed");
+    expect((await transition(owner.token, "fulfilling")).json().status).toBe("fulfilling");
+    expect((await transition(owner.token, "completed")).json().status).toBe("completed");
+
+    const view = await h.app.inject({ method: "GET", url: `/v1/orders/${orderId}`, headers: auth(owner.token) });
+    expect(view.json().isSeller).toBe(true);
+    const history = view.json().history.map((e: { toStatus: string }) => e.toStatus);
+    expect(history).toContain("seller_confirmed");
+    expect(history).toContain("completed");
+  });
+
+  it("refuses an illegal jump", async () => {
+    // completed → seller_confirmed is not a legal transition.
+    const res = await transition(owner.token, "seller_confirmed");
+    expect(res.statusCode).toBe(400);
+  });
+
+  it("refuses the buyer's attempt to drive seller-only steps", async () => {
+    const res = await transition(buyer.token, "seller_confirmed");
+    expect(res.statusCode).toBe(403);
+  });
+
+  it("lets the buyer raise a dispute but never mark money refunded", async () => {
+    const dispute = await transition(buyer.token, "disputed");
+    expect(dispute.statusCode).toBe(200);
+    expect(dispute.json().status).toBe("disputed");
+
+    // `refunded` is not even an accepted target here; only a provider webhook
+    // can move an order to refunded.
+    const refunded = await transition(owner.token, "refunded");
+    expect(refunded.statusCode).toBe(422);
+  });
+
+  it("lets the buyer confirm receipt of an order that is being fulfilled", async () => {
+    const p = await h.app.inject({
+      method: "GET", url: `/v1/merchants/${merchantId}/products`, headers: auth(owner.token),
+    });
+    const order = await h.app.inject({
+      method: "POST", url: "/v1/orders", headers: { ...auth(buyer.token), "idempotency-key": "fulfil-2" },
+      payload: { merchantId, items: [{ productId: p.json().products[0].id, quantity: 1 }] },
+    });
+    const id = order.json().id;
+    await h.pool.query("UPDATE orders SET status = 'fulfilling' WHERE id = $1", [id]);
+
+    const res = await h.app.inject({
+      method: "POST", url: `/v1/orders/${id}/transition`, headers: auth(buyer.token), payload: { to: "completed" },
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.json().status).toBe("completed");
+  });
+});

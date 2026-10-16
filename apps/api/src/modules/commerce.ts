@@ -51,6 +51,30 @@ const merchantVerifySchema = z.object({
   reason: z.string().max(500).optional(),
 });
 
+const orderTransitionSchema = z.object({
+  to: z.enum([
+    "seller_confirmed",
+    "fulfilling",
+    "completed",
+    "cancelled",
+    "refund_pending",
+    "disputed",
+  ]),
+  note: z.string().max(500).optional(),
+});
+
+/**
+ * Who may drive which transition. The seller moves an order through fulfilment;
+ * the buyer may cancel an unpaid order or raise a dispute. `refunded` is
+ * deliberately absent: money only moves back on a verified provider webhook, so
+ * `refund_pending` is a request, not a refund.
+ */
+const SELLER_TARGETS = ["seller_confirmed", "fulfilling", "completed", "cancelled", "refund_pending", "disputed"];
+const BUYER_TARGETS = ["cancelled", "disputed"];
+
+/** The states in which an order still needs the seller to do something. */
+const OPEN_FOR_SELLER = ["paid", "seller_confirmed", "fulfilling", "disputed"];
+
 /** The order lifecycle. A transition is only allowed if it is listed here. */
 export const ORDER_TRANSITIONS: Record<string, string[]> = {
   // `paid` is reachable directly from `created`: a provider webhook can arrive
@@ -445,6 +469,12 @@ export function commerceRoutes(ctx: AppContext) {
         const m = await queryOne<{ owner_id: string }>(ctx.pool, "SELECT owner_id FROM merchants WHERE id = $1", [order.merchant_id]);
         if (m?.owner_id !== user.id) throw ApiError.forbidden("You cannot view this order");
       }
+      const merchantRow = await queryOne<{ owner_id: string; name: string }>(
+        ctx.pool,
+        "SELECT owner_id, name FROM merchants WHERE id = $1",
+        [order.merchant_id],
+      );
+      const isSeller = merchantRow?.owner_id === user.id;
       const items = await queryMany(
         ctx.pool,
         `SELECT id, name, unit_amount_minor, quantity, currency FROM order_items WHERE order_id = $1`,
@@ -463,6 +493,10 @@ export function commerceRoutes(ctx: AppContext) {
         reference: order.reference,
         provider: order.provider,
         providerRef: order.provider_ref,
+        merchantId: order.merchant_id,
+        merchantName: merchantRow?.name ?? null,
+        isSeller,
+        isBuyer: order.buyer_id === user.id,
         items: items.map((it) => ({
           id: it.id,
           name: it.name,
@@ -499,6 +533,90 @@ export function commerceRoutes(ctx: AppContext) {
           createdAt: o.created_at,
         })),
       };
+    });
+
+    /**
+     * The seller's incoming orders: everything bought from a store the caller
+     * owns. `open` narrows to the ones that still need the seller to act.
+     */
+    app.get("/v1/seller/orders", async (req) => {
+      const user = await requireUser(ctx, req);
+      const { open } = req.query as { open?: string };
+      const onlyOpen = open === "true" || open === "1";
+      const rows = await queryMany<{
+        id: string; merchant_id: string; merchant_name: string; status: string;
+        amount_minor: number; currency: string; created_at: string; buyer_handle: string;
+      }>(
+        ctx.pool,
+        `SELECT o.id, o.merchant_id, m.name AS merchant_name, o.status, o.amount_minor,
+                o.currency, o.created_at, u.handle AS buyer_handle
+           FROM orders o
+           JOIN merchants m ON m.id = o.merchant_id
+           JOIN users u ON u.id = o.buyer_id
+          WHERE m.owner_id = $1
+            ${onlyOpen ? `AND o.status = ANY($2::text[])` : ""}
+          ORDER BY o.created_at DESC LIMIT 100`,
+        onlyOpen ? [user.id, OPEN_FOR_SELLER] : [user.id],
+      );
+      return {
+        orders: rows.map((o) => ({
+          id: o.id,
+          merchantId: o.merchant_id,
+          merchantName: o.merchant_name,
+          status: o.status,
+          amountMinor: o.amount_minor,
+          currency: o.currency,
+          createdAt: o.created_at,
+          buyerHandle: o.buyer_handle,
+        })),
+      };
+    });
+
+    /**
+     * Move an order along its lifecycle. The seller drives fulfilment; the buyer
+     * may cancel an unpaid order or raise a dispute. Every change is recorded in
+     * `order_events`, and `refunded` is never reachable from here — only a
+     * verified provider webhook marks money returned.
+     */
+    app.post("/v1/orders/:id/transition", async (req) => {
+      const user = await requireUser(ctx, req);
+      const { id } = req.params as { id: string };
+      const input = parse(orderTransitionSchema, req.body);
+      const order = await queryOne<{
+        id: string; buyer_id: string; merchant_id: string; status: string;
+      }>(ctx.pool, "SELECT id, buyer_id, merchant_id, status FROM orders WHERE id = $1", [id]);
+      if (!order) throw ApiError.notFound("Order not found");
+      const merchant = await queryOne<{ owner_id: string }>(
+        ctx.pool,
+        "SELECT owner_id FROM merchants WHERE id = $1",
+        [order.merchant_id],
+      );
+      const isSeller = merchant?.owner_id === user.id;
+      const isBuyer = order.buyer_id === user.id;
+      if (!isSeller && !isBuyer && !user.isAdmin) {
+        throw ApiError.forbidden("You cannot change this order");
+      }
+      if (!user.isAdmin) {
+        // Seller-only steps.
+        if ((input.to === "seller_confirmed" || input.to === "fulfilling") && !isSeller) {
+          throw ApiError.forbidden("Only the seller can do that");
+        }
+        // A buyer may confirm receipt of an order that is on its way.
+        const buyerMayComplete = input.to === "completed" && order.status === "fulfilling";
+        if (isBuyer && !isSeller && !BUYER_TARGETS.includes(input.to) && !buyerMayComplete) {
+          throw ApiError.forbidden("Only the seller can do that");
+        }
+        if (isSeller && !SELLER_TARGETS.includes(input.to)) {
+          throw ApiError.badRequest("That is not a seller action");
+        }
+      }
+      const result = await transitionOrder(ctx.pool, id, input.to, input.note ?? `order.${input.to}`, user.id);
+      trackSafe(ctx.pool, {
+        name: "order_transition",
+        userId: user.id,
+        properties: { entityType: "order", entityId: id, to: input.to },
+      });
+      return { id, status: result.status, changed: result.changed };
     });
   };
 }

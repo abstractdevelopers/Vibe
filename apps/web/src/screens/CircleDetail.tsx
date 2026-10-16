@@ -8,7 +8,9 @@ import {
   ChatIcon,
   CheckIcon,
   ChevronRightIcon,
+  EditIcon,
   PlusIcon,
+  TrashIcon,
   UsersIcon,
   WalletIcon,
 } from "../components/Icons";
@@ -40,6 +42,10 @@ export function CircleDetailScreen({ circleId, refreshKey, onBack, onChanged }: 
   const [detail, setDetail] = useState<CircleDetail | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [editing, setEditing] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [draft, setDraft] = useState({ name: "", description: "", privacy: "private" });
 
   const load = useCallback(async () => {
     try {
@@ -52,6 +58,53 @@ export function CircleDetailScreen({ circleId, refreshKey, onBack, onChanged }: 
   useEffect(() => {
     void load();
   }, [load, refreshKey]);
+
+  function startEdit() {
+    if (!detail) return;
+    setDraft({
+      name: detail.circle.name,
+      description: detail.circle.description ?? "",
+      privacy: detail.circle.privacy,
+    });
+    setEditing(true);
+    setConfirmDelete(false);
+  }
+
+  async function saveEdit() {
+    setBusy(true);
+    setError(null);
+    try {
+      await api(`/v1/circles/${circleId}`, {
+        method: "PATCH",
+        body: {
+          name: draft.name.trim(),
+          description: draft.description.trim() === "" ? null : draft.description.trim(),
+          privacy: draft.privacy,
+        },
+      });
+      setEditing(false);
+      setNotice("Circle updated.");
+      await load();
+      onChanged();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Could not save the Circle");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function deleteCircle() {
+    setBusy(true);
+    setError(null);
+    try {
+      await api(`/v1/circles/${circleId}`, { method: "DELETE" });
+      onChanged();
+      onBack();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Could not delete the Circle");
+      setBusy(false);
+    }
+  }
 
   async function createInvite() {
     try {
@@ -86,6 +139,48 @@ export function CircleDetailScreen({ circleId, refreshKey, onBack, onChanged }: 
 
       {!detail && <div className="skeleton" aria-busy="true" />}
 
+      {detail && editing && (
+        <div className="card" style={{ marginBottom: "var(--space-4)" }}>
+          <h3 style={{ marginTop: 0 }}>Edit Circle</h3>
+          <label className="field">
+            <span className="eyebrow">Name</span>
+            <input
+              value={draft.name}
+              maxLength={80}
+              onChange={(e) => setDraft({ ...draft, name: e.target.value })}
+            />
+          </label>
+          <label className="field">
+            <span className="eyebrow">Description</span>
+            <textarea
+              value={draft.description}
+              maxLength={500}
+              rows={3}
+              onChange={(e) => setDraft({ ...draft, description: e.target.value })}
+            />
+          </label>
+          <label className="field">
+            <span className="eyebrow">Privacy</span>
+            <select
+              value={draft.privacy}
+              onChange={(e) => setDraft({ ...draft, privacy: e.target.value })}
+            >
+              <option value="private">Private — members only</option>
+              <option value="invite_only">Invite only — join by link</option>
+              <option value="public_discoverable">Discoverable — anyone can find it</option>
+            </select>
+          </label>
+          <div className="row" style={{ gap: "var(--space-2)", marginTop: "var(--space-3)" }}>
+            <button className="btn primary" disabled={busy || draft.name.trim() === ""} onClick={() => void saveEdit()}>
+              {busy ? "Saving…" : "Save changes"}
+            </button>
+            <button className="btn ghost" disabled={busy} onClick={() => setEditing(false)}>
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
+
       {detail && (
         <div className="card">
           <div className="row spread" style={{ marginBottom: "var(--space-3)" }}>
@@ -95,6 +190,32 @@ export function CircleDetailScreen({ circleId, refreshKey, onBack, onChanged }: 
             </button>
           </div>
           <p className="muted">{detail.circle.description ?? "No description yet."}</p>
+
+          {/* Edit and delete are admin/owner acts; the API enforces the same
+              boundary, so hiding the buttons is a courtesy, not the guard. */}
+          {(detail.viewerRole === "owner" || detail.viewerRole === "admin") && !editing && (
+            <div className="row" style={{ gap: "var(--space-2)", marginBottom: "var(--space-3)", flexWrap: "wrap" }}>
+              <button className="btn small ghost" onClick={startEdit}>
+                <EditIcon width={15} height={15} /> Edit
+              </button>
+              {detail.viewerRole === "owner" &&
+                (confirmDelete ? (
+                  <>
+                    <span className="meta">Delete this Circle for everyone?</span>
+                    <button className="btn small danger" disabled={busy} onClick={() => void deleteCircle()}>
+                      {busy ? "Deleting…" : "Yes, delete"}
+                    </button>
+                    <button className="btn small ghost" disabled={busy} onClick={() => setConfirmDelete(false)}>
+                      Keep it
+                    </button>
+                  </>
+                ) : (
+                  <button className="btn small danger" onClick={() => setConfirmDelete(true)}>
+                    <TrashIcon width={15} height={15} /> Delete
+                  </button>
+                ))}
+            </div>
+          )}
 
           {/* The circle's chat is the circle. Plans and money below are what the
               conversation turns into. */}

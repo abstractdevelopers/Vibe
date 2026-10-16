@@ -15,6 +15,16 @@ const createSchema = z.object({
   privacy: z.enum(["private", "invite_only", "public_discoverable"]).default("private"),
 });
 
+const updateSchema = z
+  .object({
+    name: z.string().min(1).max(80).optional(),
+    description: z.string().max(500).nullable().optional(),
+    privacy: z.enum(["private", "invite_only", "public_discoverable"]).optional(),
+  })
+  .refine((v) => v.name !== undefined || v.description !== undefined || v.privacy !== undefined, {
+    message: "Nothing to update",
+  });
+
 const inviteSchema = z.object({
   role: z.enum(["admin", "moderator", "member"]).default("member"),
   expiresInHours: z.number().int().positive().max(24 * 90).optional(),
@@ -153,13 +163,66 @@ export function circlesRoutes(ctx: AppContext) {
       return { circles: rows };
     });
 
+    app.patch("/v1/circles/:id", async (req) => {
+      const user = await requireUser(ctx, req);
+      const { id } = req.params as { id: string };
+      // Renaming or re-scoping a Circle is an admin act.
+      await requireCircleRole(ctx.pool, id, user.id, "admin");
+      const input = parse(updateSchema, req.body);
+      const fields: string[] = [];
+      const values: unknown[] = [];
+      const set = (col: string, value: unknown) => {
+        values.push(value);
+        fields.push(`${col} = $${values.length}`);
+      };
+      if (input.name !== undefined) set("name", input.name);
+      if (input.description !== undefined) set("description", input.description);
+      if (input.privacy !== undefined) set("privacy", input.privacy);
+      values.push(id);
+      const updated = await queryOne<Record<string, unknown>>(
+        ctx.pool,
+        `UPDATE circles SET ${fields.join(", ")}, updated_at = now() WHERE id = $${values.length} RETURNING id, name, description, privacy`,
+        values,
+      );
+      if (!updated) throw ApiError.notFound("Circle not found");
+      await ctx.pool.query(
+        `INSERT INTO audit_events (actor_id, action, entity_type, entity_id, metadata)
+         VALUES ($1, 'circle.updated', 'circle', $2, $3)`,
+        [user.id, id, JSON.stringify(input)],
+      );
+      return { circle: updated };
+    });
+
+    app.delete("/v1/circles/:id", async (req, reply) => {
+      const user = await requireUser(ctx, req);
+      const { id } = req.params as { id: string };
+      // Deleting a Circle is the owner's call, and only the owner's.
+      await requireCircleRole(ctx.pool, id, user.id, "owner");
+      // Soft-delete: `archived_at` hides the Circle from lists and detail, while
+      // its plans, expenses and chat history stay intact for members. A hard
+      // delete would cascade through those and lose shared records.
+      const result = await ctx.pool.query(
+        "UPDATE circles SET archived_at = now(), updated_at = now() WHERE id = $1 AND archived_at IS NULL",
+        [id],
+      );
+      if (result.rowCount === 0) throw ApiError.notFound("Circle not found");
+      await ctx.pool.query(
+        `INSERT INTO audit_events (actor_id, action, entity_type, entity_id)
+         VALUES ($1, 'circle.deleted', 'circle', $2)`,
+        [user.id, id],
+      );
+      reply.code(204);
+      return null;
+    });
+
     app.get("/v1/circles/:id", async (req) => {
       const user = await requireUser(ctx, req);
       const { id } = req.params as { id: string };
       const role = await requireCircleMember(ctx.pool, id, user.id);
       const circle = await queryOne<Record<string, unknown>>(
         ctx.pool,
-        `SELECT id, name, description, privacy, created_by, created_at FROM circles WHERE id = $1`,
+        `SELECT id, name, description, privacy, created_by, created_at FROM circles
+          WHERE id = $1 AND archived_at IS NULL`,
         [id],
       );
       if (!circle) throw ApiError.notFound("Circle not found");

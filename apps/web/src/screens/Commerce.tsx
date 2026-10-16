@@ -3,6 +3,7 @@ import { api, ApiError } from "../api";
 import { useNav } from "../nav";
 import { ArrowLeftIcon, CheckIcon, MoneyIcon, ReceiptIcon, StoreIcon } from "../components/Icons";
 import { EmptyState } from "../components/EmptyState";
+import { ScreenHeader } from "../components/ScreenHeader";
 
 interface Product {
   id: string;
@@ -220,8 +221,48 @@ interface Order {
   currency: string;
   reference: string;
   provider: string | null;
+  merchantId: string;
+  merchantName: string | null;
+  isSeller: boolean;
+  isBuyer: boolean;
   items: Array<{ id: string; name: string; unitAmountMinor: number; quantity: number; currency: string }>;
   history: Array<{ fromStatus: string | null; toStatus: string; reason: string | null; createdAt: string }>;
+}
+
+/**
+ * What each side may do from the current state. The API is the real guard; this
+ * only decides which buttons to draw. `refunded` never appears: money returns
+ * only when the provider confirms it, so the most we offer is a refund request.
+ */
+function orderActions(order: Order): Array<{ to: string; label: string }> {
+  const actions: Array<{ to: string; label: string }> = [];
+  const seller = order.isSeller;
+  const buyer = order.isBuyer;
+  switch (order.status) {
+    case "paid":
+      if (seller) actions.push({ to: "seller_confirmed", label: "Confirm order" }, { to: "fulfilling", label: "Start fulfilling" });
+      break;
+    case "seller_confirmed":
+      if (seller) actions.push({ to: "fulfilling", label: "Start fulfilling" });
+      break;
+    case "fulfilling":
+      if (seller) actions.push({ to: "completed", label: "Mark completed" });
+      break;
+    case "disputed":
+      if (seller) actions.push({ to: "completed", label: "Resolve and complete" });
+      break;
+  }
+  if (seller && ["paid", "seller_confirmed", "fulfilling"].includes(order.status)) {
+    actions.push({ to: "refund_pending", label: "Request refund" });
+  }
+  if (buyer && ["created", "awaiting_payment", "payment_processing"].includes(order.status)) {
+    actions.push({ to: "cancelled", label: "Cancel order" });
+  }
+  if (buyer && ["paid", "seller_confirmed", "fulfilling", "completed"].includes(order.status)) {
+    actions.push({ to: "disputed", label: "Raise a dispute" });
+  }
+  if (buyer && order.status === "fulfilling") actions.push({ to: "completed", label: "Confirm received" });
+  return actions;
 }
 
 export function OrderScreen({ orderId, onBack }: { orderId: string; onBack: () => void }) {
@@ -255,6 +296,19 @@ export function OrderScreen({ orderId, onBack }: { orderId: string; onBack: () =
       await load();
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Could not start payment");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function transition(to: string) {
+    setBusy(true);
+    setError(null);
+    try {
+      await api(`/v1/orders/${orderId}/transition`, { method: "POST", body: { to } });
+      await load();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Could not update this order");
     } finally {
       setBusy(false);
     }
@@ -294,6 +348,33 @@ export function OrderScreen({ orderId, onBack }: { orderId: string; onBack: () =
             <button className="btn primary" style={{ marginTop: "var(--space-3)" }} disabled={busy} onClick={() => void pay()}>
               {busy ? "Opening payment…" : "Pay with the payment provider"}
             </button>
+          )}
+
+          {order.merchantName && (
+            <p className="meta" style={{ marginTop: "var(--space-3)" }}>
+              {order.isSeller ? "Selling at" : "Bought from"} {order.merchantName}
+            </p>
+          )}
+
+          {orderActions(order).length > 0 && (
+            <div className="row" style={{ gap: "var(--space-2)", marginTop: "var(--space-3)", flexWrap: "wrap" }}>
+              {orderActions(order).map((action) => (
+                <button
+                  key={action.to}
+                  className={`btn small ${action.to === "cancelled" || action.to === "disputed" ? "ghost" : "primary"}`}
+                  disabled={busy}
+                  onClick={() => void transition(action.to)}
+                >
+                  {action.label}
+                </button>
+              ))}
+            </div>
+          )}
+
+          {order.status === "refund_pending" && (
+            <p className="meta" style={{ marginTop: "var(--space-2)" }}>
+              A refund is requested. The order is only marked refunded once the payment provider confirms it.
+            </p>
           )}
 
           {redirect && (
@@ -365,3 +446,76 @@ export function OrdersScreen({ onBack }: { onBack: () => void }) {
 }
 
 export { ORDER_STATES };
+
+/**
+ * The seller's side of commerce: orders placed against a store the caller owns.
+ * This is where fulfilment happens — confirm, fulfil, complete, or request a
+ * refund. A buyer never sees this list; the API scopes it to the store owner.
+ */
+export function SellerOrdersScreen({ onBack }: { onBack: () => void }) {
+  const nav = useNav();
+  const [orders, setOrders] = useState<
+    Array<{ id: string; status: string; amountMinor: number; currency: string; createdAt: string; merchantName: string; buyerHandle: string }> | null
+  >(null);
+  const [onlyOpen, setOnlyOpen] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const load = useCallback(async () => {
+    setError(null);
+    try {
+      const res = await api<{ orders: typeof orders }>(`/v1/seller/orders${onlyOpen ? "?open=true" : ""}`);
+      setOrders(res.orders ?? []);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Could not load your sales");
+    }
+  }, [onlyOpen]);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  return (
+    <div>
+      <button className="btn ghost" onClick={onBack} style={{ paddingLeft: 0, marginBottom: "var(--space-3)" }}>
+        <ArrowLeftIcon width={18} height={18} /> Back
+      </button>
+      <ScreenHeader
+        eyebrow="Your store"
+        title="Sales"
+        subtitle="Orders placed at your store. Fulfil them here; money is collected by the payment provider."
+      />
+
+      <div className="pill-row" role="tablist" aria-label="Filter">
+        <button className="pill" role="tab" aria-pressed={!onlyOpen} onClick={() => setOnlyOpen(false)}>
+          All
+        </button>
+        <button className="pill" role="tab" aria-pressed={onlyOpen} onClick={() => setOnlyOpen(true)}>
+          Needs action
+        </button>
+      </div>
+
+      {error && <div className="notice danger">{error}</div>}
+      {orders === null && !error && <div className="skeleton" aria-busy="true" />}
+      {orders?.length === 0 && (
+        <EmptyState
+          icon={<StoreIcon />}
+          title={onlyOpen ? "Nothing needs you right now" : "No sales yet"}
+          text="When someone buys from your store, the order shows up here."
+        />
+      )}
+      <div className="stack">
+        {orders?.map((o) => (
+          <button key={o.id} className="card row spread" onClick={() => nav.push({ name: "order", orderId: o.id })}>
+            <span>
+              <strong>{o.status.replace(/_/g, " ")}</strong>
+              <div className="meta">
+                {o.merchantName} · @{o.buyerHandle} · {new Date(o.createdAt).toLocaleDateString()}
+              </div>
+            </span>
+            <span className="price">{money(o.amountMinor, o.currency)}</span>
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}

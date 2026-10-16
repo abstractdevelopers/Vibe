@@ -152,14 +152,30 @@ export function HomeScreen({ me, refreshKey, onChanged, onCreate }: Props) {
 
   const firstName = me.displayName.split(" ")[0];
 
+  // A greeting that knows the hour, and a line that turns over through the day,
+  // so the first thing you see is never the same twice.
+  const hour = new Date().getHours();
+  const greeting =
+    hour < 5 ? "Still up" : hour < 12 ? "Good morning" : hour < 17 ? "Good afternoon" : hour < 22 ? "Good evening" : "Late one";
+  const VIBES = [
+    "Make something happen.",
+    "Who's free tonight?",
+    "Turn talk into plans.",
+    "Start something small.",
+    "Good vibes only.",
+    "What's the move?",
+  ];
+  const vibe = VIBES[(new Date().getDate() + hour) % VIBES.length];
+
   return (
     <div>
       <div className="row spread" style={{ marginTop: "var(--space-2)", marginBottom: "var(--space-3)" }}>
         <div>
-          <p className="eyebrow">Good to see you</p>
+          <p className="eyebrow">{greeting}</p>
           <h1 className="screen-title" style={{ margin: 0 }}>
             {firstName}
           </h1>
+          <p className="vibe-line">{vibe}</p>
         </div>
       </div>
 

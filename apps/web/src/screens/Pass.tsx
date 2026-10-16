@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { api, ApiError } from "../api";
 import { ArrowLeftIcon, CheckIcon, PassIcon, QrIcon, TrashIcon } from "../components/Icons";
 import { EmptyState } from "../components/EmptyState";
+import { ScreenHeader } from "../components/ScreenHeader";
 
 interface Pass {
   id: string;
@@ -79,11 +80,11 @@ export function PassScreen({ onBack }: { onBack: () => void }) {
       <button className="btn ghost" onClick={onBack} style={{ paddingLeft: 0, marginBottom: "var(--space-3)" }}>
         <ArrowLeftIcon width={18} height={18} /> Back
       </button>
-      <h1 className="screen-title">Vibe Pass</h1>
-      <p className="meta">
-        A physical pass points at a revocable identifier. Nothing personal or payment-related is stored
-        on the tag or the code.
-      </p>
+      <ScreenHeader
+        eyebrow="Your key"
+        title="Vibe Pass"
+        subtitle="A physical pass points at a revocable identifier. Nothing personal or payment-related is stored on the tag or the code."
+      />
 
       {error && <div className="notice danger">{error}</div>}
 

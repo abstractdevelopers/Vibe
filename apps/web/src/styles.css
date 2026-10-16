@@ -443,11 +443,50 @@ h4 {
 
 @media (prefers-reduced-motion: reduce) {
   .eq i { animation: none; transform: scaleY(0.6); }
+  .empty-icon { animation: none; }
+}
+
+/* The greeting's rotating line. It fades in so a change reads as a beat, not a
+   jump. */
+.vibe-line {
+  margin: 4px 0 0;
+  font-size: var(--text-supporting);
+  color: var(--text-muted);
+  animation: vibe-in 600ms var(--ease-out) both;
+}
+@keyframes vibe-in {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: none; }
 }
 
 /* ============================================================
    Bottom navigation
    ============================================================ */
+
+/* Standard screen heading: eyebrow, title, subtitle, optional action. The block
+   eases in so a tab change has a beat rather than snapping. */
+.screen-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-3);
+  margin: var(--space-2) 0 var(--space-4);
+  animation: header-in 320ms var(--ease-out) both;
+}
+.screen-header-text { min-width: 0; }
+.screen-subtitle {
+  margin: 4px 0 0;
+  font-size: var(--text-supporting);
+  color: var(--text-muted);
+  max-width: 46ch;
+}
+@keyframes header-in {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .screen-header, .vibe-line { animation: none; }
+}
 
 .bottom-nav {
   position: fixed;
@@ -1568,6 +1607,11 @@ select {
   color: var(--violet-soft);
   background: color-mix(in srgb, var(--violet) 14%, transparent);
   border-radius: var(--radius-pill);
+  animation: empty-float 5s var(--ease-out) infinite alternate;
+}
+@keyframes empty-float {
+  from { transform: translateY(0); }
+  to { transform: translateY(-6px); }
 }
 .empty-icon svg {
   width: 26px;

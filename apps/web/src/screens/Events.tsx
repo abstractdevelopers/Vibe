@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { api, ApiError } from "../api";
 import { ArrowLeftIcon, CalendarIcon, MapPinIcon, TicketIcon, CheckIcon, QrIcon, LockIcon } from "../components/Icons";
 import { EmptyState } from "../components/EmptyState";
+import { ScreenHeader } from "../components/ScreenHeader";
 
 interface EventSummary {
   id: string;
@@ -48,10 +49,11 @@ export function EventsScreen({ onBack }: { onBack: () => void }) {
       <button className="btn ghost" onClick={onBack} style={{ paddingLeft: 0, marginBottom: "var(--space-3)" }}>
         <ArrowLeftIcon width={18} height={18} /> Back
       </button>
-      <h1 className="screen-title">Events</h1>
-      <p className="meta">
-        A Vibe event is not a reservation or a ticket. Ticketing stays with the provider or merchant.
-      </p>
+      <ScreenHeader
+        eyebrow="Gather"
+        title="Events"
+        subtitle="A Vibe event is not a reservation or a ticket. Ticketing stays with the provider or merchant."
+      />
 
       {error && <div className="notice danger">{error}</div>}
       {events === null && !error && <div className="skeleton" aria-busy="true" />}

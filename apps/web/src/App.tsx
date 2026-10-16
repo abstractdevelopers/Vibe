@@ -15,7 +15,7 @@ import { SettingsScreen } from "./screens/Settings";
 import { PlaceDetailScreen } from "./screens/PlaceDetail";
 import { MessagesScreen } from "./screens/Messages";
 import { ConversationScreen } from "./screens/Conversation";
-import { StorefrontScreen, ProductScreen, OrdersScreen, OrderScreen } from "./screens/Commerce";
+import { StorefrontScreen, ProductScreen, OrdersScreen, OrderScreen, SellerOrdersScreen } from "./screens/Commerce";
 import { AdvertisingScreen } from "./screens/Advertising";
 import { EventsScreen } from "./screens/Events";
 import { LiveScreen, RoomScreen } from "./screens/Live";
@@ -281,6 +281,7 @@ export function App() {
             {route.name === "product" && <ProductScreen productId={route.productId} onBack={back} />}
             {route.name === "orders" && <OrdersScreen onBack={back} />}
             {route.name === "order" && <OrderScreen orderId={route.orderId} onBack={back} />}
+            {route.name === "seller-orders" && <SellerOrdersScreen onBack={back} />}
             {route.name === "advertising" && <AdvertisingScreen onBack={back} />}
             {route.name === "events" && <EventsScreen onBack={back} />}
             {route.name === "live" && <LiveScreen onBack={back} />}

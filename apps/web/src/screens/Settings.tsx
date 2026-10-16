@@ -11,6 +11,7 @@ import {
   MoonIcon,
   ReceiptIcon,
   ShieldIcon,
+  StoreIcon,
   TrashIcon,
   WalletIcon,
 } from "../components/Icons";
@@ -238,6 +239,9 @@ export function SettingsScreen({ me, onBack, onMeChanged }: Props) {
         </p>
         <button className="btn block" onClick={() => nav.push({ name: "orders" })}>
           <ReceiptIcon width={18} height={18} /> Order history
+        </button>
+        <button className="btn block" style={{ marginTop: "var(--space-2)" }} onClick={() => nav.push({ name: "seller-orders" })}>
+          <StoreIcon width={18} height={18} /> Sales — fulfil your orders
         </button>
       </div>
 
