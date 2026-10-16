@@ -52,7 +52,22 @@ import type { Me } from "./types";
 
 export type Tab = "home" | "circles" | "explore" | "you";
 
+/**
+ * The app routes in memory, so a shared link cannot reach a screen on its own.
+ * We read the token out of `/invite/<token>` (or `?invite=`) at boot, keep it,
+ * and act on it once we know whether the visitor is signed in. The token is
+ * stripped from the address bar so a refresh does not re-trigger it.
+ */
+function readInviteToken(): string | null {
+  const fromQuery = new URLSearchParams(window.location.search).get("invite");
+  const pathMatch = window.location.pathname.match(/\/invite\/([A-Za-z0-9_-]+)/);
+  return fromQuery ?? pathMatch?.[1] ?? null;
+}
+
 export function App() {
+  const [inviteToken, setInviteToken] = useState<string | null>(() => readInviteToken());
+  const [inviteBusy, setInviteBusy] = useState(false);
+  const [inviteError, setInviteError] = useState<string | null>(null);
   const [me, setMe] = useState<Me | null>(null);
   const [checking, setChecking] = useState(true);
   const [tab, setTab] = useState<Tab>("home");
@@ -92,6 +107,37 @@ export function App() {
   useEffect(() => {
     void loadMe();
   }, [loadMe]);
+
+  // Strip the token from the URL once captured, so Back/refresh is clean.
+  useEffect(() => {
+    if (readInviteToken() && window.history.replaceState) {
+      window.history.replaceState(null, "", window.location.pathname.replace(/\/invite\/[A-Za-z0-9_-]+/, "/"));
+    }
+  }, []);
+
+  const acceptInvite = useCallback(async (token: string) => {
+    setInviteBusy(true);
+    setInviteError(null);
+    try {
+      const result = await api<{ circleId: string }>(`/v1/invites/${token}/accept`, {
+        method: "POST",
+        idempotencyKey: `invite-${token}`,
+      });
+      setInviteToken(null);
+      setTab("circles");
+      setRouteStack([]);
+      setRoute({ name: "circle", circleId: result.circleId });
+    } catch (err) {
+      setInviteError(err instanceof ApiError ? err.message : "Could not join that Circle");
+    } finally {
+      setInviteBusy(false);
+    }
+  }, []);
+
+  // A signed-in visitor holding an invite joins immediately.
+  useEffect(() => {
+    if (me && inviteToken) void acceptInvite(inviteToken);
+  }, [me, inviteToken, acceptInvite]);
 
   // A committed change elsewhere refreshes what this client is looking at.
   useRealtime(() => {
@@ -145,12 +191,15 @@ export function App() {
       )}
 
       {!checking && !me && (
-        <AuthScreen
-          onAuthenticated={async () => {
-            setChecking(true);
-            await loadMe();
-          }}
-        />
+        <>
+          {inviteToken && <InviteLanding token={inviteToken} />}
+          <AuthScreen
+            onAuthenticated={async () => {
+              setChecking(true);
+              await loadMe();
+            }}
+          />
+        </>
       )}
 
       {!checking && me && (
@@ -179,6 +228,13 @@ export function App() {
               />
             </div>
           </header>
+
+          {inviteError && (
+            <div className="notice danger" style={{ margin: "0 var(--space-4) var(--space-2)" }} role="alert">
+              {inviteError}
+            </div>
+          )}
+          {inviteBusy && <div className="notice" style={{ margin: "0 var(--space-4) var(--space-2)" }}>Joining the Circle…</div>}
 
           <main className="app-shell">
             {route.name === "tabs" && (
@@ -501,6 +557,59 @@ function AccountMenu({
           </button>
         </div>
       )}
+    </div>
+  );
+}
+
+/**
+ * The invite landing strip. Shown above sign-in when the visitor arrived from
+ * an invite link but has no account yet, so the link is not a dead end: it
+ * names the Circle and, if the link is spent, says so plainly.
+ */
+function InviteLanding({ token }: { token: string }) {
+  const [preview, setPreview] = useState<{
+    circle: { name: string; description: string | null };
+    role: string;
+    usable: boolean;
+    reason: string | null;
+  } | null>(null);
+  const [failed, setFailed] = useState(false);
+
+  useEffect(() => {
+    api<{ circle: { name: string; description: string | null }; role: string; usable: boolean; reason: string | null }>(
+      `/v1/invites/${token}`,
+    )
+      .then(setPreview)
+      .catch(() => setFailed(true));
+  }, [token]);
+
+  if (failed) {
+    return (
+      <div className="notice" style={{ margin: "0 var(--space-4) var(--space-3)" }}>
+        This invite link is not valid. Ask for a fresh one.
+      </div>
+    );
+  }
+  if (!preview) return null;
+
+  const reasonText =
+    preview.reason === "expired" ? "This invite has expired."
+      : preview.reason === "used_up" ? "This invite has been used up."
+        : preview.reason === "revoked" ? "This invite was revoked."
+          : null;
+
+  return (
+    <div className="invite-banner" role="status">
+      <span className="chip tiny">Circle invite</span>
+      <p style={{ margin: "var(--space-2) 0 0", fontWeight: 600 }}>
+        You have been invited to {preview.circle.name}
+      </p>
+      {preview.circle.description && (
+        <p className="meta" style={{ margin: "4px 0 0" }}>{preview.circle.description}</p>
+      )}
+      <p className="meta" style={{ marginTop: "var(--space-2)" }}>
+        {reasonText ?? "Sign up or log in below and you will join automatically."}
+      </p>
     </div>
   );
 }

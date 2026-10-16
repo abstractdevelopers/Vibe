@@ -226,6 +226,42 @@ export function circlesRoutes(ctx: AppContext) {
       return { inviteToken: token, expiresAt: expiresAt?.toISOString() ?? null, role: input.role };
     });
 
+    /**
+     * A public preview of an invite. This is what an invite link resolves to
+     * before the visitor has an account, so the landing page can name the
+     * Circle instead of showing a dead link. It reveals only the Circle's
+     * public face — never its members or posts.
+     */
+    app.get("/v1/invites/:token", async (req) => {
+      const { token } = req.params as { token: string };
+      const invite = await queryOne<{
+        circle_id: string; role: CircleRole; expires_at: Date | null;
+        max_uses: number | null; uses: number; revoked_at: Date | null;
+        name: string; description: string | null; privacy: string;
+      }>(
+        ctx.pool,
+        `SELECT i.circle_id, i.role, i.expires_at, i.max_uses, i.uses, i.revoked_at,
+                c.name, c.description, c.privacy
+           FROM circle_invites i JOIN circles c ON c.id = i.circle_id
+          WHERE i.token_hash = $1`,
+        [hashToken(token)],
+      );
+      if (!invite) throw ApiError.notFound("Invite not found");
+      const expired = invite.expires_at !== null && invite.expires_at.getTime() <= Date.now();
+      const exhausted = invite.max_uses !== null && invite.uses >= invite.max_uses;
+      return {
+        circle: {
+          id: invite.circle_id,
+          name: invite.name,
+          description: invite.description,
+          privacy: invite.privacy,
+        },
+        role: invite.role,
+        usable: !invite.revoked_at && !expired && !exhausted,
+        reason: invite.revoked_at ? "revoked" : expired ? "expired" : exhausted ? "used_up" : null,
+      };
+    });
+
     app.post("/v1/invites/:token/accept", async (req) => {
       const user = await requireUser(ctx, req);
       const { token } = req.params as { token: string };

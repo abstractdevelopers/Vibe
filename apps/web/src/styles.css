@@ -408,6 +408,19 @@ h4 {
   border-color: color-mix(in srgb, var(--violet) 45%, transparent);
 }
 
+/* The invite landing strip, above sign-in. */
+.invite-banner {
+  margin: 0 var(--space-4) var(--space-3);
+  padding: var(--space-4);
+  border-radius: var(--radius-card);
+  background: linear-gradient(
+    120deg,
+    color-mix(in srgb, var(--violet) 24%, transparent),
+    color-mix(in srgb, var(--coral) 16%, transparent)
+  );
+  border: 1px solid color-mix(in srgb, var(--violet) 40%, transparent);
+}
+
 @media (prefers-reduced-motion: reduce) {
   .eq i { animation: none; transform: scaleY(0.6); }
 }
