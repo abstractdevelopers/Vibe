@@ -82,10 +82,24 @@ describe("analytics instrumentation", () => {
 
   it("enforces the retention window when pruning", async () => {
     const alice = await registerUser(h.app, "analytics_d");
+    // Registration records signup_completed fire-and-forget, so it can land
+    // after the UPDATE below. Backdate only rows that already exist, then wait
+    // for the late insert and backdate it too; otherwise the event keeps a
+    // fresh created_at, survives the prune, and the test fails at random.
     await h.pool.query(
       "UPDATE analytics_events SET created_at = now() - interval '200 days' WHERE user_id = $1",
       [alice.id],
     );
+    const deadline = Date.now() + 2000;
+    while (Date.now() < deadline) {
+      const late = await h.pool.query(
+        `UPDATE analytics_events SET created_at = now() - interval '200 days'
+          WHERE user_id = $1 AND created_at > now() - interval '1 day'`,
+        [alice.id],
+      );
+      if (late.rowCount) break;
+      await new Promise((r) => setTimeout(r, 25));
+    }
     const removed = await pruneAnalytics(h.pool, 90);
     expect(removed).toBeGreaterThan(0);
     const left = await h.pool.query("SELECT 1 FROM analytics_events WHERE user_id = $1", [alice.id]);
