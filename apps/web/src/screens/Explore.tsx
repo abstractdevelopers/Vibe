@@ -148,6 +148,17 @@ export function ExploreScreen({ me }: { me: Me }) {
     <div>
       <h1 className="screen-title">Explore</h1>
 
+      {/* Live is the loudest thing on Explore: a room happening now is the
+          fastest way into a real-world experience. */}
+      <button className="card live-cta" onClick={() => nav.push({ name: "live" })}>
+        <span className="row" style={{ gap: "var(--space-2)" }}>
+          <span className="live-dot" aria-hidden />
+          <strong>Live now</strong>
+        </span>
+        <span className="meta">Voice rooms, listening parties, watch parties and match rooms.</span>
+        <ChevronRightIcon width={18} height={18} />
+      </button>
+
       <div className="row" style={{ gap: "var(--space-2)", marginBottom: "var(--space-3)" }}>
         <div className="grow" style={{ position: "relative" }}>
           <SearchIcon

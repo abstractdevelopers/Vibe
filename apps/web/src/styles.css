@@ -408,6 +408,26 @@ h4 {
   border-color: color-mix(in srgb, var(--violet) 45%, transparent);
 }
 
+/* The Live entry card on Explore. */
+.live-cta {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  width: 100%;
+  text-align: left;
+  margin-bottom: var(--space-3);
+  border-color: color-mix(in srgb, var(--coral) 45%, transparent);
+  background: linear-gradient(
+    100deg,
+    color-mix(in srgb, var(--coral) 16%, transparent),
+    color-mix(in srgb, var(--violet) 14%, transparent)
+  );
+}
+.live-cta .meta {
+  flex: 1;
+  min-width: 0;
+}
+
 /* The invite landing strip, above sign-in. */
 .invite-banner {
   margin: 0 var(--space-4) var(--space-3);
