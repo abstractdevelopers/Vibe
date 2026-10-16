@@ -31,6 +31,14 @@ export async function authenticate(ctx: AppContext, req: FastifyRequest): Promis
 export async function requireUser(ctx: AppContext, req: FastifyRequest): Promise<AuthUser> {
   const user = await authenticate(ctx, req);
   if (!user) throw ApiError.unauthorized();
+  // A suspended or banned account cannot act, even with a live session.
+  if (user.moderationStatus === "suspended" || user.moderationStatus === "banned") {
+    throw ApiError.forbidden(
+      user.moderationStatus === "banned"
+        ? "This account has been banned"
+        : "This account is suspended",
+    );
+  }
   return user;
 }
 

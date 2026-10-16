@@ -8,6 +8,8 @@ import { parse, publicUser, requireUser, type AppContext, type UserLike } from "
 import { requireCircleMember } from "./access.js";
 import { trackSafe } from "./analytics.js";
 import { notifyUsers } from "./notifications.js";
+import { selectAdForViewer } from "./ads.js";
+import { newToken } from "../ids.js";
 
 // Accepts either an absolute URL or a root-relative path returned by our own
 // media boundary (e.g. /v1/media/<id>). Anything else — javascript:, data: —
@@ -335,6 +337,52 @@ async function attachActivities(db: Db, posts: PostRow[], viewerId: string) {
   }));
 }
 
+/** Build one page of the organic feed (the "Following" or ranked "For You" stream). */
+async function buildFeedPage(
+  ctx: AppContext,
+  viewerId: string,
+  query: { cursor?: string; limit?: string; tab?: string },
+  limit: number,
+): Promise<{ items: unknown[]; nextCursor: string | null }> {
+  // "Following" is a strict chronological stream from people you follow and
+  // the Circles you belong to. "For You" is the ranked baseline. They are
+  // genuinely different feeds, not the same query with a different label.
+  if (query.tab === "following") {
+    const rows = await recentPosts(ctx.pool, viewerId, { limit: limit + 1, followingOnly: true });
+    const hasMore = rows.length > limit;
+    const page = rows.slice(0, limit);
+    const last = page[page.length - 1];
+    return {
+      items: await attachActivities(ctx.pool, page, viewerId),
+      nextCursor: hasMore && last ? encodeCursor(last.created_at, last.id) : null,
+    };
+  }
+
+  const cursor = query.cursor ? decodeCursor(query.cursor) : null;
+  // The clock is frozen on the first page and carried in the cursor, so the
+  // score of a given post does not drift between page requests.
+  const asOf = cursor?.asOf ? new Date(cursor.asOf) : new Date();
+  // Fetch extra rows so diversification can drop repeats without shortening
+  // the page, and still know whether a next page exists.
+  const rows = await rankedPosts(ctx.pool, viewerId, {
+    limit: limit + 6,
+    asOf,
+    cursor:
+      cursor && cursor.score !== undefined
+        ? { score: cursor.score, createdAt: cursor.createdAt, id: cursor.id }
+        : null,
+  });
+  const kept = diversify(rows).slice(0, limit + 1);
+  const hasMore = kept.length > limit;
+  const page = kept.slice(0, limit);
+  const items = await attachActivities(ctx.pool, page, viewerId);
+  const last = page[page.length - 1] as (PostRow & { rank: number }) | undefined;
+  return {
+    items,
+    nextCursor: hasMore && last ? encodeCursor(last.created_at, last.id, last.rank, asOf.toISOString()) : null,
+  };
+}
+
 export function feedRoutes(ctx: AppContext) {
   return async function register(app: FastifyInstance): Promise<void> {
     app.get("/v1/feed", async (req) => {
@@ -342,43 +390,13 @@ export function feedRoutes(ctx: AppContext) {
       const query = req.query as { cursor?: string; limit?: string; tab?: string };
       const limit = Math.min(Number(query.limit ?? 20) || 20, 50);
 
-      // "Following" is a strict chronological stream from people you follow and
-      // the Circles you belong to. "For You" is the ranked baseline. They are
-      // genuinely different feeds, not the same query with a different label.
-      if (query.tab === "following") {
-        const rows = await recentPosts(ctx.pool, user.id, { limit: limit + 1, followingOnly: true });
-        const hasMore = rows.length > limit;
-        const page = rows.slice(0, limit);
-        const last = page[page.length - 1];
-        return {
-          items: await attachActivities(ctx.pool, page, user.id),
-          nextCursor: hasMore && last ? encodeCursor(last.created_at, last.id) : null,
-        };
-      }
-
-      const cursor = query.cursor ? decodeCursor(query.cursor) : null;
-      // The clock is frozen on the first page and carried in the cursor, so the
-      // score of a given post does not drift between page requests.
-      const asOf = cursor?.asOf ? new Date(cursor.asOf) : new Date();
-      // Fetch extra rows so diversification can drop repeats without shortening
-      // the page, and still know whether a next page exists.
-      const rows = await rankedPosts(ctx.pool, user.id, {
-        limit: limit + 6,
-        asOf,
-        cursor:
-          cursor && cursor.score !== undefined
-            ? { score: cursor.score, createdAt: cursor.createdAt, id: cursor.id }
-            : null,
-      });
-      const kept = diversify(rows).slice(0, limit + 1);
-      const hasMore = kept.length > limit;
-      const page = kept.slice(0, limit);
-      const items = await attachActivities(ctx.pool, page, user.id);
-      const last = page[page.length - 1] as (PostRow & { rank: number }) | undefined;
-      return {
-        items,
-        nextCursor: hasMore && last ? encodeCursor(last.created_at, last.id, last.rank, asOf.toISOString()) : null,
-      };
+      // Delivery is decided once per page and carried in a response field the
+      // client renders at a fixed slot. It never enters the organic ranking, so
+      // paid content cannot outrank safety or relevance.
+      const page = await buildFeedPage(ctx, user.id, query, limit);
+      const ad = await selectAdForViewer(ctx.pool, user.id, "feed", newToken(8));
+      if (ad) trackSafe(ctx.pool, { name: "ad_impression", userId: user.id, properties: { entityType: "campaign", entityId: ad.campaignId, surface: "feed" } });
+      return { ...page, sponsored: ad };
     });
 
     app.get("/v1/users/:id/posts", async (req) => {

@@ -17,6 +17,10 @@ import { MessagesScreen } from "./screens/Messages";
 import { ConversationScreen } from "./screens/Conversation";
 import { StorefrontScreen, ProductScreen, OrdersScreen, OrderScreen } from "./screens/Commerce";
 import { AdvertisingScreen } from "./screens/Advertising";
+import { EventsScreen } from "./screens/Events";
+import { PassScreen } from "./screens/Pass";
+import { AdminScreen } from "./screens/Admin";
+import { AssistScreen } from "./screens/Assist";
 import { CreateSheet } from "./components/CreateSheet";
 import {
   ChatIcon,
@@ -27,9 +31,13 @@ import {
   InboxIcon,
   LogOutIcon,
   MegaphoneIcon,
+  PassIcon,
   PlusIcon,
   ReceiptIcon,
   SettingsIcon,
+  SparklesIcon,
+  ShieldIcon,
+  TicketIcon,
   UserIcon,
 } from "./components/Icons";
 import { NavContext, useNav, type Route } from "./nav";
@@ -207,6 +215,10 @@ export function App() {
             {route.name === "orders" && <OrdersScreen onBack={back} />}
             {route.name === "order" && <OrderScreen orderId={route.orderId} onBack={back} />}
             {route.name === "advertising" && <AdvertisingScreen onBack={back} />}
+            {route.name === "events" && <EventsScreen onBack={back} />}
+            {route.name === "pass" && <PassScreen onBack={back} />}
+            {route.name === "admin" && <AdminScreen onBack={back} />}
+            {route.name === "assist" && <AssistScreen onBack={back} />}
           </main>
 
           <nav className="bottom-nav" aria-label="Primary">
@@ -354,6 +366,48 @@ function AccountMenu({
           >
             <EditIcon width={17} height={17} /> Edit profile
           </button>
+          <button
+            className="menu-item"
+            role="menuitem"
+            onClick={() => {
+              setOpen(false);
+              nav.push({ name: "events" });
+            }}
+          >
+            <TicketIcon width={17} height={17} /> Events
+          </button>
+          <button
+            className="menu-item"
+            role="menuitem"
+            onClick={() => {
+              setOpen(false);
+              nav.push({ name: "pass" });
+            }}
+          >
+            <PassIcon width={17} height={17} /> Vibe Pass
+          </button>
+          <button
+            className="menu-item"
+            role="menuitem"
+            onClick={() => {
+              setOpen(false);
+              nav.push({ name: "assist" });
+            }}
+          >
+            <SparklesIcon width={17} height={17} /> Assist
+          </button>
+          {me.isAdmin && (
+            <button
+              className="menu-item"
+              role="menuitem"
+              onClick={() => {
+                setOpen(false);
+                nav.push({ name: "admin" });
+              }}
+            >
+              <ShieldIcon width={17} height={17} /> Operator console
+            </button>
+          )}
           <button
             className="menu-item"
             role="menuitem"

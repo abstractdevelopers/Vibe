@@ -162,6 +162,27 @@ export function commerceRoutes(ctx: AppContext) {
       return { merchants: rows };
     });
 
+    /** The caller's own businesses, whatever their verification state. */
+    app.get("/v1/merchants/mine", async (req) => {
+      const user = await requireUser(ctx, req);
+      const rows = await queryMany(
+        ctx.pool,
+        `SELECT id, name, description, category, verification_status, created_at
+           FROM merchants WHERE owner_id = $1 ORDER BY created_at DESC`,
+        [user.id],
+      );
+      return {
+        merchants: rows.map((m) => ({
+          id: m.id,
+          name: m.name,
+          description: m.description,
+          category: m.category,
+          verificationStatus: m.verification_status,
+          createdAt: m.created_at,
+        })),
+      };
+    });
+
     app.get("/v1/merchants/:id", async (req) => {
       const user = await requireUser(ctx, req);
       const { id } = req.params as { id: string };

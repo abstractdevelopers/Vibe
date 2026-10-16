@@ -14,6 +14,7 @@ import {
   ArrowLeft,
   ArrowRight,
   AtSign,
+  BadgeCheck,
   BarChart3,
   Bell,
   CalendarDays,
@@ -21,8 +22,11 @@ import {
   ChevronRight,
   CircleCheck,
   CircleDollarSign,
+  ClipboardList,
   Clock,
   Compass,
+  Eye,
+  Gauge,
   Globe,
   HandCoins,
   Image,
@@ -40,14 +44,18 @@ import {
   MessageCircle,
   MessageSquare,
   Moon,
+  MousePointerClick,
   Plus,
+  QrCode,
   Receipt,
   Reply,
+  ScanLine,
   Search,
   Send,
   Settings,
   Share2,
   ShieldCheck,
+  Sparkles,
   Store,
   Timer,
   TrendingUp,
@@ -131,4 +139,12 @@ export const NearbyIcon = icon(Navigation);
 export const TrashIcon = icon(Trash2);
 export const GiftIcon = icon(Gift);
 export const DownloadIcon = icon(Download);
+export const PassIcon = icon(BadgeCheck);
+export const QrIcon = icon(QrCode);
+export const ScanIcon = icon(ScanLine);
+export const SparklesIcon = icon(Sparkles);
+export const ClipboardIcon = icon(ClipboardList);
+export const EyeIcon = icon(Eye);
+export const ClickIcon = icon(MousePointerClick);
+export const GaugeIcon = icon(Gauge);
 

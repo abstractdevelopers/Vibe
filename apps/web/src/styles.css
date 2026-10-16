@@ -527,6 +527,56 @@ h4 {
   width: 100%;
 }
 
+/* Compact buttons for dense operator/merchant controls. Label-first, so the
+   icon never carries meaning on its own. */
+.btn.small {
+  padding: 6px 12px;
+  font-size: var(--text-meta);
+  border-radius: var(--radius-button);
+  gap: 5px;
+}
+
+/* A stat tile used by the operator overview and campaign metrics. */
+.stat-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: var(--space-3);
+}
+
+.stat-grid .card.stat {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: var(--space-4);
+}
+
+.stat-num {
+  font-family: var(--font-display);
+  font-size: 26px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.02em;
+}
+
+/* The pass token frame stands in for a scannable code without implying one. */
+.qr-frame {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 72px;
+  height: 72px;
+  border-radius: var(--radius-card);
+  border: 1px solid var(--border-strong);
+  background: color-mix(in srgb, var(--surface-3) 55%, transparent);
+  color: var(--text);
+}
+
+/* A sponsored card is set apart without shouting: a hairline and a tint. */
+.post.sponsored {
+  border: 1px solid color-mix(in srgb, var(--violet) 35%, var(--border));
+  background: color-mix(in srgb, var(--violet) 5%, transparent);
+}
+
 .btn:disabled {
   opacity: 0.45;
   cursor: not-allowed;

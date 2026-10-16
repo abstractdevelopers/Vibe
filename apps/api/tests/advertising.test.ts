@@ -4,21 +4,31 @@ import { createHarness, resetDb, registerUser, auth, type Harness, type TestUser
 describe("advertising manager", () => {
   let h: Harness;
   let advertiser: TestUser;
+  let merchantId: string;
 
   beforeAll(async () => {
     h = await createHarness();
     await resetDb(h.pool);
     advertiser = await registerUser(h.app, "advertiser");
+    // A campaign must name a business the advertiser owns. Delivery additionally
+    // requires the business to be verified, so this one is verified up front.
+    const m = await h.app.inject({
+      method: "POST", url: "/v1/merchants", headers: auth(advertiser.token),
+      payload: { name: "Advertiser Coffee", category: "food" },
+    });
+    merchantId = m.json().id;
+    await h.pool.query("UPDATE merchants SET verification_status = 'verified' WHERE id = $1", [merchantId]);
   });
   afterAll(async () => h.close());
 
-  const base = {
+  const base = () => ({
     name: "Launch", objective: "awareness", creative: "Try our coffee",
     destinationUrl: "https://example.com/coffee", budgetMinor: 500000, currency: "NGN",
-  };
+    merchantId,
+  });
 
   it("creates a campaign as a draft", async () => {
-    const res = await h.app.inject({ method: "POST", url: "/v1/campaigns", headers: auth(advertiser.token), payload: base });
+    const res = await h.app.inject({ method: "POST", url: "/v1/campaigns", headers: auth(advertiser.token), payload: base() });
     expect(res.statusCode).toBe(201);
     expect(res.json().status).toBe("draft");
   });
@@ -26,14 +36,14 @@ describe("advertising manager", () => {
   it("refuses a regulated category", async () => {
     const res = await h.app.inject({
       method: "POST", url: "/v1/campaigns", headers: auth(advertiser.token),
-      payload: { ...base, category: "gambling" },
+      payload: { ...base(), category: "gambling" },
     });
     expect(res.statusCode).toBe(400);
     expect(res.json().error.message).toMatch(/not supported/i);
   });
 
   it("moves a draft through submission and only a reviewer can approve", async () => {
-    const created = await h.app.inject({ method: "POST", url: "/v1/campaigns", headers: auth(advertiser.token), payload: base });
+    const created = await h.app.inject({ method: "POST", url: "/v1/campaigns", headers: auth(advertiser.token), payload: base() });
     const id = created.json().id;
     const submitted = await h.app.inject({ method: "POST", url: `/v1/campaigns/${id}/submit`, headers: auth(advertiser.token) });
     expect(submitted.json().status).toBe("submitted");
@@ -56,7 +66,7 @@ describe("advertising manager", () => {
 
   it("does not let another advertiser view a campaign", async () => {
     const other = await registerUser(h.app, "nosy");
-    const created = await h.app.inject({ method: "POST", url: "/v1/campaigns", headers: auth(advertiser.token), payload: base });
+    const created = await h.app.inject({ method: "POST", url: "/v1/campaigns", headers: auth(advertiser.token), payload: base() });
     const res = await h.app.inject({ method: "GET", url: `/v1/campaigns/${created.json().id}`, headers: auth(other.token) });
     expect(res.statusCode).toBe(403);
   });

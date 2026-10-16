@@ -273,6 +273,53 @@ t = await bodyText();
 check("Advertising manager opens", /Advertising/.test(t) && /New campaign/.test(t), t.replace(/\n/g, " ").slice(0, 60));
 await shot("e2e-advertising");
 
+// ---- Phase 4/5 surfaces + operator console ----
+// Events: seed one, check the list and the honest "not a reservation" copy.
+const eventRes = await fetch(`${API}/v1/events`, {
+  method: "POST", headers: shopAuth,
+  body: JSON.stringify({ title: "E2E Rooftop", startsAt: new Date(Date.now() + 86400000).toISOString(), timezone: "Africa/Lagos", city: "Lagos" }),
+});
+const eventId = (await eventRes.json()).id;
+await fetch(`${API}/v1/events/${eventId}/publish`, { method: "POST", headers: shopAuth });
+
+await rpc(ws, "Page.navigate", { url: WEB }, sessionId); await sleep(1800);
+await ev(`document.querySelector('[aria-label="Account menu"]')?.click()`); await sleep(400);
+await clickText("Events", false); await sleep(1000);
+t = await bodyText();
+check("Events screen opens and lists the event", /Events/.test(t) && /E2E Rooftop/.test(t), t.replace(/\n/g, " ").slice(0, 60));
+check("Events copy states a plan is not a reservation", /not a reservation|not a ticket/i.test(t), t.replace(/\n/g, " ").slice(0, 70));
+await shot("e2e-events");
+
+// Vibe Pass: create and see the revocable token + consent controls.
+await rpc(ws, "Page.navigate", { url: WEB }, sessionId); await sleep(1600);
+await ev(`document.querySelector('[aria-label="Account menu"]')?.click()`); await sleep(400);
+await clickText("Vibe Pass", false); await sleep(1000);
+t = await bodyText();
+const passEmpty = /No pass yet/.test(t);
+if (passEmpty) { await clickText("Create my pass", false); await sleep(900); t = await bodyText(); }
+check("Vibe Pass shows a revocable token and consent controls", /What a scan may show/i.test(t) && /Pass token/i.test(t), t.replace(/\n/g, " ").slice(0, 70));
+check("Vibe Pass offers revoke", /Revoke pass/i.test(t), t.replace(/\n/g, " ").slice(0, 60));
+await shot("e2e-pass");
+
+// AI Assist: generate a suggestion, labelled and never auto-applied.
+await rpc(ws, "Page.navigate", { url: WEB }, sessionId); await sleep(1600);
+await ev(`document.querySelector('[aria-label="Account menu"]')?.click()`); await sleep(400);
+await clickText("Assist", false); await sleep(1000);
+t = await bodyText();
+check("Assist screen opens and warns about confirmation", /generated/i.test(t) && /confirm|never sends/i.test(t), t.replace(/\n/g, " ").slice(0, 70));
+await clickText("Generate suggestion", false); await sleep(1000);
+t = await bodyText();
+check("Assist labels its output as generated with accept/dismiss", /Generated/.test(t) && /Accept/.test(t) && /Dismiss/.test(t), t.replace(/\n/g, " ").slice(0, 70));
+await shot("e2e-assist");
+
+// Operator console: reachable because the e2e actor is an admin.
+await rpc(ws, "Page.navigate", { url: WEB }, sessionId); await sleep(1600);
+await ev(`document.querySelector('[aria-label="Account menu"]')?.click()`); await sleep(400);
+await clickText("Operator console", false); await sleep(1000);
+t = await bodyText();
+check("Operator console opens with queues", /Operator console/i.test(t) && /reports/i.test(t) && /merchants/i.test(t), t.replace(/\n/g, " ").slice(0, 70));
+await shot("e2e-admin");
+
 await adminPool.end();
 
 console.log("\n==== SUMMARY ====");

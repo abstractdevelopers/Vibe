@@ -123,3 +123,25 @@ export const POST_TYPES = [
   "memory",
 ] as const;
 export type PostType = (typeof POST_TYPES)[number];
+
+/** Event lifecycle (§4.5 / Phase 4). */
+export const EVENT_STATES = ["draft", "published", "cancelled", "completed"] as const;
+export type EventState = (typeof EVENT_STATES)[number];
+
+/**
+ * Vibe Pass status (§4.9). The pass is a revocable pointer to a server-side
+ * identifier; the tag/QR itself carries no personal or payment data.
+ */
+export const PASS_STATES = ["active", "revoked", "expired"] as const;
+export type PassState = (typeof PASS_STATES)[number];
+
+export const LOYALTY_REDEMPTION_STATES = ["pending", "redeemed", "rejected", "expired"] as const;
+export type LoyaltyRedemptionState = (typeof LOYALTY_REDEMPTION_STATES)[number];
+
+/** Ad surface a campaign can be delivered to. */
+export const AD_SURFACES = ["feed", "explore"] as const;
+export type AdSurface = (typeof AD_SURFACES)[number];
+
+/** Device platforms for push registration. */
+export const DEVICE_PLATFORMS = ["ios", "android", "web"] as const;
+export type DevicePlatform = (typeof DEVICE_PLATFORMS)[number];

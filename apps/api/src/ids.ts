@@ -1,4 +1,4 @@
-import { randomUUID, randomBytes, createHmac, timingSafeEqual } from "node:crypto";
+import { randomUUID, randomBytes, createHmac, createHash, timingSafeEqual } from "node:crypto";
 
 export function newId(): string {
   return randomUUID();
@@ -19,6 +19,11 @@ export function safeEqual(a: string, b: string): boolean {
 
 export function hmacHex(secret: string, payload: string): string {
   return createHmac("sha256", secret).update(payload).digest("hex");
+}
+
+/** SHA-256 hex. Used to store secrets (session tokens, check-in codes) at rest. */
+export function sha256Hex(value: string): string {
+  return createHash("sha256").update(value).digest("hex");
 }
 
 export function nowIso(): string {

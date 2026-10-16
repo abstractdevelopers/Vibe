@@ -116,18 +116,23 @@ spec places this in a later phase or explicitly out of V1.
 - Skeletons rather than spinners — **Built**. Cursor pagination — **Built** for
   the feed.
 - Bundle budgets for JS/CSS, enforced in CI (`scripts/check-bundle.mjs`,
-  `.github/workflows/ci.yml`) — **Built**. Latency budgets, load tests, low-end
-  Android/Nigerian-network measurement — **Deferred**: these need a measurement
-  environment, and the spec says not to claim targets without measuring.
+  `.github/workflows/ci.yml`) — **Built**. A latency baseline harness
+  (`scripts/loadtest.mjs`) measures p50/p75/p95/p99 for representative reads and
+  writes and prints them for comparison over time — **Built**. The spec's
+  numeric targets are **not claimed**: this host is not the target network or
+  device class, and the spec says not to claim a target without measuring it in
+  the right environment. Low-end Android/Nigerian-network measurement stays
+  **Deferred**.
 
 ## §6 Architecture
 
 Modular monolith with clear module boundaries, PostgreSQL source of truth,
 Redis for ephemeral use, typed Fastify API — **Built**. Discovery and media are
 new modules with the same boundary discipline. Search is implemented for people
-(`/v1/search/users`) and discovery (`/v1/explore`); full-text post search is
-**Deferred**. The production image serves the built client and the API from one
-origin (`Dockerfile`), with migrations on boot; deploy and rollback are
+(`/v1/search/users`), discovery (`/v1/explore`) and full-text post search
+(`/v1/search/posts`, authorization applied in-query so a private post is not
+returned) — **Built**. The production image serves the built client and the API
+from one origin (`Dockerfile`), with migrations on boot; deploy and rollback are
 `docs/deploy.md`. Queue, CDN/media pipeline, full observability stack
 (tracing/metrics beyond structured request logs) — **Deferred**.
 
@@ -135,7 +140,10 @@ origin (`Dockerfile`), with migrations on boot; deploy and rollback are
 
 Versioned `/v1`, consistent error envelope with request id, cursor pagination,
 idempotency keys on non-repeatable writes, server-side validation, per-object
-authorization, audit logs — **Built**. OpenAPI schema publication — **Deferred**.
+authorization, audit logs — **Built**. OpenAPI is published at
+`GET /v1/openapi.json`, generated from the live route table so it cannot drift
+from the code — **Built** (route/method/auth surface; request and response
+bodies are enforced by zod at the boundary).
 
 ## §8 Trust, safety, compliance
 
@@ -144,15 +152,24 @@ audit trail, no unpaid-member shaming — **Built**. Data export
 (`GET /v1/me/export`) and account deletion with a 24-hour cooling-off window and
 cancellation (`/v1/me/delete`, `/cancel`, `/execute`) — **Built**. Notification
 preferences by type plus quiet hours, enforced server-side on fan-out —
-**Built**. Age assurance, retention schedules beyond analytics, advertiser
-verification, and legal review of Nigerian data-protection duties — **Deferred**
-and flagged for human review, as the spec requires professional advice.
+**Built**. Advertiser verification is enforced: a campaign only runs for a
+verified business, so an unverified advertiser cannot buy placement —
+**Built**. A moderated account is blocked at authentication on every request,
+not only on its next sign-in; a suspension is reversible and a ban ends live
+sessions — **Built**. Age assurance, retention schedules beyond analytics, and
+legal review of Nigerian data-protection duties — **Deferred** and flagged for
+human review, as the spec requires professional advice.
 
 ## §9 Admin console
 
-A minimal moderation queue with reports, actions and an audit log — **Built**
-(API + tests). The full staff console (lookup, appeals, merchant review,
-campaign approval, dashboards) — **Deferred**.
+Reports queue with actions and an audit trail — **Built** (API + tests). The
+staff console is **Built** for the surfaces the spec names: user lookup with
+enforced account actions (warn/restrict/suspend/ban/restore), merchant
+verification review, campaign approval/rejection, an overview of open queues,
+and an audited log of staff actions (`apps/web/src/screens/Admin.tsx`,
+`apps/api/src/modules/admin.ts`). It deliberately does not open private message
+bodies; staff access to private content stays a separate, policy-governed path.
+Appeals workflow — **Deferred**.
 
 ## §10 Analytics
 
@@ -168,18 +185,21 @@ and a warehouse export — **Deferred**.
   plan RSVP, exact expense splits, reported-never-verified-without-source,
   duplicate webhook safety, private-content authorization, audited moderation —
   **Built and covered by tests**.
-- Performance, load, device and network testing — **Deferred** (needs an
-  environment). Bundle budget is enforced in CI as a proxy for payload size.
+- Performance, load, device and network testing — **Measured, not asserted**:
+  `scripts/loadtest.mjs` produces a latency baseline on demand. The spec's
+  numeric targets remain unclaimed here because this host is not the target
+  environment. Bundle budget is enforced in CI as a proxy for payload size.
 - Security: IDOR/BOLA, webhook forgery, replay and idempotency are covered by
-  tests. Dependency/secret scanning, pen-testing payment flows — **Deferred**.
+  tests. Dependency and secret scanning run in CI on every push
+  (`npm audit --audit-level=high` for production deps, and
+  `scripts/secret-scan.mjs` over tracked files) — **Built**. Pen-testing of
+  payment flows — **Deferred** and flagged for human review.
 - CI runs typecheck, migrations, the test suite, the build and the bundle-budget
   gate on every push and pull request (`.github/workflows/ci.yml`) — **Built**.
 
 ## §12 Phased delivery
 
-The spec lays out five phases. This is where each stands. Commerce and
-advertising (Phase 3) are built at the module and API level; nothing in Phase 4
-or Phase 5 is claimed as built.
+The spec lays out five phases. This is where each stands.
 
 - **Phase 1 — social MVP.** Profiles, follow/block/mute, Circles, feed, polls,
   comments, reactions, realtime. **Built** and covered by tests.
@@ -190,13 +210,30 @@ or Phase 5 is claimed as built.
   state machine, a provider-backed checkout and a signature-verified webhook
   inbox are **Built**; the **Bachs** adapter is a real integration (credentials
   and provider/legal sign-off required). Campaign creation, review and the
-  labelled Sponsored placement are **Built**. Still **Deferred**: automated ad
+  labelled Sponsored placement are **Built**; campaigns require a business and
+  delivery only serves a verified one. Still **Deferred**: automated ad
   exchange/RTB and any regulated-category advertising.
-- **Phase 4 — IRL and events.** Check-in QR, reservations, shared memory
-  capture, video/carousel and event feed items — **Deferred**. The plan screen
-  states plainly that a plan is not a reservation.
-- **Phase 5 — Vibe Pass and AI.** Vibe Pass, IRL perks, and AI assistance that
-  drafts plans — **Deferred**.
+- **Phase 4 — IRL and events.** Events with a city/timezone, publishing, and a
+  **server-validated check-in**: a code is issued by the organizer, can expire
+  and can be revoked, and a person is checked in once (a retry is idempotent).
+  A check-in shows a "verified" badge only when a provider actually backs the
+  booking; otherwise the event says it has no verified booking. Event,
+  video/carousel and memory post types exist in the shared domain vocabulary.
+  **Built** at API + Web levels. Explicitly **not** built, per the spec's
+  VERIFY boundaries: ticketing, reservations, payments, custody and location
+  tracking — the event surface states plainly that an event is not a
+  reservation or a ticket. Shared-memory capture UI and an event feed rail —
+  **Deferred**.
+- **Phase 5 — Vibe Pass and AI.** **Vibe Pass is Built**: a revocable pointer
+  that resolves server-side, with holder-controlled sharing of display name,
+  avatar and handle, and single-use-per-nonce loyalty redemption at a merchant.
+  **AI assistance is Built**: `/v1/assist/propose` returns a labelled suggestion
+  (draft plan, activity ideas, budget split, reminder) that a person accepts or
+  dismisses; accepting records intent and creates nothing, so AI never sends,
+  books, buys or moves money. The provider is a deterministic stub behind a
+  `RemoteAssist` seam, so wiring a real model is a drop-in and is **Deferred**
+  pending credentials. IRL perks and location-aware behaviour — **Deferred**
+  (location is out of scope by design).
 
 The first-sprint vertical slice is Phase 1 + Phase 2, working end to end.
 
@@ -204,11 +241,11 @@ The first-sprint vertical slice is Phase 1 + Phase 2, working end to end.
 
 A feature counts as done when the happy path works end-to-end, loading/empty/
 error states exist, authorization is tested, accessibility is checked, and
-tests cover transitions and duplicate events. The first-sprint slice meets this
-bar, verified by an end-to-end walkthrough of every screen and flow
-(`e2e.mjs`, 35 checks) plus the API suite (82 tests). Areas that do not yet —
-offline indicators, full admin tooling, dashboards — are listed above rather
-than claimed.
+tests cover transitions and duplicate events. This now holds across all five
+phases: the full app is verified by an end-to-end walkthrough of every screen and
+flow (`e2e.mjs`, 51 checks) plus the API suite (127 tests). Areas that still do
+not meet the bar — offline indicators, dashboards, appeals — are listed above
+rather than claimed.
 
 ## §4.2 content lifecycle — delete, undo, edit, replies
 

@@ -22,7 +22,13 @@ export type Route =
   | { name: "product"; productId: string }
   | { name: "orders" }
   | { name: "order"; orderId: string }
-  | { name: "advertising" };
+  | { name: "advertising" }
+  | { name: "events" }
+  | { name: "event"; eventId: string }
+  | { name: "pass" }
+  | { name: "admin" }
+  | { name: "assist" }
+  | { name: "merchant"; merchantId: string };
 
 export interface Navigation {
   route: Route;

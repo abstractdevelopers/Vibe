@@ -56,7 +56,10 @@ export async function resetDb(pool: pg.Pool): Promise<void> {
              blocks, mutes, comments, reactions, circle_members, circle_invites,
              conversations, conversation_members, messages, post_gifts,
              post_revisions, comment_revisions, account_deletion_requests, analytics_events,
-             order_items, order_events, orders, products, merchants, campaigns
+             order_items, order_events, orders, products, merchants, campaigns,
+             ad_deliveries, ad_impressions, ad_clicks, ad_preferences,
+             events, checkin_codes, checkins, vibe_passes, loyalty_redemptions,
+             device_tokens, ai_suggestions
     RESTART IDENTITY CASCADE
   `);
 }

@@ -35,6 +35,7 @@ export interface AuthUser {
   handle: string;
   displayName: string;
   isAdmin: boolean;
+  moderationStatus: "active" | "warned" | "restricted" | "suspended" | "banned";
 }
 
 interface UserRow {
@@ -43,6 +44,7 @@ interface UserRow {
   handle: string;
   display_name: string;
   is_admin: boolean;
+  moderation_status: AuthUser["moderationStatus"];
 }
 
 export async function createSession(
@@ -62,7 +64,8 @@ export async function createSession(
 export async function resolveSession(db: Db, token: string): Promise<AuthUser | null> {
   const row = await queryOne<UserRow & { expires_at: Date; revoked_at: Date | null }>(
     db,
-    `SELECT u.id, u.email, u.handle, u.display_name, u.is_admin, s.expires_at, s.revoked_at
+    `SELECT u.id, u.email, u.handle, u.display_name, u.is_admin, u.moderation_status,
+            s.expires_at, s.revoked_at
        FROM sessions s
        JOIN users u ON u.id = s.user_id
       WHERE s.token_hash = $1 AND u.deleted_at IS NULL`,
@@ -76,6 +79,7 @@ export async function resolveSession(db: Db, token: string): Promise<AuthUser | 
     handle: row.handle,
     displayName: row.display_name,
     isAdmin: row.is_admin,
+    moderationStatus: row.moderation_status,
   };
 }
 

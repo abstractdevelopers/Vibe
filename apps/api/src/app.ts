@@ -25,6 +25,13 @@ import { accountRoutes } from "./modules/account.js";
 import { analyticsRoutes } from "./modules/analytics.js";
 import { commerceRoutes } from "./modules/commerce.js";
 import { advertisingRoutes } from "./modules/advertising.js";
+import { adsRoutes } from "./modules/ads.js";
+import { eventsRoutes } from "./modules/events.js";
+import { adminRoutes } from "./modules/admin.js";
+import { passRoutes } from "./modules/pass.js";
+import { aiRoutes } from "./modules/ai.js";
+import { pushRoutes } from "./modules/push.js";
+import { searchRoutes } from "./modules/search.js";
 import { resolveSession } from "./auth.js";
 import { bearerToken } from "./auth.js";
 import { circleIdsFor } from "./modules/access.js";
@@ -75,6 +82,43 @@ export async function buildApp(ctx: AppContext): Promise<FastifyInstance> {
   app.get("/health", async () => ({ status: "ok", provider: ctx.provider.name }));
   app.get("/v1/health", async () => ({ status: "ok" }));
 
+  // Publish a machine-readable route index. Every route is registered through
+  // this hook, so the document cannot drift from the code. Request/response
+  // body schemas are enforced by zod at the boundary; this documents the
+  // surface, methods and auth expectation.
+  const routes: Array<{ method: string; url: string }> = [];
+  app.addHook("onRoute", (route) => {
+    const method = Array.isArray(route.method) ? route.method.join(",") : route.method;
+    if (method === "HEAD" || method === "OPTIONS") return;
+    routes.push({ method, url: route.url });
+  });
+  app.get("/v1/openapi.json", async () => {
+    const paths: Record<string, Record<string, unknown>> = {};
+    // Fastify writes params as `:id`; OpenAPI uses `{id}`.
+    const toOpenApiPath = (url: string) => url.replace(/:([A-Za-z0-9_]+)/g, "{$1}");
+    for (const r of routes.sort((a, b) => a.url.localeCompare(b.url) || a.method.localeCompare(b.method))) {
+      const methods = r.method.split(",");
+      const url = toOpenApiPath(r.url);
+      for (const m of methods) {
+        if (m === "GET" && r.url === "/v1/openapi.json") continue;
+        paths[url] ??= {};
+        paths[url]![m.toLowerCase()] = {
+          summary: `${m} ${url}`,
+          // Admin and auth-gated surfaces expect a bearer session; keeping this
+          // coarse is honest — the real authorization is enforced per request.
+          security: url.startsWith("/v1/admin") ? [{ bearerAuth: [] }] : [],
+        };
+      }
+    }
+    return {
+      openapi: "3.1.0",
+      info: { title: "Vibe API", version: "1.0.0", description: "Interactive social network — conversations into activities, plans and commerce." },
+      servers: [{ url: ctx.config.PUBLIC_API_URL }],
+      components: { securitySchemes: { bearerAuth: { type: "http", scheme: "bearer" } } },
+      paths,
+    };
+  });
+
   await app.register(identityRoutes(ctx));
   await app.register(circlesRoutes(ctx));
   await app.register(feedRoutes(ctx));
@@ -93,6 +137,13 @@ export async function buildApp(ctx: AppContext): Promise<FastifyInstance> {
   await app.register(analyticsRoutes(ctx));
   await app.register(commerceRoutes(ctx));
   await app.register(advertisingRoutes(ctx));
+  await app.register(adsRoutes(ctx));
+  await app.register(eventsRoutes(ctx));
+  await app.register(adminRoutes(ctx));
+  await app.register(passRoutes(ctx));
+  await app.register(aiRoutes(ctx));
+  await app.register(pushRoutes(ctx));
+  await app.register(searchRoutes(ctx));
 
   // Realtime: chat/poll/plan updates for the circles the user belongs to.
   app.get("/v1/realtime", { websocket: true }, async (socket, req) => {

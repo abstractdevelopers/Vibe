@@ -51,6 +51,7 @@ export function ExploreScreen({ me }: { me: Me }) {
   const [kind, setKind] = useState<"all" | "event" | "place">("all");
   const [results, setResults] = useState<DiscoveryResult[] | null>(null);
   const [people, setPeople] = useState<Array<{ id: string; handle: string; displayName: string }>>([]);
+  const [posts, setPosts] = useState<Array<{ id: string; body: string | null; author: { id: string; displayName: string; handle: string } }>>([]);
   const [shops, setShops] = useState<Array<{ id: string; name: string; category: string | null }> | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -78,7 +79,8 @@ export function ExploreScreen({ me }: { me: Me }) {
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Could not load Explore");
     }
-    // People are a separate index; only meaningful once the query has substance.
+    // People and posts are separate indexes; only meaningful once the query
+    // has substance.
     if (query.trim().length >= 2) {
       try {
         const found = await api<{ users: Array<{ id: string; handle: string; displayName: string }> }>(
@@ -88,8 +90,17 @@ export function ExploreScreen({ me }: { me: Me }) {
       } catch {
         setPeople([]);
       }
+      try {
+        const found = await api<{ items: Array<{ id: string; body: string | null; author: { id: string; displayName: string; handle: string } }> }>(
+          `/v1/search/posts?q=${encodeURIComponent(query.trim())}`,
+        );
+        setPosts(found.items);
+      } catch {
+        setPosts([]);
+      }
     } else {
       setPeople([]);
+      setPosts([]);
     }
   }, [query, category, kind]);
 
@@ -188,6 +199,25 @@ export function ExploreScreen({ me }: { me: Me }) {
                   <span className="meta">@{person.handle}</span>
                 </span>
                 <ChevronRightIcon width={16} height={16} style={{ color: "var(--text-faint)" }} />
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {posts.length > 0 && (
+        <div style={{ marginBottom: "var(--space-4)" }}>
+          <p className="eyebrow">Posts</p>
+          <div className="stack">
+            {posts.map((post) => (
+              <button
+                key={post.id}
+                className="card"
+                style={{ width: "100%", textAlign: "left", cursor: "pointer" }}
+                onClick={() => nav.push({ name: "profile", userId: post.author.id })}
+              >
+                <span className="meta">@{post.author.handle}</span>
+                <p style={{ margin: "var(--space-1) 0 0" }}>{post.body}</p>
               </button>
             ))}
           </div>

@@ -185,9 +185,53 @@ test for any state transition, retry, or duplicate-event path you touch.
   (`requireAdmin`); the e2e run grants the actor admin directly, as an operator
   would be provisioned.
 - Campaigns: draft → submitted → operator review → approved/rejected. Only an
-  approved campaign is eligible to run, but approval does not place an ad:
-  automated feed delivery is deferred. Regulated categories are refused at
-  creation.
+  approved campaign for a **verified** business is eligible to run. Delivery is
+  built (`modules/ads.ts` `selectAdForViewer`, wired into `buildFeedPage` in
+  `feed.ts`): the sponsored slot is appended after the first organic item, never
+  sorted into ranking, and is frequency-capped and hideable. Metrics are
+  reported and verified **separately** — never summed into one number.
+  Regulated categories are refused at creation.
+
+## Phases 3–5 modules (events, pass, AI, push, search, admin)
+- Events and check-in live in `modules/events.ts`. A check-in code is issued by
+  the organizer, can expire and can be revoked, and is hashed (`sha256Hex`) at
+  rest. Check-in is idempotent: a retry returns `alreadyCheckedIn: true` and does
+  not create a second row. A booking is reported `verified` only when a provider
+  reference backs it — never inferred.
+- Vibe Pass (`modules/pass.ts`) is a revocable pointer. The token carries no
+  personal data; `resolve` returns only the fields the holder has consented to
+  share. Loyalty redemption is single-use per `(merchantId, nonce)` — a replay
+  returns `duplicate: true` and does not redeem again.
+- AI (`modules/ai.ts` + `ai/provider.ts`) only ever proposes. `accept` records
+  intent and creates nothing. The provider is a deterministic stub behind the
+  `RemoteAssist` seam; wiring a real model is a drop-in. Do not let an assist
+  path take a consequential action (send, book, buy, move money) without a human
+  confirmation step.
+- Push (`modules/push.ts`) stores device tokens and hints only the last 6 chars
+  in responses — never echo a raw token. Delivery is a no-op stub
+  (`deliveryProvider: "stub"`) until a real sender is configured.
+- Search (`modules/search.ts`) applies authorization **in the query**, not after
+  it, so an unauthorized row is never fetched. Keep it that way.
+- Admin (`modules/admin.ts`) enforces account actions at auth time: a moderated
+  account is blocked on every request by `requireUser`, not only at next login.
+  A suspension is reversible (sessions stay live, gated by `requireUser`); a ban
+  revokes live sessions. Every staff action writes an `audit_events` row.
+- Account moderation status lives on `users.moderation_status`
+  (`migration 0009`); `resolveSession`/`AuthUser` carry it.
+
+## Verification tooling
+- `scripts/loadtest.mjs [baseUrl] [iterations]` prints p50/p75/p95/p99 for
+  representative reads. It deliberately does **not** assert the spec's latency
+  targets — this host is not the target environment. Compare runs over time.
+- `scripts/secret-scan.mjs` scans tracked files (not `node_modules`/build) for
+  secret shapes. Narrow patterns on purpose; keep it low-noise.
+- CI runs both, plus `npm audit --audit-level=high --omit=dev`, on every push.
+  If `npm audit` flags a dependency, fix it rather than downgrading the gate:
+  `@fastify/static` was pinned `^10.x` because `8.x` had path-traversal and
+  route-guard-bypass advisories, and that module serves the web client.
+- `GET /v1/openapi.json` is generated from the live route table (`onRoute` hook
+  in `app.ts`), so it cannot drift. Fastify `:id` params are rewritten to
+  OpenAPI `{id}`. It documents routes/methods/auth; bodies stay in zod.
 
 ## Build and CI gotchas
 - The CI `verify` job sets `NODE_ENV=test` for the API suite. That env leaks

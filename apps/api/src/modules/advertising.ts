@@ -4,6 +4,7 @@ import { ApiError } from "../errors.js";
 import { queryMany, queryOne, withTransaction } from "../db.js";
 import { newId } from "../ids.js";
 import { parse, requireAdmin, requireUser, type AppContext } from "../http.js";
+import { trackSafe } from "./analytics.js";
 
 /**
  * Advertising manager (§4.8). A campaign is created as a draft, submitted for
@@ -18,7 +19,13 @@ const campaignSchema = z.object({
   name: z.string().min(1).max(160),
   objective: z.string().min(1).max(80),
   creative: z.string().min(1).max(2000),
+  creativeTitle: z.string().max(120).optional(),
+  creativeBody: z.string().max(400).optional(),
+  creativeCta: z.string().max(40).optional(),
   destinationUrl: z.string().url().max(1000),
+  // Delivery only happens for a verified business, so a campaign must name the
+  // merchant it lands on.
+  merchantId: z.string().uuid(),
   audience: z.record(z.unknown()).default({}),
   geography: z.string().max(80).optional(),
   budgetMinor: z.number().int().min(0),
@@ -45,17 +52,33 @@ export function advertisingRoutes(ctx: AppContext) {
           `The "${input.category}" category is not supported; it requires policy and legal review before it can be advertised.`,
         );
       }
+      // The advertiser must own the business the campaign lands on, and the
+      // business must at least exist. Delivery additionally requires it to be
+      // verified, so an unverified merchant can prepare a campaign but not run.
+      const merchant = await queryOne<{ owner_id: string }>(
+        ctx.pool,
+        "SELECT owner_id FROM merchants WHERE id = $1",
+        [input.merchantId],
+      );
+      if (!merchant) throw ApiError.badRequest("Unknown merchant");
+      if (merchant.owner_id !== user.id) {
+        throw ApiError.forbidden("You can only advertise for a business you own");
+      }
       const created = await queryOne<{ id: string }>(
         ctx.pool,
-        `INSERT INTO campaigns (id, advertiser_id, name, objective, creative, destination_url, audience,
+        `INSERT INTO campaigns (id, advertiser_id, merchant_id, landing_merchant_id, name, objective, creative,
+                                creative_title, creative_body, creative_cta, destination_url, audience,
                                 geography, budget_minor, currency, schedule_start, schedule_end, frequency_cap, category)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14) RETURNING id`,
+         VALUES ($1,$2,$3,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18) RETURNING id`,
         [
-          newId(), user.id, input.name, input.objective, input.creative, input.destinationUrl,
-          JSON.stringify(input.audience), input.geography ?? null, input.budgetMinor, input.currency.toUpperCase(),
+          newId(), user.id, input.merchantId, input.name, input.objective, input.creative,
+          input.creativeTitle ?? null, input.creativeBody ?? null, input.creativeCta ?? null,
+          input.destinationUrl, JSON.stringify(input.audience), input.geography ?? null,
+          input.budgetMinor, input.currency.toUpperCase(),
           input.scheduleStart ?? null, input.scheduleEnd ?? null, input.frequencyCap, input.category,
         ],
       );
+      trackSafe(ctx.pool, { name: "campaign_created", userId: user.id, properties: { entityType: "campaign", entityId: created!.id } });
       reply.code(201);
       return { id: created!.id, status: "draft" };
     });
@@ -94,18 +117,72 @@ export function advertisingRoutes(ctx: AppContext) {
           [user.id, id, JSON.stringify({ decision: next, reason: input.reason ?? null })],
         );
       });
+      if (next === "approved") {
+        trackSafe(ctx.pool, { name: "campaign_approved", userId: user.id, properties: { entityType: "campaign", entityId: id } });
+      }
       return { id, status: next };
+    });
+
+    /** An operator's queue: campaigns awaiting review, oldest first. */
+    app.get("/v1/admin/campaigns", async (req) => {
+      const user = await requireUser(ctx, req);
+      requireAdmin(user);
+      const rows = await queryMany(
+        ctx.pool,
+        `SELECT c.id, c.name, c.status, c.objective, c.category, c.creative_title,
+                c.budget_minor, c.currency, c.moderation_reason, c.created_at,
+                u.handle AS advertiser_handle, u.display_name AS advertiser_name,
+                m.name AS merchant_name, m.verification_status AS merchant_verification
+           FROM campaigns c
+           JOIN users u ON u.id = c.advertiser_id
+           LEFT JOIN merchants m ON m.id = c.landing_merchant_id
+          WHERE c.status IN ('submitted', 'under_review')
+          ORDER BY c.created_at ASC`,
+      );
+      return {
+        campaigns: rows.map((c) => ({
+          id: c.id,
+          name: c.name,
+          status: c.status,
+          objective: c.objective,
+          category: c.category,
+          creativeTitle: c.creative_title,
+          budgetMinor: c.budget_minor,
+          currency: c.currency,
+          moderationReason: c.moderation_reason,
+          createdAt: c.created_at,
+          advertiserHandle: c.advertiser_handle,
+          advertiserName: c.advertiser_name,
+          merchantName: c.merchant_name,
+          merchantVerification: c.merchant_verification,
+        })),
+      };
     });
 
     app.get("/v1/campaigns", async (req) => {
       const user = await requireUser(ctx, req);
-      const rows = await queryMany(
+      const rows = await queryMany<{
+        id: string; name: string; status: string; objective: string; category: string;
+        budget_minor: number; currency: string; created_at: string; creative_title: string | null;
+      }>(
         ctx.pool,
-        `SELECT id, name, status, objective, category, budget_minor, currency, created_at
+        `SELECT id, name, status, objective, category, budget_minor, currency, created_at, creative_title
            FROM campaigns WHERE advertiser_id = $1 ORDER BY created_at DESC`,
         [user.id],
       );
-      return { campaigns: rows };
+      return {
+        campaigns: rows.map((c) => ({
+          id: c.id,
+          name: c.name,
+          status: c.status,
+          objective: c.objective,
+          category: c.category,
+          budgetMinor: c.budget_minor,
+          currency: c.currency,
+          creativeTitle: c.creative_title,
+          createdAt: c.created_at,
+        })),
+      };
     });
 
     app.get("/v1/campaigns/:id", async (req) => {
@@ -113,8 +190,10 @@ export function advertisingRoutes(ctx: AppContext) {
       const { id } = req.params as { id: string };
       const c = await queryOne<{
         id: string; advertiser_id: string; name: string; status: string; objective: string;
-        creative: string; destination_url: string; geography: string | null; budget_minor: number;
+        creative: string; creative_title: string | null; creative_body: string | null; creative_cta: string | null;
+        destination_url: string; geography: string | null; budget_minor: number;
         currency: string; frequency_cap: number; category: string; moderation_reason: string | null;
+        landing_merchant_id: string | null;
       }>(ctx.pool, "SELECT * FROM campaigns WHERE id = $1", [id]);
       if (!c) throw ApiError.notFound("Campaign not found");
       if (c.advertiser_id !== user.id && !user.isAdmin) throw ApiError.forbidden("You cannot view this campaign");
@@ -124,6 +203,9 @@ export function advertisingRoutes(ctx: AppContext) {
         status: c.status,
         objective: c.objective,
         creative: c.creative,
+        creativeTitle: c.creative_title,
+        creativeBody: c.creative_body,
+        creativeCta: c.creative_cta,
         destinationUrl: c.destination_url,
         geography: c.geography,
         budgetMinor: c.budget_minor,
@@ -131,6 +213,7 @@ export function advertisingRoutes(ctx: AppContext) {
         frequencyCap: c.frequency_cap,
         category: c.category,
         moderationReason: c.moderation_reason,
+        merchantId: c.landing_merchant_id,
       };
     });
   };

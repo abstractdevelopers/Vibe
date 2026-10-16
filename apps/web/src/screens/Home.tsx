@@ -24,6 +24,17 @@ import { Toast, type ToastState } from "../components/Toast";
 
 export type CreateMode = "post" | "poll" | "plan" | "expense" | "media";
 
+interface SponsoredAd {
+  campaignId: string;
+  title: string;
+  body: string;
+  cta: string;
+  destinationUrl: string;
+  advertiserName: string;
+  advertiserId: string;
+  placementId: string;
+}
+
 interface Props {
   me: Me;
   refreshKey: number;
@@ -39,6 +50,7 @@ export function HomeScreen({ me, refreshKey, onChanged, onCreate }: Props) {
   const [cursor, setCursor] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [toast, setToast] = useState<ToastState | null>(null);
+  const [ad, setAd] = useState<SponsoredAd | null>(null);
 
   const notify = useCallback((next: Omit<ToastState, "id">) => {
     setToast({ ...next, id: Date.now() });
@@ -48,11 +60,12 @@ export function HomeScreen({ me, refreshKey, onChanged, onCreate }: Props) {
     setItems(null);
     setError(null);
     try {
-      const result = await api<{ items: FeedItem[]; nextCursor: string | null }>(
+      const result = await api<{ items: FeedItem[]; nextCursor: string | null; sponsored: SponsoredAd | null }>(
         `/v1/feed?limit=20${tab === "following" ? "&tab=following" : ""}`,
       );
       setItems(result.items);
       setCursor(result.nextCursor);
+      setAd(result.sponsored ?? null);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Could not load the feed");
     }
@@ -206,17 +219,31 @@ export function HomeScreen({ me, refreshKey, onChanged, onCreate }: Props) {
       )}
 
       <div className="stream">
-        {items?.map((item) => (
-          <FeedCard
-            key={item.id}
-            item={item}
-            me={me}
-            onReact={() => void toggleReaction(item)}
-            onDelete={() => void deletePost(item)}
-            notify={notify}
-            onChanged={onChanged}
-            onCreate={onCreate}
-          />
+        {/* The sponsored slot sits after the first organic item and never
+            displaces ranking — it is appended, not sorted into, the feed. */}
+        {items?.map((item, index) => (
+          <div key={item.id}>
+            <FeedCard
+              item={item}
+              me={me}
+              onReact={() => void toggleReaction(item)}
+              onDelete={() => void deletePost(item)}
+              notify={notify}
+              onChanged={onChanged}
+              onCreate={onCreate}
+            />
+            {index === 0 && ad && (
+              <SponsoredCard
+                ad={ad}
+                onHide={() => {
+                  const hidden = ad;
+                  setAd(null);
+                  void api(`/v1/ads/${hidden.campaignId}/hide`, { method: "POST" }).catch(() => undefined);
+                  notify({ message: "Ad hidden", tone: "info" });
+                }}
+              />
+            )}
+          </div>
         ))}
       </div>
 
@@ -726,3 +753,53 @@ function relativeTime(iso: string): string {
   if (days < 7) return `${days}d`;
   return new Date(iso).toLocaleDateString(undefined, { month: "short", day: "numeric" });
 }
+
+/**
+ * A real Sponsored placement. It is visually distinct and labelled, carries the
+ * advertiser's identity, and offers "Why this ad" plus a one-tap hide. The click
+ * and hide both report to the server so delivery and metrics stay honest.
+ */
+function SponsoredCard({ ad, onHide }: { ad: SponsoredAd; onHide: () => void }) {
+  const [whyOpen, setWhyOpen] = useState(false);
+  function open() {
+    // Fire-and-forget click report, then open the advertiser's destination.
+    void api(`/v1/ads/${ad.campaignId}/click`, {
+      method: "POST",
+      body: { placementId: ad.placementId, surface: "feed" },
+    }).catch(() => undefined);
+    window.open(ad.destinationUrl, "_blank", "noopener,noreferrer");
+  }
+  return (
+    <article className="post sponsored">
+      <div className="row spread" style={{ marginBottom: "var(--space-2)" }}>
+        <span className="sponsored-tag">Sponsored</span>
+        <div className="row" style={{ gap: "var(--space-2)" }}>
+          <button className="meta" onClick={() => setWhyOpen((v) => !v)} style={linkish}>
+            Why this ad
+          </button>
+          <button className="meta" onClick={onHide} style={linkish}>
+            Hide
+          </button>
+        </div>
+      </div>
+      <div className="post-head">
+        <div className="grow">
+          <div className="feed-author">{ad.advertiserName}</div>
+          <div className="meta">{ad.title}</div>
+        </div>
+      </div>
+      {whyOpen && (
+        <p className="meta" style={{ marginTop: "var(--space-2)" }}>
+          This appears because the advertiser chose a broad audience. Vibe does not target ads using
+          your private messages or sensitive traits.
+        </p>
+      )}
+      <p style={{ marginTop: "var(--space-2)" }}>{ad.body}</p>
+      <button className="btn primary" style={{ marginTop: "var(--space-3)" }} onClick={open}>
+        {ad.cta}
+      </button>
+    </article>
+  );
+}
+
+const linkish: React.CSSProperties = { background: "none", border: "none", cursor: "pointer" };

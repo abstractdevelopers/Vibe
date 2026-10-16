@@ -42,6 +42,12 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Secret scan
+        run: node scripts/secret-scan.mjs
+
+      - name: Dependency audit
+        run: npm audit --audit-level=high --omit=dev
+
       - name: Typecheck
         run: npm run typecheck
 
