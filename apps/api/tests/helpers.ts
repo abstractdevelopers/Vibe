@@ -3,6 +3,7 @@ import { createPool } from "../src/db.js";
 import { buildApp } from "../src/app.js";
 import { RealtimeHub } from "../src/realtime.js";
 import { createPaymentProvider, type PaymentProvider } from "../src/payments/provider.js";
+import { LogMailer } from "../src/modules/mailer.js";
 import type { Config } from "../src/config.js";
 import type pg from "pg";
 
@@ -21,6 +22,10 @@ export const testConfig: Config = {
   BACHS_BASE_URL: "https://sandbox-api.bachs.io",
   PUBLIC_API_URL: "http://localhost:12000",
   PUBLIC_WEB_URL: "http://localhost:12001",
+  EMAIL_API_KEY: undefined,
+  EMAIL_FROM: "Vibe <no-reply@test.local>",
+  EMAIL_BASE_URL: "https://api.resend.com",
+  PGPOOL_MAX: 10,
   isProduction: false,
 };
 
@@ -34,7 +39,7 @@ export async function createHarness(providerOverride?: PaymentProvider): Promise
   const pool = createPool(testConfig.DATABASE_URL);
   const hub = new RealtimeHub();
   const provider = providerOverride ?? createPaymentProvider("stub", testConfig.PAYMENTS_WEBHOOK_SECRET);
-  const app = await buildApp({ pool, config: testConfig, hub, provider });
+  const app = await buildApp({ pool, config: testConfig, hub, provider, mailer: new LogMailer() });
   await app.ready();
   return {
     app,
@@ -61,7 +66,8 @@ export async function resetDb(pool: pg.Pool): Promise<void> {
              events, checkin_codes, checkins, vibe_passes, loyalty_redemptions,
              device_tokens, ai_suggestions,
              activity_rooms, room_members, room_posts, room_polls, room_poll_votes,
-             activity_reminders, activity_links, room_moderation_actions, activity_link_visits
+             activity_reminders, activity_links, room_moderation_actions, activity_link_visits,
+             password_resets, email_outbox, rate_limit_counters
     RESTART IDENTITY CASCADE
   `);
 }

@@ -7,8 +7,11 @@ import pg from "pg";
  */
 pg.types.setTypeParser(20, (value: string) => Number(value));
 
-export function createPool(databaseUrl: string): pg.Pool {
-  return new pg.Pool({ connectionString: databaseUrl, max: 10 });
+export function createPool(databaseUrl: string, maxConnections = 10): pg.Pool {
+  // A bounded pool. On a single server the ceiling that matters is the
+  // database's own `max_connections`; keep this comfortably below it and
+  // reserve headroom for migrations and an operator session.
+  return new pg.Pool({ connectionString: databaseUrl, max: maxConnections });
 }
 
 export type Db = pg.Pool | pg.PoolClient;

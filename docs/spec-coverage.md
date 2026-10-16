@@ -338,6 +338,32 @@ migration `0010_activities_live.sql` and modules `activities-live.ts`,
   (`is_sponsored` + `sponsor_label`, shown distinctly from organic content).
   Sponsored polls, ticketing and merchant referrals remain **Deferred**.
 
+## Auth hardening (launch readiness)
+
+Built in migration `0011_auth_hardening.sql` and modules `mailer.ts`,
+`ratelimit.ts`.
+
+- **Password reset** — **Built**. `POST /v1/auth/forgot` always returns the same
+  response, so accounts cannot be enumerated. Only the token *hash* is stored.
+  A reset revokes every existing session. Links expire after 30 minutes and
+  cannot be reused. The web screen is `/reset?token=...`.
+- **Transactional email** — **Built** as a transactional outbox. The reset token
+  and its email are written in one transaction, so a token can never exist
+  without its email being queued. A 15-second timer drains it. The mailer is
+  selected by `EMAIL_API_KEY`; unset means the log mailer (development), and
+  production refuses to boot without a real one.
+- **Rate limiting** — **Built** on register, login, forgot and reset. Login is
+  bucketed by IP *and* email so carrier NAT does not lock out a whole network,
+  and a correct password clears the counter. The store is a database table,
+  which is sufficient for the single-instance deployment; the interface is in
+  `ratelimit.ts` so a Redis implementation can replace it without touching
+  routes.
+- **Production config guards** — **Extended**. Production now also refuses
+  `CORS_ORIGIN=*` and a missing `EMAIL_API_KEY`, alongside the existing
+  `SESSION_SECRET` and payment-provider gates.
+- **Connection pool size** — **Made configurable** (`PGPOOL_MAX`, default 10) so
+  the pool can be kept below the database's own connection ceiling.
+
 ## Why covert accounts were not built
 
 The addendum asks, in §7, for an algorithm that populates the platform as fake

@@ -401,6 +401,81 @@ await clickText("E2E Film Club", false); await sleep(1200);
 t = await bodyText();
 check("A spoiler-safe room says so", /Spoiler-safe/i.test(t), t.replace(/\n/g, " ").slice(0, 80));
 
+// ---- Password reset, end to end ----
+// Log out, request a reset, read the token out of the outbox (the log mailer
+// prints it; here we read the table directly), then set a new password through
+// the real UI and log back in with it.
+await rpc(ws, "Page.navigate", { url: WEB }, sessionId); await sleep(1400);
+await ev(`localStorage.removeItem('vibe.token')`);
+await rpc(ws, "Page.navigate", { url: WEB }, sessionId); await sleep(1600);
+await clickText("Log in", false); await sleep(600);
+t = await bodyText();
+check("Login screen offers a password reset path", /Forgot your password/i.test(t), t.replace(/\n/g, " ").slice(0, 80));
+await clickText("Forgot your password", false); await sleep(700);
+t = await bodyText();
+check("Reset request screen explains what happens", /Reset your password/i.test(t) && /send you a link/i.test(t), t.replace(/\n/g, " ").slice(0, 80));
+
+// Ask the API for a reset for the seeded account, then pull the token.
+const forgot = await fetch(`${API}/v1/auth/forgot`, {
+  method: "POST", headers: { "content-type": "application/json" },
+  body: JSON.stringify({ email: "zara@example.com" }),
+});
+check("Reset request is accepted without revealing whether the email exists", forgot.status === 202, `status ${forgot.status}`);
+const { rows: resetRows } = await adminPool.query(
+  `SELECT body FROM email_outbox WHERE to_email = 'zara@example.com' ORDER BY created_at DESC LIMIT 1`,
+);
+const resetToken = /token=([A-Za-z0-9_-]+)/.exec(resetRows[0]?.body ?? "")?.[1];
+check("A reset email is queued with a real link", Boolean(resetToken), resetToken ? "token present" : "no token");
+
+if (resetToken) {
+  const resetUrl = new URL("reset", WEB); resetUrl.searchParams.set("token", resetToken);
+  await rpc(ws, "Page.navigate", { url: resetUrl.toString() }, sessionId); await sleep(1600);
+  t = await bodyText();
+  check("The reset link opens the new-password screen", /Choose a new password/i.test(t), t.replace(/\n/g, " ").slice(0, 80));
+  await ev(`(()=>{const i=document.querySelector('#new-password');const s=Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,"value").set;s.call(i,"e2e-new-password");i.dispatchEvent(new Event("input",{bubbles:true}));})()`);
+  await sleep(200);
+  await clickText("Set new password", false); await sleep(1400);
+  t = await bodyText();
+  check("A reset password is accepted and returns to login", /changed|Log in|Email/i.test(t), t.replace(/\n/g, " ").slice(0, 80));
+
+  // The new password must actually work, through the API.
+  const relogin = await fetch(`${API}/v1/auth/login`, {
+    method: "POST", headers: { "content-type": "application/json" },
+    body: JSON.stringify({ email: "zara@example.com", password: "e2e-new-password" }),
+  });
+  check("The new password authenticates", relogin.status === 200, `status ${relogin.status}`);
+  // Reuse of the same token must fail.
+  const reuse = await fetch(`${API}/v1/auth/reset`, {
+    method: "POST", headers: { "content-type": "application/json" },
+    body: JSON.stringify({ token: resetToken, password: "another-password-x" }),
+  });
+  check("A reset token cannot be used twice", reuse.status === 400, `status ${reuse.status}`);
+
+  // Put the seeded password back, so this suite can be run again without a
+  // reseed. CI seeds before each run, but a developer re-running it locally
+  // should not have to.
+  await adminPool.query(
+    `UPDATE users SET password_hash = (SELECT password_hash FROM users WHERE handle = 'ada')
+      WHERE handle = 'zara'`,
+  );
+}
+
+// ---- Rate limiting is live on the running stack ----
+// Use a throwaway address so the spray does not fill the seeded account's
+// bucket and make this suite un-rerunnable.
+const probe = `rl-probe-${Date.now()}@example.com`;
+let blocked = 0;
+for (let i = 0; i < 12; i++) {
+  const r = await fetch(`${API}/v1/auth/login`, {
+    method: "POST", headers: { "content-type": "application/json" },
+    body: JSON.stringify({ email: probe, password: "definitely-wrong" }),
+  });
+  if (r.status === 429) blocked++;
+}
+check("Login attempts are rate limited", blocked > 0, `${blocked} blocked of 12`);
+// Leave no counters behind, so the suite starts clean next time.
+await adminPool.query(`DELETE FROM rate_limit_counters`);
+
 await adminPool.end();
 
 console.log("\n==== SUMMARY ====");

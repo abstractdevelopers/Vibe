@@ -23,8 +23,27 @@ Production refuses to boot when either of these is left at a development value:
   `BACHS_API_KEY` (and `BACHS_WEBHOOK_SECRET`) to run with the real provider.
 
 Required variables: `DATABASE_URL`, `SESSION_SECRET`, `PAYMENTS_PROVIDER`,
-`PAYMENTS_WEBHOOK_SECRET`, `PUBLIC_API_URL`. Add `NODE_ENV=production` only when
-the payment provider gate below is satisfied.
+`PAYMENTS_WEBHOOK_SECRET`, `PUBLIC_API_URL`, `PUBLIC_WEB_URL`, `CORS_ORIGIN`.
+Add `NODE_ENV=production` only when the payment and email gates below are
+satisfied.
+
+Production also refuses to boot when:
+
+- `CORS_ORIGIN` is `*` (set it to your web origin),
+- `EMAIL_API_KEY` is unset (password reset cannot deliver without a mailer).
+
+See `docs/launch-runbook.md` for the full variable list and a Coolify walkthrough.
+Note that this app is **not** a Supabase application: it is a Fastify + `pg`
+monolith with its own auth, HTTP API and WebSocket hub. The scale plan's
+Supabase/Deno/Supavisor/RLS sections do not apply.
+
+## Transactional email
+
+Password reset writes to an `email_outbox` table inside the same transaction
+that creates the token, and an interval timer drains it every 15 seconds. The
+mailer is selected by `EMAIL_API_KEY`: unset means the log mailer (development),
+set means an HTTP call to a Resend-compatible endpoint. Production requires it,
+because a user who cannot receive a reset email cannot recover their account.
 
 ## Payments (Bachs)
 

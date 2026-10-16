@@ -6,12 +6,14 @@ import { bearerToken, resolveSession, requireAdmin, type AuthUser } from "./auth
 import type { Config } from "./config.js";
 import type { RealtimeHub } from "./realtime.js";
 import type { PaymentProvider } from "./payments/provider.js";
+import type { Mailer } from "./modules/mailer.js";
 
 export interface AppContext {
   pool: pg.Pool;
   config: Config;
   hub: RealtimeHub;
   provider: PaymentProvider;
+  mailer: Mailer;
 }
 
 export interface UserLike {

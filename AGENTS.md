@@ -277,6 +277,24 @@ test for any state transition, retry, or duplicate-event path you touch.
   is staging-only and refuses a production target. Full reasoning lives in
   `docs/spec-coverage.md` under "Why covert accounts were not built".
 
+## Auth, email and rate limits
+
+- Migration `0011_auth_hardening.sql`. Modules `modules/mailer.ts`,
+  `modules/ratelimit.ts`.
+- **Email goes through the outbox.** Never call a mailer directly from a route.
+  Write to `email_outbox` inside the same transaction that needs it
+  (`queueEmail`), and let the drain timer send it.
+- **Reset responses must not differ by whether the email exists.** Keep
+  `/v1/auth/forgot` identical in every case.
+- **Store token hashes, never tokens.** Same rule as sessions.
+- **Rate-limit new auth routes.** Bucket by IP *and* the identity being tried,
+  and clear the bucket on success. `ApiError.tooManyRequests` is the 429.
+- **The rate-limit store is a table, not Redis.** It is correct for one
+  instance only. If a second instance is ever added, move it to Redis behind
+  the same interface before scaling.
+- Production refuses to boot without `EMAIL_API_KEY` and with `CORS_ORIGIN=*`.
+  Do not weaken those guards.
+
 ## Do not
 
 - Introduce floating-point money arithmetic.

@@ -9,7 +9,10 @@ import {
   bearerToken,
 } from "../auth.js";
 import { queryOne, withTransaction } from "../db.js";
-import { newId } from "../ids.js";
+import { clientIp, reset as resetLimit, hit as rateLimitHit } from "./ratelimit.js";
+import { queueEmail } from "./mailer.js";
+import { hashToken } from "../auth.js";
+import { newId, newToken } from "../ids.js";
 import { parse, publicUser, requireUser, type AppContext } from "../http.js";
 import { trackSafe } from "./analytics.js";
 
@@ -75,6 +78,9 @@ interface UserRow {
 export function identityRoutes(ctx: AppContext) {
   return async function register(app: FastifyInstance): Promise<void> {
     app.post("/v1/auth/register", async (req, reply) => {
+      // Signup is the cheapest way to fill the database with junk accounts.
+      const rl = await rateLimitHit(ctx.pool, `register:${clientIp(req.ip)}`, 10, 3600);
+      if (!rl.allowed) throw ApiError.tooManyRequests("Too many sign-up attempts. Try again later.");
       const input = parse(registerSchema, req.body);
       const passwordHash = await hashPassword(input.password);
       const user = await withTransaction(ctx.pool, async (tx) => {
@@ -104,6 +110,14 @@ export function identityRoutes(ctx: AppContext) {
 
     app.post("/v1/auth/login", async (req) => {
       const input = parse(loginSchema, req.body);
+      // Bucket by IP *and* by the email being tried, so one address cannot
+      // spray many accounts and one account cannot be sprayed from many
+      // addresses. Carrier NAT means the IP bucket alone is too blunt.
+      const bucket = `login:${clientIp(req.ip)}:${input.email.toLowerCase()}`;
+      const rl = await rateLimitHit(ctx.pool, bucket, 8, 900);
+      if (!rl.allowed) {
+        throw ApiError.tooManyRequests("Too many attempts. Try again in a few minutes.");
+      }
       const row = await queryOne<UserRow & { password_hash: string }>(
         ctx.pool,
         `SELECT id, email, handle, display_name, bio, avatar_url, is_admin, password_hash
@@ -112,6 +126,9 @@ export function identityRoutes(ctx: AppContext) {
       );
       const ok = row ? await verifyPassword(input.password, row.password_hash) : false;
       if (!row || !ok) throw ApiError.unauthorized("Invalid email or password");
+      // A correct password clears the counter so a legitimate user is not
+      // locked out by their own earlier typos.
+      await resetLimit(ctx.pool, bucket);
       const session = await createSession(ctx.pool, row.id, ctx.config.SESSION_TTL_SECONDS);
       return {
         user: { ...publicUser(row), email: row.email },
@@ -123,6 +140,78 @@ export function identityRoutes(ctx: AppContext) {
     app.post("/v1/auth/logout", async (req, reply) => {
       const token = bearerToken(req.headers.authorization);
       if (token) await revokeSession(ctx.pool, token);
+      reply.code(204);
+      return null;
+    });
+
+    // ---- Password reset ----
+    //
+    // The response is identical whether or not the email exists. That is
+    // deliberate: a different response would let anyone enumerate which emails
+    // have accounts.
+    app.post("/v1/auth/forgot", async (req, reply) => {
+      const rl = await rateLimitHit(ctx.pool, `forgot:${clientIp(req.ip)}`, 5, 900);
+      if (!rl.allowed) throw ApiError.tooManyRequests("Too many reset requests. Try again later.");
+      const input = parse(z.object({ email: z.string().email().max(254) }), req.body);
+      const user = await queryOne<{ id: string; email: string; display_name: string }>(
+        ctx.pool,
+        `SELECT id, email, display_name FROM users
+          WHERE lower(email) = lower($1) AND deleted_at IS NULL`,
+        [input.email],
+      );
+      if (user) {
+        const token = newToken(32);
+        const ttlMinutes = 30;
+        await withTransaction(ctx.pool, async (tx) => {
+          // Only the hash is stored, so a database read cannot yield a usable
+          // reset link.
+          await tx.query(
+            `INSERT INTO password_resets (id, user_id, token_hash, expires_at)
+             VALUES ($1, $2, $3, now() + ($4 || ' minutes')::interval)`,
+            [newId(), user.id, hashToken(token), String(ttlMinutes)],
+          );
+          const link = `${ctx.config.PUBLIC_WEB_URL}/reset?token=${token}`;
+          await queueEmail(tx, {
+            to: user.email,
+            subject: "Reset your Vibe password",
+            body:
+              `Hi ${user.display_name},\n\n` +
+              `Use this link within ${ttlMinutes} minutes to choose a new password:\n${link}\n\n` +
+              `If you did not ask for this, you can ignore this email — your password will not change.`,
+          });
+        });
+      }
+      reply.code(202);
+      return { status: "accepted" };
+    });
+
+    app.post("/v1/auth/reset", async (req, reply) => {
+      const rl = await rateLimitHit(ctx.pool, `reset:${clientIp(req.ip)}`, 10, 900);
+      if (!rl.allowed) throw ApiError.tooManyRequests("Too many attempts. Try again later.");
+      const input = parse(
+        z.object({ token: z.string().min(10).max(200), password: z.string().min(8).max(200) }),
+        req.body,
+      );
+      const hash = hashToken(input.token);
+      const record = await queryOne<{ id: string; user_id: string; used_at: Date | null; expires_at: Date }>(
+        ctx.pool,
+        `SELECT id, user_id, used_at, expires_at FROM password_resets WHERE token_hash = $1`,
+        [hash],
+      );
+      if (!record || record.used_at || new Date(record.expires_at).getTime() < Date.now()) {
+        throw ApiError.badRequest("This reset link is invalid or has expired");
+      }
+      const passwordHash = await hashPassword(input.password);
+      await withTransaction(ctx.pool, async (tx) => {
+        await tx.query(`UPDATE password_resets SET used_at = now() WHERE id = $1`, [record.id]);
+        await tx.query(`UPDATE users SET password_hash = $2, updated_at = now() WHERE id = $1`, [
+          record.user_id,
+          passwordHash,
+        ]);
+        // A reset means any stolen session must stop working. Revoke them all;
+        // the person resetting signs in again with the new password.
+        await tx.query(`DELETE FROM sessions WHERE user_id = $1`, [record.user_id]);
+      });
       reply.code(204);
       return null;
     });

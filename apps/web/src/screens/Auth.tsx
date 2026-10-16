@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { api, ApiError, setToken } from "../api";
 import { ArrowLeftIcon, ShieldIcon } from "../components/Icons";
 
@@ -7,13 +7,15 @@ interface Props {
 }
 
 export function AuthScreen({ onAuthenticated }: Props) {
-  const [mode, setMode] = useState<"welcome" | "signup" | "login">("welcome");
+  const [mode, setMode] = useState<"welcome" | "signup" | "login" | "forgot" | "reset">("welcome");
   const [email, setEmail] = useState("");
   const [handle, setHandle] = useState("");
   const [displayName, setDisplayName] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [resetToken, setResetToken] = useState("");
 
   async function submit() {
     setBusy(true);
@@ -32,6 +34,116 @@ export function AuthScreen({ onAuthenticated }: Props) {
     } finally {
       setBusy(false);
     }
+  }
+
+  // A reset link is /reset?token=... . The API serves index.html for that path,
+  // so the token is read here rather than through a router.
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const token = params.get("token");
+    // Collapse duplicate slashes: a proxy or a base URL ending in "/" can
+    // produce "//reset", which is still the reset screen.
+    const path = window.location.pathname.replace(/\/+/g, "/");
+    if (path === "/reset" && token) {
+      setResetToken(token);
+      setMode("reset");
+    }
+  }, []);
+
+  async function submitReset() {
+    setBusy(true);
+    setError(null);
+    setNotice(null);
+    try {
+      await api("/v1/auth/reset", { body: { token: resetToken, password } });
+      setPassword("");
+      setMode("login");
+      setNotice("Your password has been changed. Log in with your new password.");
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Something went wrong");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function requestReset() {
+    setBusy(true);
+    setError(null);
+    setNotice(null);
+    try {
+      await api("/v1/auth/forgot", { body: { email } });
+      // Same message whether or not the address has an account, so this screen
+      // cannot be used to discover who has one.
+      setNotice("If that email has a Vibe account, a reset link is on its way. Check your inbox and spam.");
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Something went wrong");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  if (mode === "reset") {
+    return (
+      <div className="auth-form-wrap">
+        <h1 className="screen-title">Choose a new password</h1>
+        <form
+          className="auth-form"
+          onSubmit={(e) => {
+            e.preventDefault();
+            void submitReset();
+          }}
+        >
+          <label htmlFor="new-password">New password</label>
+          <input
+            id="new-password"
+            type="password"
+            autoComplete="new-password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            minLength={8}
+            required
+          />
+          {error && <div className="notice danger">{error}</div>}
+          <button className="btn primary block" type="submit" disabled={busy}>
+            {busy ? "One moment…" : "Set new password"}
+          </button>
+        </form>
+      </div>
+    );
+  }
+
+  if (mode === "forgot") {
+    return (
+      <div className="auth-form-wrap">
+        <button className="btn ghost" onClick={() => setMode("login")} style={{ paddingLeft: 0 }}>
+          <ArrowLeftIcon width={18} height={18} /> Back
+        </button>
+        <h1 className="screen-title">Reset your password</h1>
+        <p className="muted">Enter your email and we will send you a link to choose a new password.</p>
+        <form
+          className="auth-form"
+          onSubmit={(e) => {
+            e.preventDefault();
+            void requestReset();
+          }}
+        >
+          <label htmlFor="forgot-email">Email</label>
+          <input
+            id="forgot-email"
+            type="email"
+            autoComplete="email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            required
+          />
+          {notice && <div className="notice">{notice}</div>}
+          {error && <div className="notice danger">{error}</div>}
+          <button className="btn primary block" type="submit" disabled={busy}>
+            {busy ? "One moment…" : "Send reset link"}
+          </button>
+        </form>
+      </div>
+    );
   }
 
   if (mode === "welcome") {
@@ -143,6 +255,18 @@ export function AuthScreen({ onAuthenticated }: Props) {
           minLength={8}
           required
         />
+
+        {notice && <div className="notice">{notice}</div>}
+        {!isSignup && (
+          <button
+            className="btn ghost"
+            type="button"
+            onClick={() => { setError(null); setNotice(null); setMode("forgot"); }}
+            style={{ paddingLeft: 0 }}
+          >
+            Forgot your password?
+          </button>
+        )}
 
         <div className="stack" style={{ marginTop: "var(--space-5)" }}>
           <button className="btn primary block" type="submit" disabled={busy}>

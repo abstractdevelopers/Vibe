@@ -28,6 +28,13 @@ const schema = z.object({
   BACHS_BASE_URL: z.string().url().default("https://sandbox-api.bachs.io"),
   PUBLIC_API_URL: z.string().default("http://localhost:12000"),
   PUBLIC_WEB_URL: z.string().default("http://localhost:12001"),
+  // Transactional email. Unset means the log mailer, which prints messages to
+  // the process log — fine for development, refused in production.
+  EMAIL_API_KEY: z.string().optional(),
+  EMAIL_FROM: z.string().default("Vibe <no-reply@vibe.app>"),
+  EMAIL_BASE_URL: z.string().url().default("https://api.resend.com"),
+  // Database connection pool ceiling. Keep below Postgres max_connections.
+  PGPOOL_MAX: z.coerce.number().int().min(1).max(200).default(10),
 });
 
 export type Config = z.infer<typeof schema> & { isProduction: boolean };
@@ -55,6 +62,15 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     }
     if (config.PAYMENTS_PROVIDER === "bachs" && !config.BACHS_WEBHOOK_SECRET) {
       throw new Error("BACHS_WEBHOOK_SECRET must be set when PAYMENTS_PROVIDER=bachs");
+    }
+    // Without a real mailer, password reset silently does nothing for users.
+    if (!config.EMAIL_API_KEY) {
+      throw new Error(
+        "EMAIL_API_KEY must be set in production; the log mailer cannot deliver password-reset email",
+      );
+    }
+    if (config.CORS_ORIGIN === "*") {
+      throw new Error("CORS_ORIGIN must be set to your web origin in production, not '*'");
     }
   }
   return { ...config, isProduction: config.NODE_ENV === "production" };
