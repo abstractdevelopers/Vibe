@@ -78,6 +78,17 @@ export async function buildApp(ctx: AppContext): Promise<FastifyInstance> {
       reply.code(apiError.status).send(errorBody(apiError, req.id));
       return;
     }
+    // A malformed id in a path is a client mistake, not a server fault. Routes
+    // take `:id` straight from the URL and pass it to Postgres, so a non-UUID
+    // reaches the database and comes back as "invalid input syntax for type
+    // uuid". That is a 404 — the thing named by that id does not exist — not a
+    // 500. Handling it here covers every route rather than 77 call sites.
+    const pgCode = (error as { code?: string }).code;
+    if (pgCode === "22P02") {
+      const apiError = new ApiError("not_found", "Not found");
+      reply.code(apiError.status).send(errorBody(apiError, req.id));
+      return;
+    }
     req.log.error(error);
     const apiError = new ApiError("internal_error", "Something went wrong");
     reply.code(apiError.status).send(errorBody(apiError, req.id));
