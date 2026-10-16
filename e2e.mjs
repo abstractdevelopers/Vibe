@@ -12,8 +12,12 @@ const WEB = process.env.WEB_URL || "https://work-2-evxhdzrcurhrlndz.prod-runtime
 const API = "http://localhost:12000";
 const PORT = 9400;
 const OUT = ".audit/";
+// CI installs Chromium at a distro path; allow an override, and make sure the
+// screenshot output directory exists.
+fs.mkdirSync(OUT, { recursive: true });
+const CHROME_BIN = process.env.CHROME_BIN || "chromium";
 
-const chrome = spawn("chromium", ["--headless=new", `--remote-debugging-port=${PORT}`, "--no-sandbox", "--disable-gpu", "--window-size=430,932", "--user-data-dir=/tmp/chrome-e2e", "about:blank"], { stdio: "ignore" });
+const chrome = spawn(CHROME_BIN, ["--headless=new", `--remote-debugging-port=${PORT}`, "--no-sandbox", "--disable-gpu", "--window-size=430,932", "--user-data-dir=/tmp/chrome-e2e", "about:blank"], { stdio: "ignore" });
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 async function wsurl() { for (let i = 0; i < 60; i++) { try { const j = await (await fetch(`http://127.0.0.1:${PORT}/json/version`)).json(); if (j.webSocketDebuggerUrl) return j.webSocketDebuggerUrl; } catch {} await sleep(200); } throw new Error("no chrome"); }
 let id = 0;
@@ -274,13 +278,14 @@ check("Advertising manager opens", /Advertising/.test(t) && /New campaign/.test(
 await shot("e2e-advertising");
 
 // ---- Phase 4/5 surfaces + operator console ----
-// Events: seed one, check the list and the honest "not a reservation" copy.
+// Events: seed one owned by the actor so the organizer controls are live, then
+// drive the real check-in flow through the UI.
 const eventRes = await fetch(`${API}/v1/events`, {
-  method: "POST", headers: shopAuth,
+  method: "POST", headers: { ...shopAuth, authorization: `Bearer ${token}` },
   body: JSON.stringify({ title: "E2E Rooftop", startsAt: new Date(Date.now() + 86400000).toISOString(), timezone: "Africa/Lagos", city: "Lagos" }),
 });
 const eventId = (await eventRes.json()).id;
-await fetch(`${API}/v1/events/${eventId}/publish`, { method: "POST", headers: shopAuth });
+await fetch(`${API}/v1/events/${eventId}/publish`, { method: "POST", headers: { ...shopAuth, authorization: `Bearer ${token}` } });
 
 await rpc(ws, "Page.navigate", { url: WEB }, sessionId); await sleep(1800);
 await ev(`document.querySelector('[aria-label="Account menu"]')?.click()`); await sleep(400);
@@ -288,36 +293,78 @@ await clickText("Events", false); await sleep(1000);
 t = await bodyText();
 check("Events screen opens and lists the event", /Events/.test(t) && /E2E Rooftop/.test(t), t.replace(/\n/g, " ").slice(0, 60));
 check("Events copy states a plan is not a reservation", /not a reservation|not a ticket/i.test(t), t.replace(/\n/g, " ").slice(0, 70));
+
+// Expand the event and exercise the real check-in interaction.
+await clickText("E2E Rooftop", false); await sleep(900);
+t = await bodyText();
+check("Event detail exposes a check-in field and organizer control",
+  (await ev(`!!document.querySelector('[aria-label="Check-in code"]')`)) &&
+  (await ev(`[...document.querySelectorAll("button")].some(b=>b.textContent.includes("Issue a check-in"))`)),
+  t.replace(/\n/g, " ").slice(0, 70));
+// Issue a code through the organizer UI, read the displayed token from its
+// monospace element, then check in with it through the same field.
+await clickText("Issue a check-in code (organizer)", false); await sleep(1000);
+const codeEl = await ev(`(()=>{const els=[...document.querySelectorAll("div")];const m=els.find(e=>{const s=getComputedStyle(e);return s.fontFamily.includes("monospace")&&/^[0-9A-Za-z_-]{12,}$/.test((e.textContent||"").trim());});return m?m.textContent.trim():"";})()`);
+check("Organizer can issue a check-in code", typeof codeEl === "string" && codeEl.length >= 12, String(codeEl).slice(0, 24));
+// Check in with that exact code through the field, then confirm the count rose.
+if (codeEl) {
+  await ev(`(()=>{const i=document.querySelector('[aria-label="Check-in code"]');const s=Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,"value").set;s.call(i,${JSON.stringify(codeEl)});i.dispatchEvent(new Event("input",{bubbles:true}));})()`);
+  await sleep(200);
+  await clickText("Check in", false); await sleep(1200);
+  t = await bodyText();
+  check("Check-in succeeds and the count reflects it", /Checked in/i.test(t) && /1 checked in/.test(t), t.replace(/\n/g, " ").slice(0, 90));
+  // A bad code must be refused (server-side validation, not just a hidden field).
+  await ev(`(()=>{const i=document.querySelector('[aria-label="Check-in code"]');const s=Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,"value").set;s.call(i,"definitely-not-a-real-code");i.dispatchEvent(new Event("input",{bubbles:true}));})()`);
+  await sleep(200);
+  await clickText("Check in", false); await sleep(1000);
+  t = await bodyText();
+  check("An invalid check-in code is refused", /invalid|not valid|no longer/i.test(t), t.replace(/\n/g, " ").slice(0, 80));
+}
 await shot("e2e-events");
 
-// Vibe Pass: create and see the revocable token + consent controls.
+// Vibe Pass: create, then flip a consent toggle and confirm it persists.
 await rpc(ws, "Page.navigate", { url: WEB }, sessionId); await sleep(1600);
 await ev(`document.querySelector('[aria-label="Account menu"]')?.click()`); await sleep(400);
 await clickText("Vibe Pass", false); await sleep(1000);
 t = await bodyText();
-const passEmpty = /No pass yet/.test(t);
-if (passEmpty) { await clickText("Create my pass", false); await sleep(900); t = await bodyText(); }
+if (/No pass yet/.test(t)) { await clickText("Create my pass", false); await sleep(900); t = await bodyText(); }
 check("Vibe Pass shows a revocable token and consent controls", /What a scan may show/i.test(t) && /Pass token/i.test(t), t.replace(/\n/g, " ").slice(0, 70));
 check("Vibe Pass offers revoke", /Revoke pass/i.test(t), t.replace(/\n/g, " ").slice(0, 60));
+const beforeUncheck = await ev(`document.querySelectorAll('.card input[type=checkbox]')[1]?.checked`);
+await ev(`document.querySelectorAll('.card input[type=checkbox]')[1]?.click()`); await sleep(800);
+await rpc(ws, "Page.navigate", { url: WEB }, sessionId); await sleep(1500);
+await ev(`document.querySelector('[aria-label="Account menu"]')?.click()`); await sleep(400);
+await clickText("Vibe Pass", false); await sleep(900);
+const afterUncheck = await ev(`document.querySelectorAll('.card input[type=checkbox]')[1]?.checked`);
+check("Pass sharing consent persists across reload", beforeUncheck !== undefined && afterUncheck === !beforeUncheck, `${beforeUncheck} -> ${afterUncheck}`);
 await shot("e2e-pass");
 
-// AI Assist: generate a suggestion, labelled and never auto-applied.
+// AI Assist: generate, then accept — and confirm nothing was created.
 await rpc(ws, "Page.navigate", { url: WEB }, sessionId); await sleep(1600);
 await ev(`document.querySelector('[aria-label="Account menu"]')?.click()`); await sleep(400);
 await clickText("Assist", false); await sleep(1000);
 t = await bodyText();
-check("Assist screen opens and warns about confirmation", /generated/i.test(t) && /confirm|never sends/i.test(t), t.replace(/\n/g, " ").slice(0, 70));
+check("Assist screen warns that a person confirms every action", /Suggestion/i.test(t) && /confirm|never sends/i.test(t), t.replace(/\n/g, " ").slice(0, 70));
 await clickText("Generate suggestion", false); await sleep(1000);
 t = await bodyText();
 check("Assist labels its output as generated with accept/dismiss", /Generated/.test(t) && /Accept/.test(t) && /Dismiss/.test(t), t.replace(/\n/g, " ").slice(0, 70));
+await clickText("Accept", false); await sleep(900);
+t = await bodyText();
+check("Accepting records intent and creates nothing", /Nothing was created/i.test(t), t.replace(/\n/g, " ").slice(0, 80));
 await shot("e2e-assist");
 
-// Operator console: reachable because the e2e actor is an admin.
+// Operator console: move between real queues and run an action.
 await rpc(ws, "Page.navigate", { url: WEB }, sessionId); await sleep(1600);
 await ev(`document.querySelector('[aria-label="Account menu"]')?.click()`); await sleep(400);
 await clickText("Operator console", false); await sleep(1000);
 t = await bodyText();
 check("Operator console opens with queues", /Operator console/i.test(t) && /reports/i.test(t) && /merchants/i.test(t), t.replace(/\n/g, " ").slice(0, 70));
+await clickText("reports", true); await sleep(700);
+t = await bodyText();
+check("Reports queue resolves to a real state", /No open reports|Remove|Limit reach|Dismiss/i.test(t), t.replace(/\n/g, " ").slice(0, 70));
+await clickText("campaigns", true); await sleep(700);
+t = await bodyText();
+check("Campaign review queue resolves to a real state", /No campaigns awaiting review|Approve|Reject/i.test(t), t.replace(/\n/g, " ").slice(0, 70));
 await shot("e2e-admin");
 
 await adminPool.end();

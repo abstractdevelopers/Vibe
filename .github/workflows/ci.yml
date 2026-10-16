@@ -67,3 +67,40 @@ jobs:
 
       - name: Enforce bundle budget
         run: node scripts/check-bundle.mjs
+
+      - name: Start API and web for end-to-end
+        # The e2e walkthrough drives the real UI against a running stack.
+        env:
+          NODE_ENV: development
+        run: |
+          npm run dev:api > /tmp/api.log 2>&1 &
+          npm run dev:web > /tmp/web.log 2>&1 &
+          for i in $(seq 1 60); do
+            curl -sf http://localhost:12000/v1/health >/dev/null && curl -sf http://localhost:12001 >/dev/null && break
+            sleep 2
+          done
+          curl -sf http://localhost:12000/v1/health >/dev/null || { cat /tmp/api.log; exit 1; }
+
+      - name: Seed demo data
+        run: |
+          python3 scripts/seed-demo.py
+          python3 scripts/seed-demo-2.py
+
+      - name: Install Chromium
+        run: sudo apt-get update && sudo apt-get install -y chromium-browser || sudo apt-get install -y chromium
+
+      - name: Run end-to-end suite
+        env:
+          WEB_URL: http://localhost:12001/
+          CHROME_BIN: chromium-browser
+        run: |
+          if ! command -v chromium-browser >/dev/null; then export CHROME_BIN=chromium; fi
+          node e2e.mjs
+
+      - name: Upload e2e artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-screenshots
+          path: .audit/*.png
+          if-no-files-found: ignore
