@@ -462,4 +462,23 @@ that is confirmed with Bachs and a lawyer.
   (`ECONNREFUSED 127.0.0.1:5432`), start the daemon (`sudo dockerd &`, then
   `sudo chmod 666 /var/run/docker.sock`) and `docker compose up -d postgres`,
   then re-run migrations.
+- **A payout only completes on a provider webhook.** Payouts are requested with a
+  `WD-` reference on the same `/v1/webhooks/payments` endpoint as collections.
+  The handler must subscribe to `payout.paid` (and `payout.failed` /
+  `payout.reversed`); before this was wired, `settlePayout` in
+  `apps/api/src/money/settlement.ts` was dead code and a payout sat at
+  `processing` forever. If you add a provider, keep the reference prefixes
+  (`GIFT-`, `WD-`) and the event-type mapping in `payments/provider.ts` aligned.
+- **Payouts are enabled per environment.** `PAYOUTS_PROVIDER=bachs` on the
+  Coolify app turns the creator-withdrawal path on; unset, every payout route
+  returns 503 by design. Bachs already has approved NGN destinations on the live
+  account, so the switch is the only gate.
+- **The mobile layout is width-driven.** There are breakpoints at 720/480/360px
+  in `apps/web/src/styles.css`. Before adding a fixed width or a `min-width`,
+  check it against 360px; the phone is the primary surface. `overflow-x: hidden`
+  on the body hides overflow rather than fixing it.
+- **Two gift sheets exist.** `GiftSheet` is the free, non-monetary cheer;
+  `PaidGiftSheet` is the real-money picker (Bachs checkout, 70/30 split). The
+  post's gift button opens the paid picker on someone else's post and the free
+  sheet on your own. Do not put price copy in the free sheet.
 
