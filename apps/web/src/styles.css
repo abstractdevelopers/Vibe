@@ -1811,6 +1811,95 @@ select {
   }
 }
 
+/* ============================================================
+   Small screens
+   ============================================================
+
+   The layout was built at one width. On a phone the 20px shell padding, the
+   fixed-position overlays and the multi-column grids ran past the viewport and
+   content was cut off. These are the only width-based breakpoints; everything
+   above 720px keeps the desktop spacing. */
+
+/* Long words, URLs and handles must wrap rather than push the column wide.
+   overflow-x: hidden on the body was hiding the symptom, not fixing it. */
+.post-body,
+.bio,
+.meta,
+.feed-author,
+.menu-head,
+.screen-title {
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 720px) {
+  :root {
+    --space-5: 16px;
+    --space-8: 24px;
+  }
+
+  .app-shell {
+    padding: var(--space-3) var(--space-4) 120px;
+  }
+
+  .topbar {
+    padding: var(--space-3) var(--space-4);
+  }
+}
+
+@media (max-width: 480px) {
+  :root {
+    --space-4: 12px;
+    --space-5: 14px;
+  }
+
+  .app-shell {
+    padding: var(--space-3) var(--space-3) 112px;
+  }
+
+  .topbar {
+    padding: var(--space-2) var(--space-3);
+  }
+
+  /* Two stat tiles or gift tiles per row, never a squeezed three. */
+  .stat-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .post-media-grid {
+    grid-template-columns: 1fr;
+  }
+
+  /* Sheets are the full width of the phone; the desktop 620px cap is moot. */
+  .sheet-inner {
+    padding: var(--space-3) var(--space-3) calc(var(--space-6) + env(safe-area-inset-bottom));
+  }
+
+  /* The account menu is anchored to the right edge; keep it on screen. */
+  .menu {
+    min-width: 0;
+    width: min(78vw, 260px);
+  }
+
+  .toast-host {
+    width: calc(100% - var(--space-3) * 2);
+  }
+
+  /* The drop zone's 220px minimum is wider than a small phone's column. */
+  .dropzone {
+    min-width: 0;
+    width: 100%;
+  }
+}
+
+@media (max-width: 360px) {
+  /* Below this the seven post actions cannot all fit; let the row scroll
+     horizontally instead of clipping the last ones. */
+  .post-actions {
+    overflow-x: auto;
+    padding-bottom: 2px;
+  }
+}
+
 
 /* ============================================================
    Switch — the settings toggles

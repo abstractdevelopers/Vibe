@@ -6,6 +6,7 @@ import {
   AtIcon,
   ChatIcon,
   CheckIcon,
+  EditIcon,
   HeartIcon,
   ShareIcon,
   UserIcon,
@@ -148,7 +149,10 @@ export function ProfileScreen({ userId, me, onChanged }: Props) {
             )}
             {isSelf && (
               <div className="row" style={{ gap: "var(--space-2)", flexWrap: "wrap" }}>
-                <button className="btn primary" onClick={() => setCardOpen(true)}>
+                <button className="btn primary" onClick={() => nav.push({ name: "edit-profile" })}>
+                  <EditIcon width={18} height={18} /> Edit profile
+                </button>
+                <button className="btn" onClick={() => setCardOpen(true)}>
                   <ShareIcon width={18} height={18} /> Share my card
                 </button>
               </div>

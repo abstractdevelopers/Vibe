@@ -22,7 +22,14 @@ export interface CheckoutSession {
 export interface ProviderPaymentEvent {
   provider: string;
   eventId: string;
-  type: "payment_succeeded" | "payment_failed" | "refund_succeeded" | "unknown";
+  type:
+    | "payment_succeeded"
+    | "payment_failed"
+    | "refund_succeeded"
+    | "payout_paid"
+    | "payout_failed"
+    | "payout_reversed"
+    | "unknown";
   providerRef: string;
   amount: Money;
   orderReference: string | null;
@@ -37,6 +44,44 @@ export interface PaymentProvider {
   }): Promise<CheckoutSession>;
   verifyWebhook(rawBody: string, signature: string | undefined, timestamp?: string): boolean;
   parseWebhook(rawBody: string): ProviderPaymentEvent;
+}
+
+/**
+ * Normalise a provider's raw event name to the internal union.
+ *
+ * Shared by every adapter so a `payout.paid` from Bachs and a `payout_paid`
+ * from the stub are the same event to the webhook handler. Payout events carry
+ * a `WD-` order reference; collection events carry a `GIFT-` one.
+ */
+export function mapProviderEventType(raw: string | undefined): ProviderPaymentEvent["type"] {
+  switch (raw) {
+    case "collection.succeeded":
+    case "checkout.completed":
+    case "payment_succeeded":
+      return "payment_succeeded";
+    case "collection.failed":
+    case "collection.underpaid":
+    case "payment_failed":
+      return "payment_failed";
+    case "refund.paid":
+    case "refund_succeeded":
+      return "refund_succeeded";
+    case "payout.paid":
+    case "payout.completed":
+    case "transfer.succeeded":
+    case "payout_paid":
+      return "payout_paid";
+    case "payout.failed":
+    case "transfer.failed":
+    case "payout_failed":
+      return "payout_failed";
+    case "payout.reversed":
+    case "transfer.reversed":
+    case "payout_reversed":
+      return "payout_reversed";
+    default:
+      return "unknown";
+  }
 }
 
 class StubPaymentProvider implements PaymentProvider {
@@ -65,7 +110,7 @@ class StubPaymentProvider implements PaymentProvider {
       // Bachs (and our own test payloads) carry the event id as `id`; the
       // normalised `eventId` is the fallback.
       eventId: parsed.eventId ?? parsed.id ?? "unknown",
-      type: parsed.type ?? "unknown",
+      type: mapProviderEventType(parsed.type),
       providerRef: parsed.providerRef ?? "unknown",
       amount: parsed.amount ?? { amount: 0, currency: "NGN" },
       orderReference: parsed.orderReference ?? null,
@@ -176,14 +221,7 @@ class BachsPaymentProvider implements PaymentProvider {
       // Bachs reports a decimal string; parse it into minor units exactly.
       amount = { amount: parseToMinorUnits(String(amountRaw), currency), currency };
     }
-    const mapped: ProviderPaymentEvent["type"] =
-      type === "collection.succeeded" || type === "checkout.completed"
-        ? "payment_succeeded"
-        : type === "collection.failed" || type === "collection.underpaid"
-          ? "payment_failed"
-          : type === "refund.paid"
-            ? "refund_succeeded"
-            : "unknown";
+    const mapped: ProviderPaymentEvent["type"] = mapProviderEventType(type);
     return {
       provider: this.name,
       eventId: parsed.id ?? "unknown",

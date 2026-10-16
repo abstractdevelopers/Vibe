@@ -83,7 +83,8 @@ export function GiftSheet({
         </div>
 
         <div className="notice">
-          <GiftIcon width={16} height={16} /> Gifts are free gestures. They carry no money, balance or value.
+          <GiftIcon width={16} height={16} /> A free cheer — no money, no balance. For a gift that carries
+          real value, use the gift button on the post.
         </div>
 
         {error && <div className="notice danger">{error}</div>}

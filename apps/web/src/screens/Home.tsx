@@ -160,7 +160,6 @@ export function HomeScreen({ me, refreshKey, onChanged, onCreate }: Props) {
             {firstName}
           </h1>
         </div>
-        <Avatar name={me.displayName} url={me.avatarUrl} />
       </div>
 
       {/* One composer. It opens the same create sheet as the centre action, so
@@ -414,14 +413,18 @@ function FeedCard({
         <button className="react-btn" onClick={() => onCreate("media")} aria-label="Add a photo">
           <ImageIcon />
         </button>
-        <button className="react-btn" onClick={() => setGifting(true)} aria-label="Send a free gift">
+        <button
+          className="react-btn"
+          onClick={() => (isMine ? setGifting(true) : setPaidGifting(true))}
+          aria-label={isMine ? "Send a free cheer" : "Send a gift"}
+        >
           <GiftIcon />
         </button>
         {!isMine && (
           <button
             className="react-btn"
-            onClick={() => setPaidGifting(true)}
-            aria-label="Send a paid gift"
+            onClick={() => setGifting(true)}
+            aria-label="Send a free cheer"
           >
             <SparklesIcon />
           </button>

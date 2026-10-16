@@ -67,6 +67,13 @@ redirect or browser event never does. Configure the Bachs webhook destination at
 `{PUBLIC_API_URL}/v1/webhooks/payments` and subscribe to at least
 `collection.succeeded`, `collection.failed` and `refund.paid`.
 
+Payouts arrive on the same endpoint and must also be subscribed: `payout.paid`
+(or `payout.completed` / `transfer.succeeded`), `payout.failed` and
+`payout.reversed`. A payout is requested with a `WD-` reference; without these
+events the payout row stays `processing` and the creator's earnings are never
+debited, so a payout would appear to hang forever. `settlePayout` is only ever
+called from this handler.
+
 Related variables: `BACHS_API_KEY`, `BACHS_WEBHOOK_SECRET`, `BACHS_BASE_URL`,
 `PUBLIC_WEB_URL`.
 

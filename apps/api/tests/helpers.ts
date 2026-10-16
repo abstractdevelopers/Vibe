@@ -4,7 +4,7 @@ import { buildApp } from "../src/app.js";
 import { RealtimeHub } from "../src/realtime.js";
 import { createPaymentProvider, type PaymentProvider } from "../src/payments/provider.js";
 import { LogMailer } from "../src/modules/mailer.js";
-import { createPayoutProvider } from "../src/payments/payouts.js";
+import { createPayoutProvider, type PayoutProvider } from "../src/payments/payouts.js";
 import type { Config } from "../src/config.js";
 import type pg from "pg";
 
@@ -37,11 +37,14 @@ export interface Harness {
   close(): Promise<void>;
 }
 
-export async function createHarness(providerOverride?: PaymentProvider): Promise<Harness> {
+export async function createHarness(
+  providerOverride?: PaymentProvider,
+  payoutsOverride?: PayoutProvider,
+): Promise<Harness> {
   const pool = createPool(testConfig.DATABASE_URL);
   const hub = new RealtimeHub();
   const provider = providerOverride ?? createPaymentProvider("stub", testConfig.PAYMENTS_WEBHOOK_SECRET);
-  const payouts = createPayoutProvider(testConfig.PAYOUTS_PROVIDER);
+  const payouts = payoutsOverride ?? createPayoutProvider(testConfig.PAYOUTS_PROVIDER);
   const app = await buildApp({ pool, config: testConfig, hub, provider, payouts, mailer: new LogMailer() });
   await app.ready();
   return {
