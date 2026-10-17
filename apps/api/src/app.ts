@@ -19,6 +19,7 @@ import { notificationsRoutes } from "./modules/notifications.js";
 import { paymentsRoutes } from "./modules/payments.js";
 import { mediaRoutes } from "./modules/media.js";
 import { rtcRoutes } from "./modules/rtc.js";
+import { battleRoutes } from "./modules/battles.js";
 import { discoveryRoutes } from "./modules/discovery.js";
 import { messagingRoutes } from "./modules/messaging.js";
 import { giftsRoutes } from "./modules/gifts.js";
@@ -199,6 +200,7 @@ export async function buildApp(ctx: AppContext): Promise<FastifyInstance> {
   await app.register(paymentsRoutes(ctx));
   await app.register(mediaRoutes(ctx));
   await app.register(rtcRoutes(ctx));
+  await app.register(battleRoutes(ctx));
   await app.register(discoveryRoutes(ctx));
   await app.register(messagingRoutes(ctx));
   await app.register(giftsRoutes(ctx));

@@ -599,3 +599,82 @@ export async function postGameRefund(
     ],
   });
 }
+
+/*
+ * Battles reuse the game pot and the game journal kinds. A battle takes no
+ * rake: the whole pot goes to the winning side. That is deliberate — a rake on
+ * a vote outcome would make this a gambling product, and Part D is explicit
+ * that a user should not have to risk money to have a voice.
+ */
+
+/** A battle stake: wallet Yens into the pot, identical to a game stake. */
+export async function postBattleStake(
+  tx: pg.PoolClient,
+  input: { reference: string; userId: string; amountMinor: number; currency: string },
+): Promise<string> {
+  const wallet = await accountId(tx, "user_wallet", input.currency, input.userId);
+  const pot = await accountId(tx, "game_pot", input.currency, null);
+  return writeJournal(tx, {
+    kind: "game_stake",
+    currency: input.currency,
+    reference: input.reference,
+    memo: "Battle stake into the pot",
+    entries: [
+      { accountId: wallet, direction: "debit", amountMinor: input.amountMinor },
+      { accountId: pot, direction: "credit", amountMinor: input.amountMinor },
+    ],
+  });
+}
+
+/**
+ * Pay the winning backers. The pot is split across the winners in proportion to
+ * what each staked, and the platform keeps nothing.
+ */
+export async function postBattlePayout(
+  tx: pg.PoolClient,
+  input: {
+    reference: string;
+    currency: string;
+    /** Each winner and the exact amount they get; must sum to the pot. */
+    payouts: Array<{ userId: string; amountMinor: number }>;
+  },
+): Promise<string> {
+  const pot = await accountId(tx, "game_pot", input.currency, null);
+  const total = input.payouts.reduce((sum, p) => sum + p.amountMinor, 0);
+  if (total <= 0) throw new Error("Battle payout with nothing to pay");
+  const entries: Entry[] = [{ accountId: pot, direction: "debit", amountMinor: total }];
+  for (const p of input.payouts) {
+    if (p.amountMinor <= 0) continue;
+    entries.push({
+      accountId: await accountId(tx, "user_wallet", input.currency, p.userId),
+      direction: "credit",
+      amountMinor: p.amountMinor,
+    });
+  }
+  return writeJournal(tx, {
+    kind: "game_payout",
+    currency: input.currency,
+    reference: input.reference,
+    memo: "Battle pot paid to the winning side",
+    entries,
+  });
+}
+
+/** A cancelled battle returns every stake in full. */
+export async function postBattleRefund(
+  tx: pg.PoolClient,
+  input: { reference: string; userId: string; amountMinor: number; currency: string },
+): Promise<string> {
+  const wallet = await accountId(tx, "user_wallet", input.currency, input.userId);
+  const pot = await accountId(tx, "game_pot", input.currency, null);
+  return writeJournal(tx, {
+    kind: "game_refund",
+    currency: input.currency,
+    reference: input.reference,
+    memo: "Battle stake refunded",
+    entries: [
+      { accountId: pot, direction: "debit", amountMinor: input.amountMinor },
+      { accountId: wallet, direction: "credit", amountMinor: input.amountMinor },
+    ],
+  });
+}

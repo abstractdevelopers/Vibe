@@ -4,7 +4,7 @@ import { useNav } from "../nav";
 import { ScreenHeader } from "../components/ScreenHeader";
 import { EmptyState } from "../components/EmptyState";
 import { GameArt, GameCover, WORLD_ORDER, worldFor } from "../components/GameArt";
-import { SpinnerIcon, UsersIcon, PlayIcon, RadioIcon, TrophyIcon } from "../components/Icons";
+import { SpinnerIcon, UsersIcon, PlayIcon, RadioIcon, TrophyIcon, SplitIcon, ChevronRightIcon } from "../components/Icons";
 import { themeForGame } from "../themes";
 import { applyTheme, pickedTheme, themeMode } from "../theme-runtime";
 import { GAME_RAKE_BPS } from "@vibe/shared";
@@ -227,6 +227,16 @@ export function GamesScreen({ onBack }: { onBack?: () => void }) {
           })}
         </div>
       </section>
+
+      {/* Battles: the same crowd energy as a table, but asynchronous. */}
+      <button className="battles-banner" onClick={() => nav.push({ name: "battles" })}>
+        <span className="battles-banner-icon" aria-hidden="true"><SplitIcon width={22} height={22} /></span>
+        <span className="battles-banner-body">
+          <span className="battles-banner-title">Battles</span>
+          <span className="meta">Two sides, one crowd. Vote free — stake only if you want to.</span>
+        </span>
+        <ChevronRightIcon width={18} height={18} />
+      </button>
 
       {/* The catalogue. */}
       {games === null && <div className="skeleton" aria-busy="true" />}

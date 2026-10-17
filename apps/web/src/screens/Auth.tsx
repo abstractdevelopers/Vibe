@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { api, ApiError, setToken } from "../api";
 import { ArrowLeftIcon, ShieldIcon } from "../components/Icons";
+import { AuthImprint } from "../components/AuthImprint";
 
 interface Props {
   onAuthenticated: () => void | Promise<void>;
@@ -148,7 +149,8 @@ export function AuthScreen({ onAuthenticated }: Props) {
 
   if (mode === "welcome") {
     return (
-      <div className="auth-hero">
+      <div className="auth-hero auth-hero-art">
+        <AuthImprint className="auth-imprint" />
         <div className="brand-mark">
           <span className="brand-orb" aria-hidden="true" />
           <span className="brand-name gradient-text">Vibe</span>

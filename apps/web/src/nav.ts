@@ -35,6 +35,8 @@ export type Route =
   | { name: "live" }
   | { name: "room"; roomId: string }
   | { name: "games" }
+  | { name: "battles" }
+  | { name: "battle"; battleId: string }
   | { name: "game"; sessionId: string };
 
 export interface Navigation {

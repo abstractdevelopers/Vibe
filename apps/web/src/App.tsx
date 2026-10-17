@@ -52,6 +52,8 @@ const AdminScreen = lazy(() => import("./screens/Admin").then((m) => ({ default:
 const AssistScreen = lazy(() => import("./screens/Assist").then((m) => ({ default: m.AssistScreen })));
 const AdvertisingScreen = lazy(() => import("./screens/Advertising").then((m) => ({ default: m.AdvertisingScreen })));
 const GamesScreen = lazy(() => import("./screens/Games").then((m) => ({ default: m.GamesScreen })));
+const BattlesScreen = lazy(() => import("./screens/Battles").then((m) => ({ default: m.BattlesScreen })));
+const BattleScreen = lazy(() => import("./screens/Battles").then((m) => ({ default: m.BattleScreen })));
 const GameTableScreen = lazy(() => import("./screens/GameTable").then((m) => ({ default: m.GameTableScreen })));
 // Settings carries the whole environment catalogue; Room Studio carries the
 // per-kind panels and the game art. Both are split out so the launch bundle
@@ -321,6 +323,16 @@ export function App() {
             {route.name === "games" && (
               <Suspense fallback={<div className="skeleton" aria-busy="true" />}>
                 <GamesScreen onBack={back} />
+              </Suspense>
+            )}
+            {route.name === "battles" && (
+              <Suspense fallback={<div className="skeleton" aria-busy="true" />}>
+                <BattlesScreen onBack={back} />
+              </Suspense>
+            )}
+            {route.name === "battle" && me && (
+              <Suspense fallback={<div className="skeleton" aria-busy="true" />}>
+                <BattleScreen battleId={route.battleId} viewerId={me.id} onBack={back} />
               </Suspense>
             )}
             {route.name === "game" && me && (
