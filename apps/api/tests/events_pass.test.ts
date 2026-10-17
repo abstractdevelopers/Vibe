@@ -42,6 +42,28 @@ describe("events, check-in, pass and loyalty", () => {
     expect(res.json().booking.verified).toBe(false);
   });
 
+  it("shows a published event to the public with no session, but not a draft", async () => {
+    const id = await makeEvent();
+    // No authorization header: an anonymous visitor can read the listing and
+    // the event itself.
+    const list = await h.app.inject({ method: "GET", url: "/v1/events" });
+    expect(list.statusCode).toBe(200);
+    expect((list.json().events as Array<{ id: string }>).some((e) => e.id === id)).toBe(true);
+    const detail = await h.app.inject({ method: "GET", url: `/v1/events/${id}` });
+    expect(detail.statusCode).toBe(200);
+
+    // A draft is not public.
+    const draft = await h.app.inject({
+      method: "POST", url: "/v1/events", headers: auth(organizer.token),
+      payload: {
+        title: "Not yet", startsAt: new Date(Date.now() + 86_400_000).toISOString(),
+        timezone: "Africa/Lagos", city: "Lagos",
+      },
+    });
+    const hidden = await h.app.inject({ method: "GET", url: `/v1/events/${draft.json().id}` });
+    expect(hidden.statusCode).toBe(404);
+  });
+
   it("checks a person in with a valid code, once", async () => {
     const id = await makeEvent();
     const codeRes = await h.app.inject({

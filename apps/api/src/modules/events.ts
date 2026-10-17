@@ -3,7 +3,7 @@ import type { FastifyInstance } from "fastify";
 import { ApiError } from "../errors.js";
 import { queryMany, queryOne, withTransaction } from "../db.js";
 import { newId, newToken, sha256Hex } from "../ids.js";
-import { parse, publicUser, requireUser, type AppContext } from "../http.js";
+import { authenticate, parse, publicUser, requireUser, type AppContext } from "../http.js";
 import { requireCircleMember, requireCircleRole } from "./access.js";
 import { trackSafe } from "./analytics.js";
 import { notifyUsers } from "./notifications.js";
@@ -137,7 +137,9 @@ export function eventsRoutes(ctx: AppContext) {
     });
 
     app.get("/v1/events", async (req) => {
-      await requireUser(ctx, req);
+      // Published events are public: anyone, signed in or not, can see what is
+      // on. Drafts and cancelled events stay private to their organizer.
+      await authenticate(ctx, req);
       const q = req.query as { city?: string; circleId?: string; limit?: string };
       const limit = Math.min(Number(q.limit ?? 20) || 20, 50);
       const rows = await queryMany<Parameters<typeof eventView>[0]>(
@@ -155,9 +157,9 @@ export function eventsRoutes(ctx: AppContext) {
     });
 
     app.get("/v1/events/:id", async (req) => {
-      await requireUser(ctx, req);
+      const viewer = await authenticate(ctx, req);
       const { id } = req.params as { id: string };
-      const e = await queryOne(
+      const e = await queryOne<Parameters<typeof eventView>[0] & { organizer_id: string; state: string }>(
         ctx.pool,
         `SELECT e.*, u.handle, u.display_name, u.avatar_url
            FROM events e JOIN users u ON u.id = e.organizer_id
@@ -165,6 +167,10 @@ export function eventsRoutes(ctx: AppContext) {
         [id],
       );
       if (!e) throw ApiError.notFound("Event not found");
+      // A published event is public; anything else is only for its organizer.
+      if (e.state !== "published" && e.organizer_id !== viewer?.id && !viewer?.isAdmin) {
+        throw ApiError.notFound("Event not found");
+      }
       const checkins = await queryMany<{ user_id: string }>(
         ctx.pool,
         "SELECT user_id FROM checkins WHERE event_id = $1",
