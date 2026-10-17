@@ -870,5 +870,14 @@ Gotchas the harnesses encode, in case you write new checks:
   sets CSP, nosniff, X-Frame-Options and Permissions-Policy on every response,
   and HSTS only when `x-forwarded-proto` is https. None of it touches SSH, ufw,
   or the Docker firewall — a "harden the app" request must not change host
-  access. `/v1/openapi.json` documents every route; the CSP is strict because the
-  API and web client are same-origin (one image).
+  access. `/v1/openapi.json` documents every route. `connect-src` names the API
+  origin (from `PUBLIC_API_URL`) so the cross-origin web client can reach it; do
+  not shrink it back to `'self'`.
+- **Stored media is a path, and must be resolved against the API origin.** The
+  API returns `/v1/media/<id>` — never an absolute URL — so the same row renders
+  on any host. A bare path in an `<img>` resolves against the *web* host and
+  404s, so every render site goes through `mediaSrc()` (`apps/web/src/api.ts`),
+  which resolves relative paths against `VITE_API_URL` and leaves absolute,
+  `data:` and `blob:` URLs untouched. Raw binary uploads likewise use
+  `apiUrl()`. Miss either and images silently 404 while the upload itself
+  succeeds, which reads as "upload is broken".
