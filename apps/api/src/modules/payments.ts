@@ -161,7 +161,7 @@ export function paymentsRoutes(ctx: AppContext) {
         [event.provider, event.eventId],
       );
       reply.code(202);
-      return { status: "accepted", eventId: event.eventId, type: event.type, orderUpdated: applied, gift, ticket, payout };
+      return { status: "accepted", eventId: event.eventId, type: event.type, orderUpdated: applied, gift, ticket, wallet, payout };
     });
 
     app.get("/v1/payments/attempts/:providerRef", async (req) => {
