@@ -36,6 +36,7 @@ import { activityRoutes } from "./modules/activities-live.js";
 import { locationRoutes } from "./modules/location.js";
 import { launchRoutes } from "./modules/launch.js";
 import { moneyRoutes } from "./modules/money.js";
+import { walletRoutes } from "./modules/wallet.js";
 import { resolveSession } from "./auth.js";
 import { bearerToken } from "./auth.js";
 import { circleIdsFor } from "./modules/access.js";
@@ -163,6 +164,7 @@ export async function buildApp(ctx: AppContext): Promise<FastifyInstance> {
   await app.register(locationRoutes(ctx));
   await app.register(launchRoutes(ctx));
   await app.register(moneyRoutes(ctx));
+  await app.register(walletRoutes(ctx));
 
   // Realtime: chat/poll/plan updates for the circles the user belongs to.
   app.get("/v1/realtime", { websocket: true }, async (socket, req) => {
@@ -179,7 +181,40 @@ export async function buildApp(ctx: AppContext): Promise<FastifyInstance> {
     const circleIds = await circleIdsFor(ctx.pool, user.id);
     const unsubscribe = ctx.hub.subscribe(socket, user.id, circleIds);
     socket.send(JSON.stringify({ type: "realtime.ready", entityId: user.id, payload: { circleIds } }));
-    socket.on("close", unsubscribe);
+
+    // Inbound frames are only used for room presence and WebRTC signalling.
+    // Everything durable (a gift, a message, a stage change) still goes through
+    // an HTTP route that authorizes and persists it; the socket never writes.
+    socket.on("message", (raw: Buffer) => {
+      let msg: { type?: string; roomId?: string; to?: string; payload?: unknown };
+      try {
+        msg = JSON.parse(raw.toString());
+      } catch {
+        return;
+      }
+      if (!msg?.type || !msg.roomId) return;
+      if (msg.type === "room.join") {
+        ctx.hub.joinRoom(socket, msg.roomId);
+        return;
+      }
+      if (msg.type === "room.leave") {
+        ctx.hub.leaveRoom(socket, msg.roomId);
+        return;
+      }
+      // WebRTC signalling: relay to the room, addressed to one peer. The server
+      // is a dumb relay here; it never inspects or stores the SDP/ICE.
+      if (msg.type === "rtc.offer" || msg.type === "rtc.answer" || msg.type === "rtc.ice") {
+        ctx.hub.publishToRoom(
+          msg.roomId,
+          { type: msg.type, entityId: msg.roomId, payload: { from: user.id, to: msg.to, data: msg.payload } },
+          socket,
+        );
+      }
+    });
+
+    socket.on("close", () => {
+      unsubscribe();
+    });
   });
 
   // When the web client has been built into the image, serve it from the same

@@ -25,6 +25,9 @@ import { Avatar } from "../components/Avatar";
 import { MediaGrid } from "../components/MediaView";
 import { Toast, type ToastState } from "../components/Toast";
 
+/** A paid placement appears after this many organic posts in the feed. */
+const SPONSORED_AFTER = 15;
+
 export type CreateMode = "post" | "poll" | "plan" | "expense" | "media";
 
 interface SponsoredAd {
@@ -239,8 +242,9 @@ export function HomeScreen({ me, refreshKey, onChanged, onCreate }: Props) {
       )}
 
       <div className="stream">
-        {/* The sponsored slot sits after the first organic item and never
-            displaces ranking — it is appended, not sorted into, the feed. */}
+        {/* A paid placement is inserted after the 15th organic post, never
+            displacing ranking — the feed leads with people, and a brand only
+            appears once the viewer has scrolled past a screenful. */}
         {items?.map((item, index) => (
           <div key={item.id}>
             <FeedCard
@@ -252,7 +256,7 @@ export function HomeScreen({ me, refreshKey, onChanged, onCreate }: Props) {
               onChanged={onChanged}
               onCreate={onCreate}
             />
-            {index === 0 && ad && (
+            {index === SPONSORED_AFTER && ad && (
               <SponsoredCard
                 ad={ad}
                 onHide={() => {

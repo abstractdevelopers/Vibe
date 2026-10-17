@@ -1,8 +1,8 @@
 import { useState } from "react";
-import { api } from "./api";
+import { api, getToken } from "./api";
 
 const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
-const MAX_VIDEO_BYTES = 25 * 1024 * 1024;
+const MAX_VIDEO_BYTES = 200 * 1024 * 1024;
 
 /** A stored media URL ends in the extension the API assigned. */
 export function isVideoUrl(url: string): boolean {
@@ -12,15 +12,11 @@ export function isVideoUrl(url: string): boolean {
 /**
  * Client-side image preparation.
  *
- * The spec asks for client-side resize/compress before upload and for uploads
- * that do not block the composer. We downscale to a sensible longest edge and
- * re-encode as JPEG so a phone photo does not arrive at full sensor size. The
- * upload itself goes through the media boundary, which returns an opaque URL.
- *
- * Video is deliberately not re-encoded here: a browser cannot transcode without
- * a WASM codec, which is not worth the bundle. A clip is size-capped and sent
- * as-is; a signed-URL direct-to-bucket flow is the real answer once a provider
- * is chosen.
+ * We downscale to a sensible longest edge and re-encode as JPEG so a phone
+ * photo does not arrive at full sensor size. Video is never read into memory or
+ * base64-encoded: a clip is uploaded as raw bytes (see `uploadRawFile`), which
+ * is what lets a real phone video upload at all. The old path read the whole
+ * clip into a base64 data URL, which is the "could not read that file" failure.
  */
 async function compress(file: File, maxEdge = 1600): Promise<string> {
   const bitmap = await createImageBitmap(file);
@@ -32,15 +28,6 @@ async function compress(file: File, maxEdge = 1600): Promise<string> {
   if (!context) throw new Error("Canvas is unavailable in this browser");
   context.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
   return canvas.toDataURL("image/jpeg", 0.82);
-}
-
-function readAsDataUrl(file: File): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(reader.result as string);
-    reader.onerror = () => reject(new Error("Could not read that file"));
-    reader.readAsDataURL(file);
-  });
 }
 
 /**
@@ -55,12 +42,31 @@ export async function uploadImageFile(file: File, maxEdge = 512): Promise<string
   return result.url;
 }
 
+/** Upload any file as raw bytes. No base64, so a large clip never inflates. */
+export async function uploadRawFile(file: File): Promise<string> {
+  const token = getToken();
+  const res = await fetch("/v1/media/upload", {
+    method: "POST",
+    headers: {
+      "content-type": file.type || "application/octet-stream",
+      ...(token ? { authorization: `Bearer ${token}` } : {}),
+    },
+    body: file,
+  });
+  const text = await res.text();
+  const data = text ? JSON.parse(text) : null;
+  if (!res.ok) throw new Error(data?.error?.message ?? "Could not upload that file");
+  return data.url as string;
+}
+
 export interface PendingMedia {
-  /** Local preview source: a data URL for images, an object URL for video. */
+  /** Local preview: an object URL for video, a data URL for image. */
   preview: string;
-  /** Payload held until publish. */
-  dataUrl: string;
   kind: "image" | "video";
+  /** Images are held as a compressed data URL. */
+  dataUrl?: string;
+  /** Video is held as the original file and uploaded as raw bytes. */
+  file?: File;
 }
 
 export function useMediaUpload() {
@@ -80,20 +86,27 @@ export function useMediaUpload() {
           continue;
         }
         if (isVideo && file.size > MAX_VIDEO_BYTES) {
-          setError("Videos must be 25 MB or smaller");
+          setError("Videos must be 200 MB or smaller");
           continue;
         }
         if (isImage && file.size > MAX_IMAGE_BYTES) {
           setError("Images must be 5 MB or smaller");
           continue;
         }
-        const dataUrl = isVideo ? await readAsDataUrl(file) : await compress(file);
+        let item: PendingMedia;
+        if (isVideo) {
+          // Keep the file as-is; the browser can preview it from an object URL.
+          item = { preview: URL.createObjectURL(file), kind: "video", file };
+        } else {
+          const dataUrl = await compress(file);
+          item = { preview: dataUrl, kind: "image", dataUrl };
+        }
         setItems((prev) => {
           // A post is either up to four photos or a single clip.
           if (prev.length >= 4) return prev;
           if (isVideo && prev.length > 0) return prev;
           if (!isVideo && prev.some((p) => p.kind === "video")) return prev;
-          return [...prev, { preview: dataUrl, dataUrl, kind: isVideo ? "video" : "image" }];
+          return [...prev, item];
         });
       }
     } catch (err) {
@@ -104,15 +117,23 @@ export function useMediaUpload() {
   }
 
   function remove(index: number) {
-    setItems((prev) => prev.filter((_, i) => i !== index));
+    setItems((prev) => {
+      const item = prev[index];
+      if (item?.kind === "video") URL.revokeObjectURL(item.preview);
+      return prev.filter((_, i) => i !== index);
+    });
   }
 
   /** Upload everything held and return the stored URLs. */
   async function upload(): Promise<string[]> {
     const urls: string[] = [];
     for (const item of items) {
-      const result = await api<{ url: string }>("/v1/media", { body: { dataUrl: item.dataUrl } });
-      urls.push(result.url);
+      if (item.kind === "video" && item.file) {
+        urls.push(await uploadRawFile(item.file));
+      } else if (item.dataUrl) {
+        const result = await api<{ url: string }>("/v1/media", { body: { dataUrl: item.dataUrl } });
+        urls.push(result.url);
+      }
     }
     return urls;
   }

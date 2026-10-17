@@ -67,6 +67,7 @@ const NOTIFICATION_FAMILY: Record<string, string> = {
   "gift.received": "gift",
   "comment.reply": "comment_reply",
   "comment.mention": "mention",
+  "wallet.received": "wallet",
 };
 
 /**

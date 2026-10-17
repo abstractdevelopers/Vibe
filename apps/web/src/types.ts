@@ -158,6 +158,12 @@ export interface PublicProfile extends PublicUser {
   interests: string[];
   profileAudience: string;
   followerCount: number;
+  /** The viewer follows this account (accepted). */
+  viewerFollows?: boolean;
+  /** The viewer's follow request is pending. */
+  viewerRequested?: boolean;
+  /** The viewer has blocked this account. */
+  viewerHasBlocked?: boolean;
 }
 
 export interface ConversationSummary {

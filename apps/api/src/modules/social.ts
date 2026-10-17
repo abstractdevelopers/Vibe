@@ -72,11 +72,27 @@ export function socialRoutes(ctx: AppContext) {
         "SELECT count(*) AS count FROM follows WHERE followee_id = $1 AND state = 'accepted'",
         [id],
       );
+      // The viewer's own relationship to this profile, so the buttons can show
+      // the true state (Followed / Blocked) instead of always offering the
+      // action again.
+      const viewerFollows = await queryOne<{ state: string }>(
+        ctx.pool,
+        "SELECT state FROM follows WHERE follower_id = $1 AND followee_id = $2",
+        [user.id, id],
+      );
+      const viewerHasBlocked = await queryOne(
+        ctx.pool,
+        "SELECT 1 FROM blocks WHERE blocker_id = $1 AND blocked_id = $2",
+        [user.id, id],
+      );
       return {
         ...publicUser(row),
         interests: row.interests,
         profileAudience: row.profile_audience,
         followerCount: followerCount?.count ?? 0,
+        viewerFollows: Boolean(viewerFollows && viewerFollows.state === "accepted"),
+        viewerRequested: Boolean(viewerFollows && viewerFollows.state === "pending"),
+        viewerHasBlocked: Boolean(viewerHasBlocked),
       };
     });
 

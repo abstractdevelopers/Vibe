@@ -27,6 +27,8 @@ const purchaseSchema = z.object({
   quantity: z.number().int().min(1).max(100).default(1),
   recipientId: z.string().uuid(),
   postId: z.string().uuid().optional(),
+  // A paid gift can be sent inside a live room as well as on a post.
+  roomId: z.string().uuid().optional(),
 });
 
 const destinationSchema = z.object({
@@ -124,11 +126,12 @@ export function moneyRoutes(ctx: AppContext) {
           const purchaseId = newId();
           await ctx.pool.query(
             `INSERT INTO gift_purchases
-               (id, buyer_id, recipient_id, post_id, gift_id, quantity, unit_price_minor,
+               (id, buyer_id, recipient_id, post_id, room_id, gift_id, quantity, unit_price_minor,
                 fee_bps, amount_minor, fee_minor, recipient_minor, currency, reference, provider)
-             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)`,
+             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)`,
             [
-              purchaseId, user.id, input.recipientId, input.postId ?? null, gift.id, input.quantity,
+              purchaseId, user.id, input.recipientId, input.postId ?? null, input.roomId ?? null,
+              gift.id, input.quantity,
               unitPrice, gift.fee_bps, amountMinor, feeMinor, recipientMinor, gift.currency,
               reference, ctx.provider.name,
             ],

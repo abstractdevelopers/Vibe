@@ -66,15 +66,32 @@ export function ProfileScreen({ userId, me, onChanged }: Props) {
     }
   }
 
+  async function unfollow() {
+    setBusy(true);
+    try {
+      await api(`/v1/follows/${userId}`, { method: "DELETE" });
+      await load();
+      onChanged();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Could not unfollow");
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function block() {
     setBusy(true);
     try {
-      await api(`/v1/users/${userId}/block`, { method: "POST" });
+      if (profile?.viewerHasBlocked) {
+        await api(`/v1/users/${userId}/block`, { method: "DELETE" });
+      } else {
+        await api(`/v1/users/${userId}/block`, { method: "POST" });
+      }
       setError(null);
       await load();
       onChanged();
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Could not block");
+      setError(err instanceof ApiError ? err.message : "Could not update the block");
     } finally {
       setBusy(false);
     }
@@ -129,31 +146,42 @@ export function ProfileScreen({ userId, me, onChanged }: Props) {
             </div>
 
             {!isSelf && (
-              <div className="row" style={{ gap: "var(--space-2)", flexWrap: "wrap" }}>
-                <button className="btn primary grow" onClick={() => void follow()} disabled={busy}>
-                  <UsersIcon width={18} height={18} /> Follow
+              <div className="profile-actions">
+                {profile.viewerFollows ? (
+                  <button className="btn small" onClick={() => void unfollow()} disabled={busy}>
+                    <CheckIcon width={15} height={15} /> Following
+                  </button>
+                ) : (
+                  <button className="btn primary small" onClick={() => void follow()} disabled={busy}>
+                    <UsersIcon width={15} height={15} /> {profile.viewerRequested ? "Requested" : "Follow"}
+                  </button>
+                )}
+                <button className="btn small" onClick={() => void message()} disabled={busy}>
+                  <ChatIcon width={15} height={15} /> Message
                 </button>
-                <button className="btn" onClick={() => void message()} disabled={busy}>
-                  <ChatIcon width={18} height={18} /> Message
+                <button className="btn small" onClick={() => setCardOpen(true)}>
+                  <ShareIcon width={15} height={15} /> Share card
                 </button>
-                <button className="btn" onClick={() => setCardOpen(true)}>
-                  <ShareIcon width={18} height={18} /> Share card
+                <button
+                  className={`btn small${profile.viewerHasBlocked ? " danger" : ""}`}
+                  onClick={() => void block()}
+                  disabled={busy}
+                  aria-pressed={profile.viewerHasBlocked}
+                >
+                  <ShieldIcon width={15} height={15} /> {profile.viewerHasBlocked ? "Blocked" : "Block"}
                 </button>
-                <button className="btn" onClick={() => void block()} disabled={busy}>
-                  <ShieldIcon width={18} height={18} /> Block
-                </button>
-                <button className="btn ghost" onClick={() => setReporting(true)} aria-label="Report this profile">
+                <button className="btn small ghost" onClick={() => setReporting(true)} aria-label="Report this profile">
                   Report
                 </button>
               </div>
             )}
             {isSelf && (
-              <div className="row" style={{ gap: "var(--space-2)", flexWrap: "wrap" }}>
-                <button className="btn primary" onClick={() => nav.push({ name: "edit-profile" })}>
-                  <EditIcon width={18} height={18} /> Edit profile
+              <div className="profile-actions">
+                <button className="btn primary small" onClick={() => nav.push({ name: "edit-profile" })}>
+                  <EditIcon width={15} height={15} /> Edit profile
                 </button>
-                <button className="btn" onClick={() => setCardOpen(true)}>
-                  <ShareIcon width={18} height={18} /> Share my card
+                <button className="btn small" onClick={() => setCardOpen(true)}>
+                  <ShareIcon width={15} height={15} /> Share my card
                 </button>
               </div>
             )}

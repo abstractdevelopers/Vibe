@@ -77,6 +77,12 @@ export const ANALYTICS_EVENTS = [
   "spoiler_revealed",
   "location_enabled",
   "location_cleared",
+  // Vibe Yens (stored balance). Gated behind WALLET_ENABLED; the event names
+  // are allow-listed here so the ledger surface reports consistently when on.
+  "wallet_topup_started",
+  "wallet_topup_settled",
+  "wallet_sent",
+  "wallet_received",
 ] as const;
 
 export type AnalyticsEventName = (typeof ANALYTICS_EVENTS)[number];

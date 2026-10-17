@@ -56,6 +56,7 @@ interface RoomRow {
   cohost_id: string | null;
   ticket_price_minor: string;
   banner_url: string | null;
+  hype: number;
   host_handle?: string;
   host_name?: string;
   host_kind?: string;
@@ -121,6 +122,8 @@ function serializeRoom(room: RoomRow, now = new Date()) {
     // price; the server enforces it on join.
     ticketPriceMinor: Number(room.ticket_price_minor ?? 0),
     isTicketed: Number(room.ticket_price_minor ?? 0) > 0,
+    // Energy: reactions and gifts in the last hour. Drives the live "hot" badge.
+    hype: Number(room.hype ?? 0),
   };
 }
 
@@ -670,7 +673,259 @@ export function activityRoutes(ctx: AppContext) {
       );
       return { room: await loadRoom(ctx, id, user.id) };
     });
+
+    // ---- Edit / delete (host) ----
+    app.patch("/v1/activities/rooms/:id", async (req) => {
+      const user = await requireUser(ctx, req);
+      const { id } = req.params as { id: string };
+      await assertHost(ctx, id, user.id);
+      const input = parse(
+        z.object({
+          title: z.string().min(1).max(160).optional(),
+          topic: z.string().max(400).nullable().optional(),
+          rules: z.string().max(1000).nullable().optional(),
+          city: z.string().max(80).nullable().optional(),
+          area: z.string().max(80).nullable().optional(),
+          bannerUrl: z.string().max(500).nullable().optional(),
+          visibility: z.enum(["public", "private"]).optional(),
+          ticketPriceMinor: z.coerce.number().int().min(0).max(100_000_000).optional(),
+          audioTrack: z
+            .object({ title: z.string().min(1).max(200), artist: z.string().max(200).optional(), artworkUrl: z.string().max(500).optional() })
+            .nullable()
+            .optional(),
+          startsAt: z.coerce.date().optional(),
+          endsAt: z.coerce.date().optional(),
+        }),
+        req.body,
+      );
+      const sets: string[] = [];
+      const values: unknown[] = [id];
+      const put = (col: string, val: unknown) => {
+        values.push(val);
+        sets.push(`${col} = $${values.length}`);
+      };
+      if (input.title !== undefined) put("title", input.title);
+      if (input.topic !== undefined) put("topic", input.topic);
+      if (input.rules !== undefined) put("rules", input.rules);
+      if (input.city !== undefined) put("city", input.city);
+      if (input.area !== undefined) put("area", input.area);
+      if (input.bannerUrl !== undefined) put("banner_url", input.bannerUrl);
+      if (input.visibility !== undefined) put("visibility", input.visibility);
+      if (input.ticketPriceMinor !== undefined) put("ticket_price_minor", input.ticketPriceMinor);
+      if (input.audioTrack !== undefined) put("audio_track", input.audioTrack ? JSON.stringify(input.audioTrack) : null);
+      if (input.startsAt !== undefined) put("starts_at", input.startsAt);
+      if (input.endsAt !== undefined) put("ends_at", input.endsAt);
+      if (sets.length === 0) throw ApiError.badRequest("Nothing to update");
+      await ctx.pool.query(`UPDATE activity_rooms SET ${sets.join(", ")}, edited_at = now() WHERE id = $1`, values);
+      const room = await loadRoom(ctx, id, user.id);
+      ctx.hub.publishToRoom(id, { type: "room.updated", entityId: id, payload: { room } });
+      return { room };
+    });
+
+    app.delete("/v1/activities/rooms/:id", async (req, reply) => {
+      const user = await requireUser(ctx, req);
+      const { id } = req.params as { id: string };
+      await assertHost(ctx, id, user.id);
+      // A room with a paid ticket history is ended rather than deleted, so the
+      // money trail stays intact; a free room is removed outright.
+      const paid = await queryOne<{ n: string }>(
+        ctx.pool,
+        `SELECT count(*)::int AS n FROM room_tickets WHERE room_id = $1`,
+        [id],
+      );
+      if (Number(paid?.n ?? 0) > 0) {
+        await ctx.pool.query(`UPDATE activity_rooms SET state_override = 'ended', edited_at = now() WHERE id = $1`, [id]);
+        ctx.hub.publishToRoom(id, { type: "room.ended", entityId: id, payload: {} });
+        return { id, deleted: false, ended: true };
+      }
+      await ctx.pool.query(`DELETE FROM activity_rooms WHERE id = $1`, [id]);
+      ctx.hub.publishToRoom(id, { type: "room.deleted", entityId: id, payload: {} });
+      reply.code(200);
+      return { id, deleted: true, ended: false };
+    });
+
+    // ---- Stage & audience (voice/listen rooms) ----
+    app.get("/v1/activities/rooms/:id/members", async (req) => {
+      const user = await requireUser(ctx, req);
+      const { id } = req.params as { id: string };
+      await assertCanSee(ctx, id, user.id);
+      const rows = await queryMany<{
+        user_id: string; role: string; hand_raised: boolean; muted: boolean; muted_by_host: boolean;
+        handle: string; display_name: string; avatar_url: string | null; host_kind: string;
+      }>(
+        ctx.pool,
+        `SELECT m.user_id, m.role, m.hand_raised, m.muted, m.muted_by_host,
+                u.handle, u.display_name, u.avatar_url, u.host_kind
+           FROM room_members m JOIN users u ON u.id = m.user_id
+          WHERE m.room_id = $1
+          ORDER BY (m.role = 'host') DESC, (m.role = 'speaker') DESC, m.joined_at ASC
+          LIMIT 200`,
+        [id],
+      );
+      const stage = rows.filter((r) => r.role === "host" || r.role === "speaker" || r.role === "moderator");
+      const audience = rows.filter((r) => !(r.role === "host" || r.role === "speaker" || r.role === "moderator"));
+      const view = (r: typeof rows[number]) => ({
+        id: r.user_id,
+        handle: r.handle,
+        displayName: r.display_name,
+        avatarUrl: r.avatar_url,
+        role: r.role,
+        hostKind: r.host_kind,
+        handRaised: r.hand_raised,
+        muted: r.muted || r.muted_by_host,
+        mutedByHost: r.muted_by_host,
+      });
+      return {
+        stage: stage.map(view),
+        audience: audience.map(view),
+        stageCount: stage.length,
+        audienceCount: audience.length,
+      };
+    });
+
+    // Raise or lower a hand: the listener asks to be brought up.
+    app.post("/v1/activities/rooms/:id/hand", async (req) => {
+      const user = await requireUser(ctx, req);
+      const { id } = req.params as { id: string };
+      const input = parse(z.object({ raised: z.boolean() }), req.body);
+      await ctx.pool.query(
+        `INSERT INTO room_members (room_id, user_id, hand_raised) VALUES ($1,$2,$3)
+         ON CONFLICT (room_id, user_id) DO UPDATE SET hand_raised = EXCLUDED.hand_raised`,
+        [id, user.id, input.raised],
+      );
+      ctx.hub.publishToRoom(id, {
+        type: "room.hand",
+        entityId: id,
+        payload: { userId: user.id, handle: user.handle, raised: input.raised },
+      });
+      return { raised: input.raised };
+    });
+
+    // Bring a listener up to the stage, or send a speaker back to the audience.
+    app.post("/v1/activities/rooms/:id/stage", async (req) => {
+      const user = await requireUser(ctx, req);
+      const { id } = req.params as { id: string };
+      const input = parse(
+        z.object({
+          userId: z.string().uuid(),
+          action: z.enum(["promote", "demote", "mute", "unmute"]),
+        }),
+        req.body,
+      );
+      await assertHost(ctx, id, user.id);
+      const room = await queryOne<{ kind: string }>(ctx.pool, `SELECT kind FROM activity_rooms WHERE id = $1`, [id]);
+      if (room && !["voice", "listen", "other"].includes(room.kind)) {
+        throw ApiError.badRequest("This room kind does not have a stage");
+      }
+      if (input.action === "promote") {
+        await ctx.pool.query(
+          `INSERT INTO room_members (room_id, user_id, role, hand_raised) VALUES ($1,$2,'speaker',false)
+           ON CONFLICT (room_id, user_id) DO UPDATE SET role = 'speaker', hand_raised = false`,
+          [id, input.userId],
+        );
+      } else if (input.action === "demote") {
+        await ctx.pool.query(
+          `UPDATE room_members SET role = 'member', muted_by_host = false WHERE room_id = $1 AND user_id = $2`,
+          [id, input.userId],
+        );
+      } else if (input.action === "mute") {
+        await ctx.pool.query(
+          `UPDATE room_members SET muted_by_host = true WHERE room_id = $1 AND user_id = $2`,
+          [id, input.userId],
+        );
+      } else {
+        await ctx.pool.query(
+          `UPDATE room_members SET muted_by_host = false WHERE room_id = $1 AND user_id = $2`,
+          [id, input.userId],
+        );
+      }
+      ctx.hub.publishToRoom(id, {
+        type: "room.stage",
+        entityId: id,
+        payload: { userId: input.userId, action: input.action, by: user.id },
+      });
+      return { ok: true };
+    });
+
+    // ---- Free gifts in a room (energy) ----
+    app.post("/v1/activities/rooms/:id/gifts", async (req, reply) => {
+      const user = await requireUser(ctx, req);
+      const { id } = req.params as { id: string };
+      const input = parse(
+        z.object({ kind: z.enum(["sparkle", "high_five", "cheer", "hug", "fire"]), recipientId: z.string().uuid().optional() }),
+        req.body,
+      );
+      const room = await queryOne<{ host_id: string }>(ctx.pool, `SELECT host_id FROM activity_rooms WHERE id = $1`, [id]);
+      if (!room) throw ApiError.notFound("Room not found");
+      const recipientId = input.recipientId ?? room.host_id;
+      if (recipientId === user.id) throw ApiError.badRequest("You cannot gift yourself");
+      const inserted = await queryOne<{ id: string }>(
+        ctx.pool,
+        `INSERT INTO room_gifts (room_id, sender_id, recipient_id, kind) VALUES ($1,$2,$3,$4) RETURNING id`,
+        [id, user.id, recipientId, input.kind],
+      );
+      ctx.hub.publishToRoom(id, {
+        type: "room.gift",
+        entityId: id,
+        payload: { kind: input.kind, from: user.handle, fromName: user.displayName, to: recipientId, giftId: inserted!.id },
+      });
+      reply.code(201);
+      return { ok: true };
+    });
+
+    // ---- Reactions (the energy burst) ----
+    app.post("/v1/activities/rooms/:id/reactions", async (req, reply) => {
+      const user = await requireUser(ctx, req);
+      const { id } = req.params as { id: string };
+      const input = parse(z.object({ emoji: z.string().min(1).max(8) }), req.body);
+      await ctx.pool.query(
+        `INSERT INTO room_reactions (room_id, user_id, emoji) VALUES ($1,$2,$3)`,
+        [id, user.id, input.emoji],
+      );
+      ctx.hub.publishToRoom(id, {
+        type: "room.reaction",
+        entityId: id,
+        payload: { emoji: input.emoji, from: user.handle },
+      });
+      reply.code(201);
+      return { ok: true };
+    });
+
+    // ---- Room energy ----
+    app.get("/v1/activities/rooms/:id/hype", async (req) => {
+      const user = await requireUser(ctx, req);
+      const { id } = req.params as { id: string };
+      await assertCanSee(ctx, id, user.id);
+      return { hype: await computeHype(ctx, id) };
+    });
   };
+}
+
+/**
+ * Energy for a room, recomputed from the last hour of activity rather than
+ * stored as a running total. Reactions and gifts raise it; it naturally decays
+ * as the window slides. The result is cached on the room for cheap listing.
+ */
+export async function computeHype(ctx: AppContext, roomId: string): Promise<number> {
+  const row = await queryOne<{ reactions: string; gifts: string; paid: string; members: string; messages: string }>(
+    ctx.pool,
+    `SELECT
+       (SELECT count(*) FROM room_reactions WHERE room_id = $1 AND created_at > now() - interval '1 hour') AS reactions,
+       (SELECT count(*) FROM room_gifts     WHERE room_id = $1 AND created_at > now() - interval '1 hour') AS gifts,
+       (SELECT count(*) FROM paid_gifts     WHERE room_id = $1 AND created_at > now() - interval '1 hour') AS paid,
+       (SELECT count(*) FROM room_members   WHERE room_id = $1) AS members,
+       (SELECT count(*) FROM room_posts     WHERE room_id = $1 AND created_at > now() - interval '1 hour' AND removed_at IS NULL) AS messages`,
+    [roomId],
+  );
+  const hype = Math.round(
+    Number(row?.reactions ?? 0) * 1 +
+    Number(row?.gifts ?? 0) * 3 +
+    Number(row?.paid ?? 0) * 20 +
+    Number(row?.members ?? 0) * 2 +
+    Number(row?.messages ?? 0) * 1,
+  );
+  await ctx.pool.query(`UPDATE activity_rooms SET hype = $2 WHERE id = $1`, [roomId, hype]);
+  return hype;
 }
 
 const ROOM_SELECT = `

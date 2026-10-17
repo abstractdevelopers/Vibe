@@ -270,4 +270,53 @@ describe("discovery ranking", () => {
     const results = res.json().results as Array<{ name: string }>;
     expect(results.some((r) => r.name === "Hidden dinner")).toBe(false);
   });
+
+  it("surfaces a published Vibe event in Explore with a location reason", async () => {
+    const host = await registerUser(h.app, "eventhost");
+    const created = await h.app.inject({
+      method: "POST",
+      url: "/v1/events",
+      headers: auth(host.token),
+      payload: {
+        title: "Beach cleanup",
+        startsAt: new Date(Date.now() + 86_400_000).toISOString(),
+        timezone: "Africa/Lagos",
+        city: "Lagos",
+        area: "Lekki",
+        priceMinor: 0,
+        currency: "NGN",
+      },
+    });
+    const id = created.json().id;
+    await h.app.inject({ method: "POST", url: `/v1/events/${id}/publish`, headers: auth(host.token) });
+
+    const res = await h.app.inject({
+      method: "GET",
+      url: "/v1/explore?city=Lagos&area=Lekki&kind=event",
+      headers: auth(host.token),
+    });
+    const results = res.json().results as Array<{ name: string; vibeEvent?: boolean; reasons: string[] }>;
+    const event = results.find((r) => r.name === "Beach cleanup");
+    expect(event).toBeDefined();
+    expect(event!.vibeEvent).toBe(true);
+    expect(event!.reasons).toContain("in your area");
+  });
+
+  it("does not surface a draft Vibe event in Explore", async () => {
+    const host = await registerUser(h.app, "drafthost");
+    await h.app.inject({
+      method: "POST",
+      url: "/v1/events",
+      headers: auth(host.token),
+      payload: {
+        title: "Unfinished idea",
+        startsAt: new Date(Date.now() + 86_400_000).toISOString(),
+        timezone: "Africa/Lagos",
+        city: "Lagos",
+      },
+    });
+    const res = await h.app.inject({ method: "GET", url: "/v1/explore?kind=event", headers: auth(host.token) });
+    const results = res.json().results as Array<{ name: string }>;
+    expect(results.some((r) => r.name === "Unfinished idea")).toBe(false);
+  });
 });

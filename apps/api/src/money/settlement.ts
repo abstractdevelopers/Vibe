@@ -8,6 +8,7 @@ import {
   postPayoutReversal,
   postTicketPurchase,
   postTicketRefund,
+  postWalletTopup,
 } from "./ledger.js";
 
 /**
@@ -36,12 +37,12 @@ export async function settleGiftPurchase(
 ): Promise<GiftSettlementResult> {
   return withTransaction(pool, async (tx) => {
     const purchase = await queryOne<{
-      id: string; buyer_id: string; recipient_id: string; post_id: string | null;
+      id: string; buyer_id: string; recipient_id: string; post_id: string | null; room_id: string | null;
       gift_id: string; quantity: number; amount_minor: string; fee_minor: string;
       currency: string; status: string;
     }>(
       tx as unknown as pg.Pool,
-      `SELECT id, buyer_id, recipient_id, post_id, gift_id, quantity, amount_minor, fee_minor, currency, status
+      `SELECT id, buyer_id, recipient_id, post_id, room_id, gift_id, quantity, amount_minor, fee_minor, currency, status
          FROM gift_purchases WHERE reference = $1 FOR UPDATE`,
       [input.reference],
     );
@@ -83,10 +84,10 @@ export async function settleGiftPurchase(
 
     // The unique index on purchase_id is what makes a duplicate impossible.
     await tx.query(
-      `INSERT INTO paid_gifts (id, purchase_id, post_id, sender_id, recipient_id, gift_id, quantity)
-       VALUES ($1,$2,$3,$4,$5,$6,$7)
+      `INSERT INTO paid_gifts (id, purchase_id, post_id, room_id, sender_id, recipient_id, gift_id, quantity)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
        ON CONFLICT (purchase_id) DO NOTHING`,
-      [newId(), purchase.id, purchase.post_id, purchase.buyer_id, purchase.recipient_id, purchase.gift_id, purchase.quantity],
+      [newId(), purchase.id, purchase.post_id, purchase.room_id, purchase.buyer_id, purchase.recipient_id, purchase.gift_id, purchase.quantity],
     );
 
     await tx.query(
@@ -97,6 +98,53 @@ export async function settleGiftPurchase(
 
     return { applied: true, purchaseId: purchase.id };
   });
+}
+
+/**
+ * Apply a verified `payment_succeeded` for a Vibe Yens top-up. Credits the
+ * wallet only once the provider confirms the charge; idempotent on reference.
+ */
+export async function settleWalletTopup(
+  pool: pg.Pool,
+  input: { reference: string; providerRef: string; paidAmountMinor: number | null },
+): Promise<GiftSettlementResult> {
+  return withTransaction(pool, async (tx) => {
+    const topup = await queryOne<{
+      id: string; user_id: string; amount_minor: string; currency: string; status: string;
+    }>(
+      tx as unknown as pg.Pool,
+      `SELECT id, user_id, amount_minor, currency, status FROM wallet_topups WHERE reference = $1 FOR UPDATE`,
+      [input.reference],
+    );
+    if (!topup) return { applied: false, reason: "unknown_reference" };
+    if (topup.status === "paid") return { applied: false, reason: "already_paid" };
+    if (topup.status !== "pending") return { applied: false, reason: `status_${topup.status}` };
+    const expected = Number(topup.amount_minor);
+    if (input.paidAmountMinor !== null && input.paidAmountMinor !== expected) {
+      await tx.query(`UPDATE wallet_topups SET status = 'failed' WHERE id = $1`, [topup.id]);
+      return { applied: false, reason: "amount_mismatch" };
+    }
+    const journalId = await postWalletTopup(tx, {
+      reference: input.reference,
+      userId: topup.user_id,
+      amountMinor: expected,
+      currency: topup.currency,
+    });
+    await tx.query(
+      `UPDATE wallet_topups SET status = 'paid', provider_ref = COALESCE($2, provider_ref), journal_id = $3, paid_at = now()
+        WHERE id = $1`,
+      [topup.id, input.providerRef, journalId],
+    );
+    return { applied: true };
+  });
+}
+
+export async function failWalletTopup(pool: pg.Pool, reference: string): Promise<GiftSettlementResult> {
+  const result = await pool.query(
+    `UPDATE wallet_topups SET status = 'failed' WHERE reference = $1 AND status = 'pending'`,
+    [reference],
+  );
+  return { applied: (result.rowCount ?? 0) > 0, reason: "failed" };
 }
 
 /** Reverse a paid gift after a refund or chargeback. */

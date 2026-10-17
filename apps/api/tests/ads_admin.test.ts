@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
+import { randomUUID } from "node:crypto";
 import { createHarness, resetDb, registerUser, auth, type Harness, type TestUser } from "./helpers.js";
 
 /**
@@ -26,10 +27,40 @@ describe("ad delivery, reporting and admin console", () => {
   });
   afterAll(async () => h.close());
 
+  /**
+   * Seed enough organic posts that the feed page is long enough for the paid
+   * slot to appear. A paid placement only renders after ~15 posts, so an ad is
+   * never delivered — or counted — on a page too short to show it. The feed
+   * caps each author at three posts per page, so this needs several authors.
+   * Authors are inserted directly: the sign-up route is rate limited, and these
+   * are fixtures, not accounts anyone signs into.
+   */
+  async function seedFeedPosts(authors = 6, perAuthor = 3): Promise<void> {
+    await h.pool.query("DELETE FROM posts WHERE author_id <> $1", [advertiser.id]);
+    for (let a = 0; a < authors; a += 1) {
+      const authorId = randomUUID();
+      const suffix = authorId.slice(0, 8);
+      await h.pool.query(
+        `INSERT INTO users (id, email, handle, display_name, password_hash)
+         VALUES ($1, $2, $3, $4, 'x')`,
+        [authorId, `seed-${suffix}@example.com`, `seedposter_${suffix}`, `Seed ${a}`],
+      );
+      for (let p = 0; p < perAuthor; p += 1) {
+        await h.pool.query(
+          `INSERT INTO posts (id, author_id, type, audience, body)
+           VALUES ($1, $2, 'text', 'public', $3)`,
+          [randomUUID(), authorId, `seed ${a}-${p}`],
+        );
+      }
+    }
+  }
+
   async function makeApprovedCampaign(): Promise<string> {
     await h.pool.query("UPDATE merchants SET verification_status = 'verified' WHERE id = $1", [merchantId]);
-    // Retire earlier campaigns so delivery picks the one this test just made.
+    // Retire earlier campaigns so delivery picks the one this test just made,
+    // and clear deliveries so an earlier test's frequency cap cannot suppress it.
     await h.pool.query("UPDATE campaigns SET status = 'completed' WHERE status IN ('approved', 'active')");
+    await h.pool.query("DELETE FROM ad_deliveries");
     const created = await h.app.inject({
       method: "POST", url: "/v1/campaigns", headers: auth(advertiser.token),
       payload: {
@@ -46,6 +77,8 @@ describe("ad delivery, reporting and admin console", () => {
       method: "POST", url: `/v1/admin/campaigns/${id}/review`, headers: auth(advertiser.token),
       payload: { decision: "approved" },
     });
+    // Make the viewer's feed long enough for the paid slot to actually render.
+    await seedFeedPosts();
     return id;
   }
 
@@ -72,8 +105,6 @@ describe("ad delivery, reporting and admin console", () => {
   });
 
   it("delivers an approved campaign in the feed with an advertiser identity", async () => {
-    // Clear other campaigns so this test is deterministic.
-    await h.pool.query("DELETE FROM ad_deliveries");
     const id = await makeApprovedCampaign();
     const feed = await h.app.inject({ method: "GET", url: "/v1/feed", headers: auth(viewer.token) });
     const ad = feed.json().sponsored;

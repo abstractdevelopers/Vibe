@@ -30,6 +30,8 @@ interface DiscoveryResult {
   isSample?: boolean;
   organizer?: { id: string; handle: string; displayName: string };
   goingCount?: number;
+  /** True when this is a Vibe event (the `events` table), not a plan. */
+  vibeEvent?: boolean;
   score: number;
   reasons: string[];
 }
@@ -298,7 +300,11 @@ export function ExploreScreen({ me }: { me: Me }) {
       <div className="stack">
         {results?.map((r) =>
           r.kind === "event" ? (
-            <EventCard key={r.id} result={r} onOpen={() => nav.push({ name: "plan", planId: r.id })} />
+            <EventCard
+              key={r.id}
+              result={r}
+              onOpen={() => nav.push(r.vibeEvent ? { name: "event", eventId: r.id } : { name: "plan", planId: r.id })}
+            />
           ) : (
             <PlaceCard key={r.id} result={r} onOpen={() => nav.push({ name: "place", placeId: r.id })} />
           ),

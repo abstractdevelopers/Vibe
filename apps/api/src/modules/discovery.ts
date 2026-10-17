@@ -115,8 +115,11 @@ export function discoveryRoutes(ctx: AppContext) {
       const here = me?.lat_band != null && me?.lng_band != null ? { lat: me.lat_band, lng: me.lng_band } : null;
       const places = query.kind === "event" ? [] : await loadPlaces(ctx, scoped, interests, here);
       const events = query.kind === "place" ? [] : await loadEvents(ctx, user.id, scoped, interests);
+      // The Vibe events feed (the `events` table) is a first-class discovery
+      // surface too, so a public event shows in Explore, not only in Events.
+      const vibeEvents = query.kind === "place" ? [] : await loadVibeEvents(ctx, user.id, scoped, interests, here);
 
-      const results = [...events, ...places]
+      const results = [...vibeEvents, ...events, ...places]
         .sort((a, b) => b.score - a.score)
         .slice(0, query.limit);
 
@@ -299,6 +302,85 @@ async function loadEvents(
       place: event.place,
       organizer: { id: event.organizer_id, handle: event.organizer_handle, displayName: event.organizer_name },
       goingCount: event.going_count,
+      score: Math.round(score),
+      reasons,
+    };
+  });
+}
+
+/**
+ * Vibe events (the `events` table) as discovery results.
+ *
+ * Ranked on the same transparent components as everything else. Location is
+ * matched at coarse city/area granularity — a nearby band, when the viewer and
+ * the event both have one, orders by distance without revealing either point.
+ */
+async function loadVibeEvents(
+  ctx: AppContext,
+  viewerId: string,
+  query: z.infer<typeof searchSchema>,
+  interests: string[],
+  here: { lat: number; lng: number } | null,
+): Promise<Scored[]> {
+  const rows = await queryMany<{
+    id: string; title: string; description: string | null; starts_at: Date; ends_at: Date | null;
+    place: string | null; city: string | null; area: string | null; image_url: string | null;
+    price_minor: number; currency: string; organizer_id: string; organizer_handle: string;
+    organizer_name: string; followed: boolean; in_circle: boolean;
+  }>(
+    ctx.pool,
+    `SELECT e.id, e.title, e.description, e.starts_at, e.ends_at, e.place, e.city, e.area,
+            e.image_url, e.price_minor, e.currency, e.organizer_id,
+            u.handle AS organizer_handle, u.display_name AS organizer_name,
+            EXISTS(SELECT 1 FROM follows f
+                    WHERE f.follower_id = $1 AND f.followee_id = e.organizer_id AND f.state = 'accepted') AS followed,
+            EXISTS(SELECT 1 FROM circle_members cm
+                    WHERE cm.user_id = $1 AND cm.circle_id = e.circle_id) AS in_circle
+       FROM events e JOIN users u ON u.id = e.organizer_id
+      WHERE e.state = 'published'
+        AND e.starts_at > now() - interval '1 day'
+        AND ($2::text IS NULL OR lower(e.title) LIKE '%' || lower($2) || '%'
+             OR lower(coalesce(e.description, '')) LIKE '%' || lower($2) || '%')
+        AND ($3::text IS NULL OR lower(coalesce(e.city, '')) = lower($3))
+        AND ($4::text IS NULL OR lower(coalesce(e.area, '')) = lower($4))
+      LIMIT 100`,
+    [viewerId, query.q ?? null, query.city ?? null, query.area ?? null],
+  );
+
+  return rows.map((event) => {
+    const reasons: string[] = [];
+    let score = 0;
+    if (query.area && event.area && event.area.toLowerCase() === query.area.toLowerCase()) {
+      score += WEIGHTS.areaMatch; reasons.push("in your area");
+    } else if (query.city && event.city && event.city.toLowerCase() === query.city.toLowerCase()) {
+      score += WEIGHTS.cityMatch; reasons.push("in your city");
+    } else if (here && event.city) {
+      // With a coarse device location and a city on the event, a same-city
+      // event still reads as nearby without exposing either point.
+      score += WEIGHTS.cityMatch * 0.6; reasons.push("near you");
+    }
+    if (event.in_circle) { score += WEIGHTS.relationship; reasons.push("from your Circle"); }
+    else if (event.followed) { score += WEIGHTS.relationship; reasons.push("host you follow"); }
+    const haystack = `${event.title} ${event.place ?? ""}`.toLowerCase();
+    if (interests.some((i) => haystack.includes(i))) { score += WEIGHTS.interestMatch; reasons.push("matches your interests"); }
+    score += WEIGHTS.freshness * freshness(event.starts_at);
+
+    return {
+      id: event.id,
+      kind: "event" as const,
+      vibeEvent: true,
+      name: event.title,
+      state: "published",
+      startsAt: event.starts_at,
+      endsAt: event.ends_at,
+      city: event.city,
+      area: event.area,
+      place: event.place,
+      imageUrl: event.image_url,
+      priceMinor: event.price_minor,
+      currency: event.currency,
+      organizer: { id: event.organizer_id, handle: event.organizer_handle, displayName: event.organizer_name },
+      goingCount: 0,
       score: Math.round(score),
       reasons,
     };

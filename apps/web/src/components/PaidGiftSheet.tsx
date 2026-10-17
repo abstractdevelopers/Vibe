@@ -49,12 +49,15 @@ export function PaidGiftSheet({
   recipientId,
   recipientName,
   postId,
+  roomId,
   onClose,
   onPurchased,
 }: {
   recipientId: string;
   recipientName: string;
   postId?: string;
+  /** Set when the gift is sent inside a live room. */
+  roomId?: string;
   onClose: () => void;
   onPurchased?: () => void;
 }) {
@@ -84,7 +87,7 @@ export function PaidGiftSheet({
     try {
       const purchase = await api<PurchaseResult>("/v1/money/gifts/purchase", {
         idempotencyKey: idempotencyKey("gift"),
-        body: { giftId: chosen.id, quantity, recipientId, postId },
+        body: { giftId: chosen.id, quantity, recipientId, postId, roomId },
       });
       setResult(purchase);
       onPurchased?.();

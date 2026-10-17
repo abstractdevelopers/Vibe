@@ -27,7 +27,8 @@ export type LedgerAccountKind =
   | "provider_clearing"
   | "provider_fee"
   | "creator_payouts"
-  | "gift_refunds";
+  | "gift_refunds"
+  | "user_wallet";
 
 export type JournalKind =
   | "gift_purchase"
@@ -36,7 +37,10 @@ export type JournalKind =
   | "payout_reversal"
   | "ticket_purchase"
   | "ticket_refund"
-  | "adjustment";
+  | "adjustment"
+  | "wallet_topup"
+  | "wallet_transfer"
+  | "wallet_spend";
 
 interface Entry {
   accountId: string;
@@ -360,4 +364,94 @@ export async function creatorBalance(pool: pg.Pool, userId: string, currency: st
     availableMinor: Math.max(0, credits - debits - pending - reserved),
     minPayoutMinor: MIN_PAYOUT_MINOR,
   };
+}
+
+/**
+ * Wallet (Vibe Yens) movements. These exist only when `WALLET_ENABLED` is on;
+ * the routes that call them are not even registered otherwise.
+ *
+ * A top-up is cash arriving at the provider (asset up) against a liability Vibe
+ * now owes the user (wallet up). A transfer moves that liability between two
+ * users, so it nets to zero and never touches cash. Spending on a gift moves the
+ * liability to the creator and the platform's cut to revenue.
+ */
+
+/** A verified top-up: cash in, wallet liability up. */
+export async function postWalletTopup(
+  tx: pg.PoolClient,
+  input: { reference: string; userId: string; amountMinor: number; currency: string },
+): Promise<string> {
+  const clearing = await accountId(tx, "provider_clearing", input.currency, null);
+  const wallet = await accountId(tx, "user_wallet", input.currency, input.userId);
+  return writeJournal(tx, {
+    kind: "wallet_topup",
+    currency: input.currency,
+    reference: input.reference,
+    memo: "Vibe Yens top-up",
+    entries: [
+      { accountId: clearing, direction: "debit", amountMinor: input.amountMinor },
+      { accountId: wallet, direction: "credit", amountMinor: input.amountMinor },
+    ],
+  });
+}
+
+/** Send to a friend: the liability moves from sender to recipient. */
+export async function postWalletTransfer(
+  tx: pg.PoolClient,
+  input: { reference: string; senderId: string; recipientId: string; amountMinor: number; currency: string },
+): Promise<string> {
+  const from = await accountId(tx, "user_wallet", input.currency, input.senderId);
+  const to = await accountId(tx, "user_wallet", input.currency, input.recipientId);
+  return writeJournal(tx, {
+    kind: "wallet_transfer",
+    currency: input.currency,
+    reference: input.reference,
+    memo: "Vibe Yens transfer",
+    entries: [
+      { accountId: from, direction: "debit", amountMinor: input.amountMinor },
+      { accountId: to, direction: "credit", amountMinor: input.amountMinor },
+    ],
+  });
+}
+
+/** Spend wallet balance on a gift: wallet liability falls, creator earns, Vibe takes its fee. */
+export async function postWalletSpend(
+  tx: pg.PoolClient,
+  input: { reference: string; userId: string; recipientId: string; amountMinor: number; feeMinor: number; currency: string },
+): Promise<string> {
+  const wallet = await accountId(tx, "user_wallet", input.currency, input.userId);
+  const revenue = await accountId(tx, "platform_revenue", input.currency, null);
+  const entries: Entry[] = [{ accountId: wallet, direction: "debit", amountMinor: input.amountMinor }];
+  if (input.feeMinor > 0) entries.push({ accountId: revenue, direction: "credit", amountMinor: input.feeMinor });
+  const creatorMinor = input.amountMinor - input.feeMinor;
+  if (creatorMinor > 0) {
+    const earnings = await accountId(tx, "creator_earnings", input.currency, input.recipientId);
+    entries.push({ accountId: earnings, direction: "credit", amountMinor: creatorMinor });
+  }
+  return writeJournal(tx, {
+    kind: "wallet_spend",
+    currency: input.currency,
+    reference: input.reference,
+    memo: "Gift paid from Vibe Yens",
+    entries,
+  });
+}
+
+/** A user's wallet balance, derived from the ledger. */
+export async function walletBalance(pool: pg.Pool, userId: string, currency: string): Promise<{ currency: string; balanceMinor: number }> {
+  const account = await queryOne<{ id: string }>(
+    pool,
+    `SELECT id FROM ledger_accounts WHERE kind = 'user_wallet' AND user_id = $1 AND currency = $2`,
+    [userId, currency],
+  );
+  if (!account) return { currency, balanceMinor: 0 };
+  const totals = await queryOne<{ credits: string; debits: string }>(
+    pool,
+    `SELECT
+       COALESCE(SUM(CASE WHEN direction = 'credit' THEN amount_minor ELSE 0 END), 0) AS credits,
+       COALESCE(SUM(CASE WHEN direction = 'debit' THEN amount_minor ELSE 0 END), 0) AS debits
+     FROM ledger_entries WHERE account_id = $1`,
+    [account.id],
+  );
+  return { currency, balanceMinor: Math.max(0, Number(totals?.credits ?? 0) - Number(totals?.debits ?? 0)) };
 }

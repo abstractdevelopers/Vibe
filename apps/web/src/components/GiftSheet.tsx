@@ -18,11 +18,14 @@ interface GiftOption {
  */
 export function GiftSheet({
   postId,
+  roomId,
   authorName,
   onClose,
   onSent,
 }: {
-  postId: string;
+  /** A post id, or omit when `roomId` is set (a gift inside a live room). */
+  postId?: string;
+  roomId?: string;
   authorName: string;
   onClose: () => void;
   onSent?: () => void;
@@ -33,10 +36,17 @@ export function GiftSheet({
   const [burst, setBurst] = useState<GiftBurstSpec | null>(null);
 
   useEffect(() => {
+    if (roomId) {
+      // A room gift has no per-post counts; the catalogue is the same set.
+      void api<{ gifts: Array<{ id: string; label: string; hint: string }> }>("/v1/gifts/catalogue")
+        .then((r) => setGifts(r.gifts.map((g) => ({ ...g, count: 0, viewerSent: false }))))
+        .catch((err) => setError(err instanceof ApiError ? err.message : "Could not load gifts"));
+      return;
+    }
     void api<{ gifts: GiftOption[] }>(`/v1/posts/${postId}/gifts`)
       .then((r) => setGifts(r.gifts))
       .catch((err) => setError(err instanceof ApiError ? err.message : "Could not load gifts"));
-  }, [postId]);
+  }, [postId, roomId]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -50,7 +60,7 @@ export function GiftSheet({
     setBusy(kind);
     setError(null);
     try {
-      await api(`/v1/posts/${postId}/gifts`, { body: { kind } });
+      await api(roomId ? `/v1/activities/rooms/${roomId}/gifts` : `/v1/posts/${postId}/gifts`, { body: { kind } });
       setGifts((prev) =>
         (prev ?? []).map((g) =>
           g.id === kind && !g.viewerSent ? { ...g, viewerSent: true, count: g.count + 1 } : g,

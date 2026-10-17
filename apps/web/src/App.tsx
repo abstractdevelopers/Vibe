@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useRef, useState } from "react";
 import { api, ApiError, getToken, setToken } from "./api";
 import { AuthScreen } from "./screens/Auth";
 import { HomeScreen, type CreateMode } from "./screens/Home";
@@ -16,13 +16,9 @@ import { PlaceDetailScreen } from "./screens/PlaceDetail";
 import { MessagesScreen } from "./screens/Messages";
 import { ConversationScreen } from "./screens/Conversation";
 import { StorefrontScreen, ProductScreen, OrdersScreen, OrderScreen, SellerOrdersScreen } from "./screens/Commerce";
-import { AdvertisingScreen } from "./screens/Advertising";
 import { EventsScreen } from "./screens/Events";
-import { LiveScreen, RoomScreen } from "./screens/Live";
-import { PassScreen } from "./screens/Pass";
-import { AdminScreen } from "./screens/Admin";
-import { Wallet } from "./screens/Wallet";
-import { AssistScreen } from "./screens/Assist";
+import { LiveScreen } from "./screens/Live";
+import { RoomStudio } from "./components/RoomStudio";
 import { CreateSheet } from "./components/CreateSheet";
 import { CreateSomethingSheet } from "./components/CreateSomething";
 import {
@@ -34,6 +30,7 @@ import {
   InboxIcon,
   LogOutIcon,
   MegaphoneIcon,
+  MoneyIcon,
   PassIcon,
   PlusIcon,
   ReceiptIcon,
@@ -45,6 +42,16 @@ import {
   RadioIcon,
   UserIcon,
 } from "./components/Icons";
+
+// Cold screens (menu/detail routes most sessions never open) are split out of
+// the main bundle and fetched on first navigation, keeping the launch bundle
+// inside its budget.
+const Wallet = lazy(() => import("./screens/Wallet").then((m) => ({ default: m.Wallet })));
+const VibeYens = lazy(() => import("./screens/VibeYens").then((m) => ({ default: m.VibeYens })));
+const PassScreen = lazy(() => import("./screens/Pass").then((m) => ({ default: m.PassScreen })));
+const AdminScreen = lazy(() => import("./screens/Admin").then((m) => ({ default: m.AdminScreen })));
+const AssistScreen = lazy(() => import("./screens/Assist").then((m) => ({ default: m.AssistScreen })));
+const AdvertisingScreen = lazy(() => import("./screens/Advertising").then((m) => ({ default: m.AdvertisingScreen })));
 import { NavContext, useNav, type Route } from "./nav";
 import { useRealtime } from "./realtime";
 import { Avatar } from "./components/Avatar";
@@ -282,14 +289,48 @@ export function App() {
             {route.name === "orders" && <OrdersScreen onBack={back} />}
             {route.name === "order" && <OrderScreen orderId={route.orderId} onBack={back} />}
             {route.name === "seller-orders" && <SellerOrdersScreen onBack={back} />}
-            {route.name === "advertising" && <AdvertisingScreen onBack={back} />}
             {route.name === "events" && <EventsScreen onBack={back} />}
+            {route.name === "event" && <EventsScreen onBack={back} focusEventId={route.eventId} />}
             {route.name === "live" && <LiveScreen onBack={back} />}
-            {route.name === "room" && <RoomScreen roomId={route.roomId} onBack={back} />}
-            {route.name === "pass" && <PassScreen onBack={back} />}
-            {route.name === "admin" && <AdminScreen onBack={back} />}
-            {route.name === "wallet" && <Wallet onClose={back} />}
-            {route.name === "assist" && <AssistScreen onBack={back} />}
+            {route.name === "room" && me && (
+              <RoomStudio
+                roomId={route.roomId}
+                viewerId={me.id}
+                viewerName={me.displayName}
+                onBack={back}
+                onLeft={() => { setRoute({ name: "live" }); bump(); }}
+              />
+            )}
+            {route.name === "pass" && (
+              <Suspense fallback={<div className="skeleton" aria-busy="true" />}>
+                <PassScreen onBack={back} />
+              </Suspense>
+            )}
+            {route.name === "admin" && (
+              <Suspense fallback={<div className="skeleton" aria-busy="true" />}>
+                <AdminScreen onBack={back} />
+              </Suspense>
+            )}
+            {route.name === "wallet" && (
+              <Suspense fallback={<div className="skeleton" aria-busy="true" />}>
+                <Wallet onClose={back} />
+              </Suspense>
+            )}
+            {route.name === "vibe-yens" && (
+              <Suspense fallback={<div className="skeleton" aria-busy="true" />}>
+                <VibeYens onBack={back} />
+              </Suspense>
+            )}
+            {route.name === "assist" && (
+              <Suspense fallback={<div className="skeleton" aria-busy="true" />}>
+                <AssistScreen onBack={back} />
+              </Suspense>
+            )}
+            {route.name === "advertising" && (
+              <Suspense fallback={<div className="skeleton" aria-busy="true" />}>
+                <AdvertisingScreen onBack={back} />
+              </Suspense>
+            )}
           </main>
 
           <nav className="bottom-nav" aria-label="Primary">
@@ -522,6 +563,16 @@ function AccountMenu({
             }}
           >
             <WalletIcon width={17} height={17} /> Wallet
+          </button>
+          <button
+            className="menu-item"
+            role="menuitem"
+            onClick={() => {
+              setOpen(false);
+              nav.push({ name: "vibe-yens" });
+            }}
+          >
+            <MoneyIcon width={17} height={17} /> Vibe Yens
           </button>
           <button
             className="menu-item"

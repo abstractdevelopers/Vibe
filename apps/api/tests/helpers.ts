@@ -22,6 +22,9 @@ export const testConfig: Config = {
   BACHS_WEBHOOK_SECRET: undefined,
   BACHS_BASE_URL: "https://sandbox-api.bachs.io",
   PAYOUTS_PROVIDER: "disabled",
+  // The wallet is exercised by its own test with the flag on; the default test
+  // config keeps it off so the rest of the suite sees the feature absent.
+  WALLET_ENABLED: false,
   PUBLIC_API_URL: "http://localhost:12000",
   PUBLIC_WEB_URL: "http://localhost:12001",
   EMAIL_API_KEY: undefined,
@@ -75,6 +78,7 @@ export async function resetDb(pool: pg.Pool): Promise<void> {
              activity_reminders, activity_links, room_moderation_actions, activity_link_visits,
              password_resets, email_outbox, rate_limit_counters,
              paid_gifts, gift_purchases, payouts, payout_events, payout_destinations,
+             wallet_topups, wallet_transfers,
              money_audit, ledger_entries, ledger_journals, ledger_accounts
     RESTART IDENTITY CASCADE
   `);

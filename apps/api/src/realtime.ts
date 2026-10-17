@@ -19,6 +19,8 @@ interface Subscriber {
   socket: WebSocket;
   userId: string;
   circleIds: Set<string>;
+  /** Rooms this socket is present in, so room events only reach the room. */
+  roomIds: Set<string>;
 }
 
 export class RealtimeHub {
@@ -26,9 +28,41 @@ export class RealtimeHub {
   private sequence = 0;
 
   subscribe(socket: WebSocket, userId: string, circleIds: string[]): () => void {
-    const subscriber: Subscriber = { socket, userId, circleIds: new Set(circleIds) };
+    const subscriber: Subscriber = { socket, userId, circleIds: new Set(circleIds), roomIds: new Set() };
     this.subscribers.add(subscriber);
     return () => this.subscribers.delete(subscriber);
+  }
+
+  /** Track which room a socket is in. Presence is per connection. */
+  joinRoom(socket: WebSocket, roomId: string): void {
+    for (const s of this.subscribers) if (s.socket === socket) s.roomIds.add(roomId);
+  }
+
+  leaveRoom(socket: WebSocket, roomId: string): void {
+    for (const s of this.subscribers) if (s.socket === socket) s.roomIds.delete(roomId);
+  }
+
+  /** Everyone currently present in a room. */
+  roomMembers(roomId: string): Subscriber[] {
+    return [...this.subscribers].filter((s) => s.roomIds.has(roomId));
+  }
+
+  /**
+   * Publish a room event to every socket present in the room. `except` skips the
+   * sender, which is what WebRTC signalling needs: an offer goes to the peer it
+   * is meant for, not back to the sender.
+   */
+  publishToRoom(roomId: string, event: Omit<RealtimeEvent, "id" | "sequence" | "timestamp">, except?: WebSocket): void {
+    this.sequence += 1;
+    const full: RealtimeEvent = {
+      ...event,
+      id: `evt_${this.sequence}`,
+      sequence: this.sequence,
+      timestamp: new Date().toISOString(),
+    };
+    for (const subscriber of this.subscribers) {
+      if (subscriber.roomIds.has(roomId) && subscriber.socket !== except) this.send(subscriber, full);
+    }
   }
 
   private send(subscriber: Subscriber, event: RealtimeEvent): void {

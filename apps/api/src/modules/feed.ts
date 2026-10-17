@@ -391,6 +391,9 @@ async function buildFeedPage(
   };
 }
 
+/** How many organic posts precede the paid placement in a feed page. */
+const SPONSORED_AFTER = 15;
+
 export function feedRoutes(ctx: AppContext) {
   return async function register(app: FastifyInstance): Promise<void> {
     app.get("/v1/feed", async (req) => {
@@ -400,9 +403,14 @@ export function feedRoutes(ctx: AppContext) {
 
       // Delivery is decided once per page and carried in a response field the
       // client renders at a fixed slot. It never enters the organic ranking, so
-      // paid content cannot outrank safety or relevance.
+      // paid content cannot outrank safety or relevance. A delivery is only
+      // chosen when the page is long enough to actually show it, so an
+      // impression is never counted for an ad the viewer could not see.
       const page = await buildFeedPage(ctx, user.id, query, limit);
-      const ad = await selectAdForViewer(ctx.pool, user.id, "feed", newToken(8));
+      const ad =
+        page.items.length > SPONSORED_AFTER
+          ? await selectAdForViewer(ctx.pool, user.id, "feed", newToken(8))
+          : null;
       if (ad) trackSafe(ctx.pool, { name: "ad_impression", userId: user.id, properties: { entityType: "campaign", entityId: ad.campaignId, surface: "feed" } });
       return { ...page, sponsored: ad };
     });

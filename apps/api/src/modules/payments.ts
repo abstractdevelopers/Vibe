@@ -14,6 +14,8 @@ import {
   settleTicketPurchase,
   failTicketPurchase,
   refundTicketPurchase,
+  settleWalletTopup,
+  failWalletTopup,
 } from "../money/settlement.js";
 
 /**
@@ -115,6 +117,20 @@ export function paymentsRoutes(ctx: AppContext) {
           ticket = await failTicketPurchase(ctx.pool, event.orderReference);
         } else if (event.type === "refund_succeeded") {
           ticket = await refundTicketPurchase(ctx.pool, { reference: event.orderReference });
+        }
+      }
+      // A Vibe Yens top-up reference is `WALLET-...`; the webhook is the only
+      // thing that credits the balance.
+      let wallet: { applied: boolean; reason?: string } | null = null;
+      if (event.orderReference?.startsWith("WALLET-")) {
+        if (event.type === "payment_succeeded") {
+          wallet = await settleWalletTopup(ctx.pool, {
+            reference: event.orderReference,
+            providerRef: event.providerRef,
+            paidAmountMinor: event.amount.amount > 0 ? event.amount.amount : null,
+          });
+        } else if (event.type === "payment_failed") {
+          wallet = await failWalletTopup(ctx.pool, event.orderReference);
         }
       }
       // A payout reference is `WD-...`; it is the same provider webhook channel

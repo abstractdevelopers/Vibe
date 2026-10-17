@@ -29,6 +29,14 @@ const schema = z.object({
   // Payouts move money OUT. They are off unless explicitly enabled, so a
   // deployment whose payout flow has not been reviewed cannot pay anyone.
   PAYOUTS_PROVIDER: z.enum(["disabled", "bachs"]).default("disabled"),
+  // Vibe Yens: an optional stored balance with send-to-a-friend. Stored value
+  // and peer-to-peer transfer are regulated, so this is OFF by default and only
+  // switched on by an operator who has cleared it. When off, every wallet route
+  // returns 404 as if the feature did not exist.
+  WALLET_ENABLED: z
+    .enum(["true", "false"])
+    .default("false")
+    .transform((v) => v === "true"),
   PUBLIC_API_URL: z.string().default("http://localhost:12000"),
   PUBLIC_WEB_URL: z.string().default("http://localhost:12001"),
   // Transactional email. Unset means the log mailer, which prints messages to

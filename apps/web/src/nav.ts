@@ -25,6 +25,7 @@ export type Route =
   | { name: "seller-orders" }
   | { name: "advertising" }
   | { name: "wallet" }
+  | { name: "vibe-yens" }
   | { name: "events" }
   | { name: "event"; eventId: string }
   | { name: "pass" }

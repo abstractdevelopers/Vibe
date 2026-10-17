@@ -30,7 +30,7 @@ function when(iso: string, tz: string): string {
   }
 }
 
-export function EventsScreen({ onBack }: { onBack: () => void }) {
+export function EventsScreen({ onBack, focusEventId }: { onBack: () => void; focusEventId?: string }) {
   const [events, setEvents] = useState<EventSummary[] | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -63,15 +63,15 @@ export function EventsScreen({ onBack }: { onBack: () => void }) {
       )}
       <div className="stack">
         {events?.map((e) => (
-          <EventCard key={e.id} event={e} />
+          <EventCard key={e.id} event={e} defaultOpen={e.id === focusEventId} />
         ))}
       </div>
     </div>
   );
 }
 
-function EventCard({ event }: { event: EventSummary }) {
-  const [open, setOpen] = useState(false);
+function EventCard({ event, defaultOpen = false }: { event: EventSummary; defaultOpen?: boolean }) {
+  const [open, setOpen] = useState(defaultOpen);
   return (
     <div className="card">
       {event.imageUrl && (

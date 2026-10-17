@@ -239,7 +239,7 @@ function PostForm({
             <label className="dropzone">
               <UploadIcon width={22} height={22} />
               <span>{media.busy ? "Preparing…" : "Add a photo or video"}</span>
-              <span className="meta">Photos: JPEG, PNG, WebP, GIF · up to 4. Video: MP4, WebM, MOV · one, up to 25 MB.</span>
+              <span className="meta">Photos: JPEG, PNG, WebP, GIF · up to 4. Video: MP4, WebM, MOV · one, up to 200 MB.</span>
               <input
                 type="file"
                 accept="image/*,video/mp4,video/webm,video/quicktime"

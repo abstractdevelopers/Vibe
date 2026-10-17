@@ -186,11 +186,35 @@ test for any state transition, retry, or duplicate-event path you touch.
   would be provisioned.
 - Campaigns: draft → submitted → operator review → approved/rejected. Only an
   approved campaign for a **verified** business is eligible to run. Delivery is
-  built (`modules/ads.ts` `selectAdForViewer`, wired into `buildFeedPage` in
-  `feed.ts`): the sponsored slot is appended after the first organic item, never
-  sorted into ranking, and is frequency-capped and hideable. Metrics are
-  reported and verified **separately** — never summed into one number.
-  Regulated categories are refused at creation.
+  built (`modules/ads.ts` `selectAdForViewer`, wired into `feed.ts`): the
+  sponsored slot is a separate response field (`sponsored`) the client renders
+  after the **15th** organic post (`SPONSORED_AFTER` in `modules/feed.ts`, and
+  the same constant on the client). It is never sorted into ranking, and is
+  frequency-capped and hideable. Delivery is only chosen when the page actually
+  has more than `SPONSORED_AFTER` items, so an impression is never counted for
+  an ad the viewer could not see. A test that wants a delivered ad must seed a
+  page longer than 15 posts across **several authors** — the feed caps each
+  author at three posts per page, so one account cannot fill it. Seed those
+  authors with a direct `INSERT INTO users` (the sign-up route is rate limited).
+  Metrics are reported and verified **separately** — never summed into one
+  number. Regulated categories are refused at creation.
+
+## Vibe Yens (stored balance) — gated
+- `WALLET_ENABLED` (default **false**) gates the whole surface. When off,
+  `walletRoutes` registers nothing, so every wallet route 404s — there is no
+  dead money-moving endpoint reachable. Do not weaken this default: a stored
+  balance and P2P transfer are stored value and money transmission, and V1
+  forbids them unless an operator has cleared it.
+- The money model is unchanged: a balance is a SUM over double-entry journals
+  (`walletBalance` in `money/ledger.ts`), never a mutable column. A top-up
+  credits the wallet **only** from a signature-verified webhook
+  (`settleWalletTopup`), keyed on the `WALLET-` reference prefix. A send moves a
+  liability between two wallets inside one transaction that re-checks the
+  balance, so two concurrent sends cannot overdraw.
+- Adding any new notification type needs a `NOTIFICATION_FAMILY` entry
+  (`wallet.received → wallet`) **and** a `NOTIFICATION_TYPES` entry in
+  `modules/account.ts`, or the opt-out silently does nothing. A new analytics
+  name must be added to `ANALYTICS_EVENTS` or `trackSafe` drops it.
 
 ## Phases 3–5 modules (events, pass, AI, push, search, admin)
 - Events and check-in live in `modules/events.ts`. A check-in code is issued by
@@ -234,6 +258,12 @@ test for any state transition, retry, or duplicate-event path you touch.
   OpenAPI `{id}`. It documents routes/methods/auth; bodies stay in zod.
 
 ## Build and CI gotchas
+- **Cold screens are code-split.** `App.tsx` lazy-loads the menu/detail screens
+  most sessions never open (`Wallet`, `VibeYens`, `Pass`, `Admin`, `Assist`,
+  `Advertising`) behind a `Suspense` boundary. Keep it that way: the launch
+  bundle sits at ~92% of its raw budget, so adding a screen eagerly (or a heavy
+  import) will fail `check-bundle` in CI. Add new rarely-opened screens as
+  `lazy(() => import(...))` rather than raising the budget.
 - The CI `verify` job sets `NODE_ENV=test` for the API suite. That env leaks
   into every later step, including the Vite build. Vite picks the dev React
   build under any `NODE_ENV` other than `production`, which roughly doubles the

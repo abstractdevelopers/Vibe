@@ -29,6 +29,7 @@ export const NOTIFICATION_TYPES = [
   "comment_reply",
   "message",
   "gift",
+  "wallet",
   "system",
 ] as const;
 
