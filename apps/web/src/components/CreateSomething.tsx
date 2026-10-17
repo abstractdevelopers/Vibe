@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { api, ApiError } from "../api";
+import { api, ApiError, mediaSrc } from "../api";
 import { uploadImageFile } from "../media";
 import { ImageIcon, MegaphoneIcon, RadioIcon, StoreIcon, TicketIcon } from "../components/Icons";
 
@@ -330,7 +330,7 @@ function EventForm({ setError, onDone, onBack }: FormProps) {
       <label htmlFor="e-place">Venue</label>
       <input id="e-place" className="input" value={place} onChange={(e) => setPlace(e.target.value)} />
       <label htmlFor="e-image">Banner image (optional)</label>
-      {imageUrl && <img className="event-banner" src={imageUrl} alt="" />}
+      {imageUrl && <img className="event-banner" src={mediaSrc(imageUrl)} alt="" />}
       <label className="dropzone">
         <input
           id="e-image"

@@ -1,4 +1,5 @@
 import { isVideoUrl } from "../media";
+import { mediaSrc } from "../api";
 
 /**
  * Renders one stored media URL as either an image or a video.
@@ -9,10 +10,11 @@ import { isVideoUrl } from "../media";
  * screen on iOS.
  */
 export function MediaView({ url, alt = "" }: { url: string; alt?: string }) {
+  const src = mediaSrc(url);
   if (isVideoUrl(url)) {
-    return <video className="media-video" src={url} controls playsInline preload="metadata" />;
+    return <video className="media-video" src={src} controls playsInline preload="metadata" />;
   }
-  return <img src={url} alt={alt} loading="lazy" />;
+  return <img src={src} alt={alt} loading="lazy" />;
 }
 
 /** A set of media, laid out as one hero or a grid, images and video alike. */

@@ -20,6 +20,21 @@ export function apiUrl(path: string): string {
   return `${API_BASE}${path}`;
 }
 
+/**
+ * Resolve a stored media URL for rendering.
+ *
+ * The API stores paths (`/v1/media/<id>`), not absolute URLs, which keeps them
+ * host-independent. When the web client is on a different host from the API, a
+ * bare path would resolve against the *web* origin and 404 — so a relative path
+ * is resolved against the API origin here. Absolute URLs, and `data:`/`blob:`
+ * previews, are returned untouched.
+ */
+export function mediaSrc(url: string | null | undefined): string {
+  if (!url) return "";
+  if (/^(https?:|data:|blob:)/i.test(url)) return url;
+  return apiUrl(url);
+}
+
 /** The `wss://host` origin for the realtime socket, matching the API. */
 export function realtimeUrl(token: string): string {
   const base = API_BASE || `${location.protocol === "https:" ? "wss" : "ws"}://${location.host}`;

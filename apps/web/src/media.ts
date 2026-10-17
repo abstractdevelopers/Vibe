@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { api, getToken } from "./api";
+import { api, apiUrl, getToken } from "./api";
 
 const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
 const MAX_VIDEO_BYTES = 200 * 1024 * 1024;
@@ -45,7 +45,7 @@ export async function uploadImageFile(file: File, maxEdge = 512): Promise<string
 /** Upload any file as raw bytes. No base64, so a large clip never inflates. */
 export async function uploadRawFile(file: File): Promise<string> {
   const token = getToken();
-  const res = await fetch("/v1/media/upload", {
+  const res = await fetch(apiUrl("/v1/media/upload"), {
     method: "POST",
     headers: {
       "content-type": file.type || "application/octet-stream",

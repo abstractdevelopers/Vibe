@@ -1,3 +1,5 @@
+import { mediaSrc } from "../api";
+
 interface Props {
   name: string;
   url?: string | null;
@@ -16,7 +18,7 @@ export function Avatar({ name, url, size = "md", className = "", style }: Props)
   const classes = ["avatar", size === "sm" ? "sm" : "", className].filter(Boolean).join(" ");
   return (
     <span className={classes} style={style} aria-hidden="true">
-      {url ? <img src={url} alt="" loading="lazy" /> : name.slice(0, 1).toUpperCase() || "?"}
+      {url ? <img src={mediaSrc(url)} alt="" loading="lazy" /> : name.slice(0, 1).toUpperCase() || "?"}
     </span>
   );
 }

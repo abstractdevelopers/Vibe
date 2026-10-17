@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { api, ApiError } from "../api";
+import { api, ApiError, mediaSrc } from "../api";
 import type { Comment, FeedItem, Me, PollActivity } from "../types";
 import {
   CloseIcon,
@@ -863,7 +863,7 @@ function SponsoredCard({ ad, onHide }: { ad: SponsoredAd; onHide: () => void }) 
           is same-origin and needs no remote allow-list. */}
       {ad.imageUrl && (
         <button className="ad-banner" onClick={open} aria-label={`${ad.cta}: ${ad.title}`}>
-          <img src={ad.imageUrl} alt="" loading="lazy" />
+          <img src={mediaSrc(ad.imageUrl)} alt="" loading="lazy" />
         </button>
       )}
       <p style={{ marginTop: "var(--space-2)" }}>{ad.body}</p>

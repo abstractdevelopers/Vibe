@@ -52,4 +52,27 @@ describe("api base resolution", () => {
     const mod = await load();
     expect(mod.realtimeUrl("tok")).toBe("wss://vibe.launchverse.site/v1/realtime?token=tok");
   });
+
+  it("resolves a stored media path against the API origin", async () => {
+    vi.stubEnv("VITE_API_URL", "https://vibeapi.launchverse.site");
+    const mod = await load();
+    // A bare path would resolve against the web origin and 404 there.
+    expect(mod.mediaSrc("/v1/media/abc123.jpg")).toBe("https://vibeapi.launchverse.site/v1/media/abc123.jpg");
+  });
+
+  it("leaves absolute, data and blob URLs untouched", async () => {
+    vi.stubEnv("VITE_API_URL", "https://vibeapi.launchverse.site");
+    const mod = await load();
+    expect(mod.mediaSrc("https://cdn.example.com/a.jpg")).toBe("https://cdn.example.com/a.jpg");
+    expect(mod.mediaSrc("data:image/png;base64,AAAA")).toBe("data:image/png;base64,AAAA");
+    expect(mod.mediaSrc("blob:https://vibe.launchverse.site/x")).toBe("blob:https://vibe.launchverse.site/x");
+    expect(mod.mediaSrc(null)).toBe("");
+    expect(mod.mediaSrc(undefined)).toBe("");
+  });
+
+  it("keeps media same-origin when VITE_API_URL is unset", async () => {
+    vi.stubEnv("VITE_API_URL", "");
+    const mod = await load();
+    expect(mod.mediaSrc("/v1/media/abc123.jpg")).toBe("/v1/media/abc123.jpg");
+  });
 });

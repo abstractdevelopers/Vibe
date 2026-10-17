@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { api, ApiError, idempotencyKey } from "../api";
+import { api, ApiError, idempotencyKey, mediaSrc } from "../api";
 import { useNav } from "../nav";
 import {
   ArrowLeftIcon, RadioIcon, GoalIcon, FilmIcon, MusicIcon, ClockIcon, UsersIcon,
@@ -368,7 +368,7 @@ function GoLiveSheet({ onClose, onCreated }: { onClose: () => void; onCreated: (
         <label htmlFor="liveBanner">Banner <span className="meta">(optional)</span></label>
         <label className="dropzone" style={{ marginBottom: "var(--space-3)" }}>
           {bannerUrl ? (
-            <img src={bannerUrl} alt="Banner preview" style={{ width: "100%", borderRadius: "var(--radius-sm)" }} />
+            <img src={mediaSrc(bannerUrl)} alt="Banner preview" style={{ width: "100%", borderRadius: "var(--radius-sm)" }} />
           ) : (
             <>
               <UploadIcon width={22} height={22} />

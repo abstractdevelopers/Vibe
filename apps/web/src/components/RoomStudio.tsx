@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { api, ApiError, idempotencyKey } from "../api";
+import { api, ApiError, idempotencyKey, mediaSrc } from "../api";
 import { useRoomChannel, type RealtimeEvent } from "../realtime";
 import { uploadImageFile } from "../media";
 import { Avatar } from "./Avatar";
@@ -492,7 +492,7 @@ export function RoomStudio({ roomId, viewerId, viewerName, onBack, onLeft }: Pro
         <span className="energy-value">{room.hype}</span>
       </div>
 
-      {room.bannerUrl && <img className="room-banner" src={room.bannerUrl} alt="" loading="lazy" />}
+      {room.bannerUrl && <img className="room-banner" src={mediaSrc(room.bannerUrl)} alt="" loading="lazy" />}
 
       {/* The one panel this kind exists for. */}
       {room.kind === "sports" && (
@@ -748,7 +748,7 @@ function RoomEditSheet({ room, onClose, onSaved }: { room: Room; onClose: () => 
           </>
         )}
         <label>Banner</label>
-        {bannerUrl && <img className="room-banner" src={bannerUrl} alt="" />}
+        {bannerUrl && <img className="room-banner" src={mediaSrc(bannerUrl)} alt="" />}
         <label className="dropzone">
           <UploadIcon width={18} height={18} />
           <span>{uploading ? "Uploading…" : "Replace banner"}</span>

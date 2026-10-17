@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { api, ApiError } from "../api";
+import { api, ApiError, mediaSrc } from "../api";
 import type { Me } from "../types";
 import { ArrowLeftIcon, CheckIcon, CloseIcon, ImageIcon, UploadIcon } from "../components/Icons";
 import { useMediaUpload, uploadImageFile } from "../media";
@@ -83,7 +83,7 @@ export function EditProfileScreen({ me, onBack, onSaved }: Props) {
         <div className="row" style={{ gap: "var(--space-4)", marginBottom: "var(--space-4)" }}>
           <span className="avatar" style={{ width: 64, height: 64, fontSize: 24 }} aria-hidden="true">
             {avatarUrl ? (
-              <img src={avatarUrl} alt="" />
+              <img src={mediaSrc(avatarUrl)} alt="" />
             ) : (
               displayName.slice(0, 1).toUpperCase() || "?"
             )}

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { api, ApiError } from "../api";
+import { api, ApiError, mediaSrc } from "../api";
 import { ArrowLeftIcon, CalendarIcon, MapPinIcon, TicketIcon, CheckIcon, QrIcon, LockIcon } from "../components/Icons";
 import { EmptyState } from "../components/EmptyState";
 import { ScreenHeader } from "../components/ScreenHeader";
@@ -75,7 +75,7 @@ function EventCard({ event, defaultOpen = false }: { event: EventSummary; defaul
   return (
     <div className="card">
       {event.imageUrl && (
-        <img className="event-banner" src={event.imageUrl} alt="" loading="lazy" />
+        <img className="event-banner" src={mediaSrc(event.imageUrl)} alt="" loading="lazy" />
       )}
       <button
         className="grow"
@@ -168,7 +168,7 @@ function EventDetail({ eventId }: { eventId: string }) {
 
   return (
     <div style={{ marginTop: "var(--space-3)" }}>
-      {detail?.imageUrl && <img className="event-banner" src={detail.imageUrl} alt="" loading="lazy" />}
+      {detail?.imageUrl && <img className="event-banner" src={mediaSrc(detail.imageUrl)} alt="" loading="lazy" />}
       {detail?.description && <p>{detail.description}</p>}
       <p className="meta">
         {detail ? detail.checkinCount : 0} checked in · Organizer {detail?.organizer.displayName}
