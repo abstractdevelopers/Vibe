@@ -53,9 +53,18 @@ export async function buildApp(ctx: AppContext): Promise<FastifyInstance> {
 
   // Baseline security headers. These are additive and cannot lock anyone out of
   // the server: they only shape what a browser is allowed to do with a response.
-  // The API is same-origin with the web client (one image serves both), so the
-  // CSP can be strict; media-src allows the blob: URLs the WebRTC audio and
-  // banner uploads use, and connect-src allows the wss: realtime socket.
+  // The API may be on its own origin (PUBLIC_API_URL), in which case the web
+  // client's fetches and its WebSocket are cross-origin and CSP must name that
+  // origin in connect-src; 'self' alone would silently block every call.
+  // media-src allows the blob: URLs the WebRTC audio and banner uploads use.
+  const apiOrigin = (() => {
+    try {
+      return new URL(ctx.config.PUBLIC_API_URL).origin;
+    } catch {
+      return "";
+    }
+  })();
+  const apiSocketOrigin = apiOrigin.replace(/^http/, "ws");
   app.addHook("onSend", async (req, reply) => {
     reply.header("X-Content-Type-Options", "nosniff");
     reply.header("Referrer-Policy", "strict-origin-when-cross-origin");
@@ -70,7 +79,7 @@ export async function buildApp(ctx: AppContext): Promise<FastifyInstance> {
         "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
         "font-src 'self' https://fonts.gstatic.com",
         "script-src 'self'",
-        "connect-src 'self' ws: wss:",
+        `connect-src 'self' ws: wss:${apiOrigin ? ` ${apiOrigin} ${apiSocketOrigin}` : ""}`,
         "frame-ancestors 'none'",
         "base-uri 'self'",
         "form-action 'self'",
