@@ -548,4 +548,46 @@ Gotchas the harnesses encode, in case you write new checks:
   between runs rather than assuming a bug.
 - **`sshd` is `ssh.service` on Ubuntu**; `systemctl is-active sshd` is
   misleadingly "inactive" even while SSH is up.
+- **Sheets are `.sheet-card` / `.sheet-head`, and both must be styled.** The
+  create and "start something" sheets sit on a full-screen scrim; without a
+  background on `.sheet-card` the scrim shows through and the sheet's contents
+  float as transparent, overlapping text over the page ("bleeding"). Both
+  classes mirror `.sheet-inner` (gradient background, padding, top radius).
+  A transparent `backgroundColor` is expected — the fill is the
+  `background-image` gradient, so check `backgroundImage`, not `backgroundColor`,
+  when verifying a sheet in a browser.
+- **The account menu is capped above the bottom nav on short screens.** On a
+  320×568 phone the menu's max height keeps it clear of the nav (menu bottom
+  ~452, nav top ~499) and it scrolls internally, so "Log out" is reachable
+  rather than covered. On tall phones it is uncapped (menu bottom ~677).
+- **A cheer is stored in `post_gifts`, not `reactions`.** Free cheers and paid
+  gifts share the table; `feed.ts` returns `giftCount` and `viewerCheered` from
+  subqueries so a post shows its cheer count and a sender sees their own. The
+  cheer uses `CheerIcon` (PartyPopper), not the decorative `SparklesIcon`.
+- **Event artwork is `events.image_url`** (migration 0018), same contract as
+  `campaigns.creative_image_url`: an absolute http(s) URL or `/v1/media/<id>`.
+  Rendered by the `.event-banner` class (16:9, `object-fit: cover`). A bad URL
+  is a 422 from the zod regex.
+- **Live rooms are built on `activity_rooms` / `room_members`.** `kind` includes
+  `voice` (open stage) and `listen` (listening party); `room_members.role`
+  includes `speaker` with `hand_raised` / `muted_by_host`, and a room carries
+  `audio_track` / `audio_started_at` for synced listening. The Live screen
+  already has the "Watch party" / "Match room" create kinds and a
+  `playbackMode` (YouTube) path — but the room *view* has **no gift button and
+  no stage/audience UI yet**, and there is **no room-scoped gift route** (gifts
+  are post-scoped only). Those are the concrete gaps for items 5–7.
+- **Hard-deleting a user is blocked by RESTRICT FKs.** `users` has ~71 FKs;
+  `gift_purchases`, `expenses` (payer), `circles` (creator), `ledger_accounts`,
+  `payouts` and `paid_gifts` use RESTRICT, so a bare `DELETE FROM users` fails.
+  The product itself only *soft*-deletes (sets `deleted_at`, keeps financial
+  records). To purge synthetic accounts: delete `gift_purchases`, `expenses`
+  (payer or creator), and `circles` (creator) for those users first, then
+  `DELETE FROM users` — everything else cascades. Match `%@example.com` /
+  `%@vibe.test` and exclude `host_kind = 'official'`.
+- **Seeded official content uses a `vibe` host account** (`host_kind =
+  'official'`, disclosure set) that publishes events through the normal API.
+  Event banners are generated locally (Pillow) and uploaded via `POST
+  /v1/media`, so they are self-hosted under `/v1/media/<id>` — no hotlinking.
+  The media volume is mounted at `/app/media` with `MEDIA_DIR=/app/media`, so
+  uploads survive redeploys.
 
