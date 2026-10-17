@@ -285,6 +285,13 @@ npm --workspace @vibe/api run test
 - `scripts/loadtest.mjs [baseUrl] [iterations]` prints p50/p75/p95/p99 for
   representative reads. It deliberately does **not** assert the spec's latency
   targets — this host is not the target environment. Compare runs over time.
+- `scripts/room-loadtest.mjs [baseUrl] [listeners] [users]` measures a live
+  room, not a request: how many sockets `/v1/realtime` holds, how many receive
+  one broadcast, and sustained delivery. It does **not** create accounts over
+  HTTP (signup is rate limited to 10/hour/IP by design) — pre-mint tokens with
+  `scripts/seed-load-users.sh <count>` and pass `LOAD_TOKENS=<file>`. Local only;
+  the seeder talks to the docker-compose Postgres, never production. Baseline on
+  a dev box: 1000 listeners held, 999/1000 fan-out, ~99.9% sustained delivery.
 - `scripts/secret-scan.mjs` scans tracked files (not `node_modules`/build) for
   secret shapes. Narrow patterns on purpose; keep it low-noise.
 - CI runs both, plus `npm audit --audit-level=high --omit=dev`, on every push.
@@ -320,6 +327,17 @@ npm --workspace @vibe/api run test
   `dataset.vibe`. `applyTheme(theme | null)` sets `--accent`, the surface ramp
   and `--brand-gradient`; `null` means "follow the room/game" (see
   `useActivityTheme`, `themeForRoom`, `themeForGame`).
+- The environment mode is `auto` by default, not a fixed default theme.
+  `themeMode()` returns `auto | pinned | follow`; auto rotates through the four
+  signature worlds (`ROTATION`) on a pure function of the clock
+  (`autoTheme(now)`, one step per `ROTATION_MS`), so a reload in the same window
+  shows the same mood. `restoreTheme()` applies it at boot and `App.tsx` re-applies
+  it on an interval. Picking a tile pins it (`setThemeMode('pinned')`, which
+  clears the pick when set back to auto). `useActivityTheme`/`Games.tsx` only
+  apply a screen's own environment when the mode is `follow` — otherwise walking
+  into a room would yank the whole app to that room's colour and back, which is
+  the "bleed" the theme work removed. A legacy `vibe.vibetheme` with no mode is
+  treated as pinned, so nobody's stored choice is overridden by the new default.
 - Every interactive colour must come from a token, never a hardcoded hue. The
   theme defect (a primary button that stayed transparent under a new
   environment) was caused by `--violet`/`--coral` being baked into
@@ -356,6 +374,20 @@ npm --workspace @vibe/api run test
 - **Live state is derived, never stored.** `effectiveRoomState` is the only
   place that decides live / starting soon / scheduled / ended; `state_override`
   holds only a terminal `ended`/`cancelled`. Do not add a boolean `is_live`.
+- **The realtime socket buffers frames sent before it is ready.** The client
+  sends `room.join` in `onopen`, but `/v1/realtime` awaits the session and circle
+  lookups first. `@fastify/websocket` does not buffer, so frames arriving in that
+  window used to be dropped — the socket stayed subscribed to nothing and
+  silently received no room events (worst under load, when the lookup is slow).
+  The route now installs a message handler before its first await and replays
+  buffered frames once the real handler is ready. Regression test:
+  `apps/api/tests/realtime-join.test.ts`. Do not move the handler back after the
+  awaits.
+- **The mic is a sticky dock, not a control at the bottom of the page.** A voice
+  room must always show a mic toggle with a live input-level meter, so "is my
+  voice being picked up?" is answerable without asking anyone. It is `canSpeak`
+  rooms only, but it is present for everyone in them — not gated behind being on
+  stage.
 - **Coordinates are rounded before storage.** `roundBand` (~1.1 km) is the only
   writer of `users.lat_band/lng_band`. Never store or return a precise point;
   never return any point to another member. Explore falls back to city/area.

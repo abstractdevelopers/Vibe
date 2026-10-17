@@ -6,7 +6,7 @@ import { EmptyState } from "../components/EmptyState";
 import { GameArt, GameCover, WORLD_ORDER, worldFor } from "../components/GameArt";
 import { SpinnerIcon, UsersIcon, PlayIcon, RadioIcon, TrophyIcon } from "../components/Icons";
 import { themeForGame } from "../themes";
-import { applyTheme, followActivity, pickedTheme } from "../theme-runtime";
+import { applyTheme, pickedTheme, themeMode } from "../theme-runtime";
 import { GAME_RAKE_BPS } from "@vibe/shared";
 
 /**
@@ -107,7 +107,7 @@ export function GamesScreen({ onBack }: { onBack?: () => void }) {
   // The room takes on the environment of whatever game is in focus.
   const focus = picked ?? (category ? (byCategory[category]?.[0] ?? featured) : featured);
   useEffect(() => {
-    if (!followActivity() || pickedTheme()) return;
+    if (themeMode() !== "follow") return;
     applyTheme(focus ? themeForGame(focus.id, focus.category) : null);
     return () => applyTheme(pickedTheme());
   }, [focus?.id]);

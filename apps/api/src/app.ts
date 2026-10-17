@@ -211,6 +211,20 @@ export async function buildApp(ctx: AppContext): Promise<FastifyInstance> {
 
   // Realtime: chat/poll/plan updates for the circles the user belongs to.
   app.get("/v1/realtime", { websocket: true }, async (socket, req) => {
+    // Attach a message handler before the first await. @fastify/websocket does
+    // not buffer frames, and the client sends `room.join` the instant the socket
+    // opens — which can be while the awaits below are still resolving. Frames
+    // that arrive in that window used to be dropped, so the socket was never
+    // registered in the room and silently received nothing. Under load, when the
+    // session lookup is slow, that is most of them. Buffer instead, and replay
+    // once the real handler is installed.
+    const pending: Buffer[] = [];
+    let handleFrame: ((raw: Buffer) => void) | null = null;
+    socket.on("message", (raw: Buffer) => {
+      if (handleFrame) handleFrame(raw);
+      else if (pending.length < 64) pending.push(raw);
+    });
+
     const token = bearerToken(req.headers.authorization) ?? (req.query as { token?: string }).token;
     if (!token) {
       socket.close(4401, "unauthorized");
@@ -250,7 +264,7 @@ export async function buildApp(ctx: AppContext): Promise<FastifyInstance> {
     // relayed. Without the queue an offer could be published before the socket
     // was registered in the room, and the answer would never arrive.
     let chain: Promise<void> = Promise.resolve();
-    socket.on("message", (raw: Buffer) => {
+    handleFrame = (raw: Buffer) => {
       // Flood guard: a well-behaved client sends a handful of frames a second at
       // most (presence + ICE candidates). Anything above the burst is dropped
       // rather than closed, so a transient spike does not kill a live call.
@@ -291,7 +305,9 @@ export async function buildApp(ctx: AppContext): Promise<FastifyInstance> {
           );
         }
       }).catch(() => undefined);
-    });
+    };
+    for (const raw of pending) handleFrame(raw);
+    pending.length = 0;
 
     socket.on("close", () => {
       unsubscribe();

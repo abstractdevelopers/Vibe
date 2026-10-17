@@ -1910,6 +1910,18 @@ select {
   border-bottom: 1px solid var(--hairline);
   margin-bottom: var(--space-2);
 }
+/* Group labels. Twelve flat items read as a junk drawer; four labelled groups
+   read as a menu you can scan. */
+.menu-group {
+  margin: var(--space-2) 0 2px;
+  padding: 0 var(--space-3);
+  font-size: var(--text-meta);
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+.menu-group:first-of-type { margin-top: 0; }
 .menu-item {
   display: flex;
   align-items: center;
@@ -2459,12 +2471,55 @@ select {
 .react-emoji.gift { color: var(--accent); }
 
 /* Studio controls. */
+.studio-dock {
+  position: sticky;
+  bottom: 0;
+  z-index: 30;
+  padding-top: var(--space-2);
+  background: linear-gradient(to bottom, transparent, var(--surface-1) 28%);
+  backdrop-filter: blur(8px);
+}
 .studio-controls {
   display: flex;
   flex-wrap: wrap;
+  align-items: center;
   gap: var(--space-2);
   margin: 0 var(--space-4) var(--space-3);
 }
+
+/* The mic is the one control a voice room cannot hide. It carries its own live
+   level, so the answer to "is my voice being picked up?" is visible without
+   asking anyone. */
+.mic-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid var(--border-strong);
+  background: var(--surface-2);
+}
+.mic-btn.live {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 16%, var(--surface-2));
+  color: var(--text);
+}
+.mic-btn-label { font-weight: 600; }
+.mic-meter {
+  display: inline-block;
+  width: 54px;
+  height: 6px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--text-muted) 30%, transparent);
+  overflow: hidden;
+}
+.mic-meter-fill {
+  display: block;
+  height: 100%;
+  width: 0;
+  border-radius: 999px;
+  background: linear-gradient(90deg, var(--accent-soft), var(--accent));
+  transition: width 90ms linear;
+}
+.mic-state { flex-basis: 100%; }
 .hands { margin: 0 var(--space-4) var(--space-3); }
 
 /* Audience strip. */

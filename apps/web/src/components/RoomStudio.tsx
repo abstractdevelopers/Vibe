@@ -127,6 +127,8 @@ export function RoomStudio({ roomId, viewerId, viewerName, onBack, onLeft }: Pro
   const peerConns = useRef<Map<string, RTCPeerConnection>>(new Map());
   const audioEls = useRef<Map<string, HTMLAudioElement>>(new Map());
   const analysers = useRef<Map<string, { ctx: AudioContext; raf: number }>>(new Map());
+  const localAnalyser = useRef<{ ctx: AudioContext; raf: number } | null>(null);
+  const [micLevel, setMicLevel] = useState(0);
 
   const isHost = room?.host.id === viewerId;
   const isOnStage = stage.some((m) => m.id === viewerId);
@@ -322,11 +324,13 @@ export function RoomStudio({ roomId, viewerId, viewerName, onBack, onLeft }: Pro
     try {
       if (micOn) {
         localStream.current?.getAudioTracks().forEach((t) => { t.enabled = false; });
+        stopLocalMeter();
         setMicOn(false);
         return;
       }
       const stream = await ensureLocalStream();
       stream.getAudioTracks().forEach((t) => { t.enabled = true; });
+      startLocalMeter(stream);
       setMicOn(true);
       // Who this speaker connects to depends on the room's format. In an open
       // mic every speaker meshes with every other speaker. In broadcast only the
@@ -345,11 +349,41 @@ export function RoomStudio({ roomId, viewerId, viewerName, onBack, onLeft }: Pro
     }
   }
 
+  // A live level for the viewer's own mic, so "is my voice being picked up?"
+  // is answerable without asking someone else. This is the missing feedback
+  // that made voice rooms feel dead.
+  const stopLocalMeter = useCallback(() => {
+    const a = localAnalyser.current;
+    if (a) { cancelAnimationFrame(a.raf); void a.ctx.close(); localAnalyser.current = null; }
+    setMicLevel(0);
+  }, []);
+
+  const startLocalMeter = useCallback((stream: MediaStream) => {
+    if (localAnalyser.current) return;
+    try {
+      const ctx = new AudioContext();
+      const src = ctx.createMediaStreamSource(stream);
+      const analyser = ctx.createAnalyser();
+      analyser.fftSize = 512;
+      src.connect(analyser);
+      const data = new Uint8Array(analyser.frequencyBinCount);
+      const tick = () => {
+        analyser.getByteFrequencyData(data);
+        const level = data.reduce((s, v) => s + v, 0) / data.length;
+        setMicLevel(Math.min(100, Math.round((level / 40) * 100)));
+        const a = localAnalyser.current;
+        if (a) a.raf = requestAnimationFrame(tick);
+      };
+      localAnalyser.current = { ctx, raf: requestAnimationFrame(tick) };
+    } catch { /* meter is best-effort */ }
+  }, []);
+
   // Tear down audio on unmount.
   useEffect(() => () => {
     localStream.current?.getTracks().forEach((t) => t.stop());
     peerConns.current.forEach((pc) => pc.close());
     analysers.current.forEach((a) => { cancelAnimationFrame(a.raf); void a.ctx.close(); });
+    if (localAnalyser.current) { cancelAnimationFrame(localAnalyser.current.raf); void localAnalyser.current.ctx.close(); }
   }, []);
 
   async function join() {
@@ -516,35 +550,54 @@ export function RoomStudio({ roomId, viewerId, viewerName, onBack, onLeft }: Pro
         ))}
       </div>
 
-      {/* Reaction bar. */}
-      <div className="react-bar" role="group" aria-label="Reactions">
-        {REACTIONS.map((r) => (
-          <button key={r.id} className="react-emoji" onClick={() => void react(r.id)} aria-label={`React ${r.label}`}>
-            <GiftArt id={r.id} size={26} />
-          </button>
-        ))}
-        <button className="react-emoji gift" onClick={() => setGifting(true)} aria-label="Send a gift"><CheerIcon width={18} height={18} /></button>
-        <button className="react-emoji gift" onClick={() => setPaidGifting(true)} aria-label="Send a paid gift"><GiftIcon width={18} height={18} /></button>
-      </div>
+      {/* Reaction bar + mic share one dock that stays in reach while the room
+          scrolls. The mic is the control you must never have to hunt for, and
+          reactions belong next to it, not above it. */}
+      <div className="studio-dock">
+        <div className="react-bar" role="group" aria-label="Reactions">
+          {REACTIONS.map((r) => (
+            <button key={r.id} className="react-emoji" onClick={() => void react(r.id)} aria-label={`React ${r.label}`}>
+              <GiftArt id={r.id} size={26} />
+            </button>
+          ))}
+          <button className="react-emoji gift" onClick={() => setGifting(true)} aria-label="Send a gift"><CheerIcon width={18} height={18} /></button>
+          <button className="react-emoji gift" onClick={() => setPaidGifting(true)} aria-label="Send a paid gift"><GiftIcon width={18} height={18} /></button>
+        </div>
 
-      {/* Studio controls. */}
-      <div className="studio-controls">
-        {canSpeak && (
-          <button className={`btn ${micOn ? "primary" : ""}`} onClick={() => void toggleMic()}>
-            <MicIcon width={16} height={16} /> {micOn ? "Mute" : "Speak"}
-          </button>
-        )}
-        {!isOnStage && (
-          <button className="btn" onClick={() => void raiseHand(true)} disabled={audience.find((a) => a.id === viewerId)?.handRaised}>
-            <HandIcon width={15} height={15} /> {audience.find((a) => a.id === viewerId)?.handRaised ? "Hand raised" : "Raise hand"}
-          </button>
-        )}
-        <button className="btn ghost" onClick={share}><ShareIcon width={15} height={15} /> Share</button>
-        {isHost && <button className="btn ghost" onClick={() => setEditing(true)}><EditIcon width={15} height={15} /> Edit</button>}
-        {isHost && <button className="btn ghost danger" onClick={() => void removeRoom()}><TrashIcon width={15} height={15} /> Delete</button>}
-        {!joined && <button className="btn" onClick={() => void join()} disabled={busy}>Join</button>}
+        <div className="studio-controls">
+          {canSpeak && (
+            <button
+              className={`btn mic-btn${micOn ? " live" : ""}`}
+              onClick={() => void toggleMic()}
+              aria-pressed={micOn}
+              title={micOn ? "Mute your microphone" : "Turn your microphone on"}
+            >
+              {micOn ? <MicOnIcon width={17} height={17} /> : <MicOffIcon width={17} height={17} />}
+              <span className="mic-btn-label">{micOn ? "Mic on" : "Mic off"}</span>
+              <span className="mic-meter" aria-hidden="true">
+                <span className="mic-meter-fill" style={{ width: `${micOn ? micLevel : 0}%` }} />
+              </span>
+            </button>
+          )}
+          {canSpeak && (
+            <span className="meta mic-state">
+              {micOn
+                ? (isOnStage ? "You are on the stage — everyone can hear you." : "You are unmuted; the host can bring you up.")
+                : "Your mic is off."}
+            </span>
+          )}
+          {!isOnStage && canSpeak && (
+            <button className="btn" onClick={() => void raiseHand(true)} disabled={audience.find((a) => a.id === viewerId)?.handRaised}>
+              <HandIcon width={15} height={15} /> {audience.find((a) => a.id === viewerId)?.handRaised ? "Hand raised" : "Raise hand"}
+            </button>
+          )}
+          <button className="btn ghost" onClick={share}><ShareIcon width={15} height={15} /> Share</button>
+          {isHost && <button className="btn ghost" onClick={() => setEditing(true)}><EditIcon width={15} height={15} /> Edit</button>}
+          {isHost && <button className="btn ghost danger" onClick={() => void removeRoom()}><TrashIcon width={15} height={15} /> Delete</button>}
+          {!joined && <button className="btn" onClick={() => void join()} disabled={busy}>Join</button>}
+        </div>
+        {micError && <div className="notice">{micError}</div>}
       </div>
-      {micError && <div className="notice">{micError}</div>}
 
       {/* Host: hands raised, waiting to be brought up. */}
       {isHost && audience.some((a) => a.handRaised) && (

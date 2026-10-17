@@ -24,7 +24,7 @@
 import type { Theme } from "./theme-runtime";
 
 export type { Surfaces, Theme } from "./theme-runtime";
-export { applyTheme, rampFor, chooseTheme, restoreTheme, pickedTheme, followActivity } from "./theme-runtime";
+export { applyTheme, rampFor, chooseTheme, restoreTheme, pickedTheme, followActivity, themeMode, setThemeMode, autoTheme, rotateAutoTheme, ROTATION, ROTATION_MS, type ThemeMode } from "./theme-runtime";
 
 function hslToHex(h: number, s: number, l: number): string {
   const a = (s / 100) * Math.min(l / 100, 1 - l / 100);

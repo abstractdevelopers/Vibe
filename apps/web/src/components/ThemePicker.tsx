@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import { CheckIcon } from "./Icons";
 import { THEMES, getTheme } from "../themes";
-import { chooseTheme, followActivity, pickedTheme, rampFor, type Theme } from "../theme-runtime";
+import { chooseTheme, pickedTheme, rampFor, setThemeMode, themeMode, type Theme, type ThemeMode } from "../theme-runtime";
 
 /**
  * Theme picker.
@@ -10,8 +10,11 @@ import { chooseTheme, followActivity, pickedTheme, rampFor, type Theme } from ".
  * and surface, each in four house styles, plus four signature environments
  * (Neon Arcade, Obsidian Lounge, Cyber Arena, Royal Chamber). This lets someone
  * browse them by family, preview each one as an actual environment (its
- * surfaces, its accent, its atmosphere), try it live, or let Vibe follow
- * whatever they are doing.
+ * surfaces, its accent, its atmosphere), try it live, or pin one for good.
+ *
+ * The default is Auto: Vibe rotates through the four signature worlds between
+ * visits, so the product has a mood without anyone choosing one. Picking any
+ * tile pins it; "Let it rotate" returns to Auto.
  *
  * Selecting is immediate and persistent: it writes the theme to localStorage and
  * applies the full surface ramp to the document root, so the whole app changes —
@@ -19,8 +22,8 @@ import { chooseTheme, followActivity, pickedTheme, rampFor, type Theme } from ".
  */
 
 export function ThemePicker() {
-  const [selected, setSelected] = useState<string | null>(() => pickedTheme()?.id ?? null);
-  const [follow, setFollow] = useState<boolean>(() => followActivity());
+  const [mode, setMode] = useState<ThemeMode>(() => themeMode());
+  const [selected, setSelected] = useState<string | null>(() => (themeMode() === "pinned" ? pickedTheme()?.id ?? null : null));
 
   const families = useMemo(() => [...new Set(THEMES.map((t) => t.family))], []);
   const styles = useMemo(() => [...new Set(THEMES.map((t) => t.style))], []);
@@ -29,16 +32,16 @@ export function ThemePicker() {
 
   function choose(theme: Theme | null) {
     setSelected(theme?.id ?? null);
+    if (theme) setMode("pinned");
     chooseTheme(theme);
+    setThemeMode(theme ? "pinned" : "auto");
   }
 
-  function toggleFollow(next: boolean) {
-    setFollow(next);
-    localStorage.setItem("vibe.theme.follow", next ? "1" : "0");
-    if (next) {
-      setSelected(null);
-      chooseTheme(null);
-    }
+  function setAuto() {
+    setSelected(null);
+    setMode("auto");
+    setThemeMode("auto");
+    // Show what auto currently resolves to, so the choice is not invisible.
     window.dispatchEvent(new CustomEvent("vibe:theme"));
   }
 
@@ -46,27 +49,33 @@ export function ThemePicker() {
 
   return (
     <div className="stack">
-      <label className="row spread" style={{ cursor: "pointer" }}>
-        <span>
-          <span style={{ display: "block", fontWeight: 600 }}>Follow activity</span>
-          <span className="meta">Let the environment change with the game or room you are in</span>
-        </span>
-        <input type="checkbox" checked={follow} onChange={(e) => toggleFollow(e.target.checked)} />
-      </label>
+      <div className="mode-row" role="radiogroup" aria-label="How Vibe picks an environment">
+        <button className={`mode-card${mode === "auto" ? " sel" : ""}`} role="radio" aria-checked={mode === "auto"} onClick={setAuto}>
+          <span className="mode-card-title">Let it rotate</span>
+          <span className="mode-card-sub">Vibe changes the mood between visits — the default</span>
+        </button>
+        <button className={`mode-card${mode === "pinned" ? " sel" : ""}`} role="radio" aria-checked={mode === "pinned"} onClick={() => setMode("pinned")}>
+          <span className="mode-card-title">Pin one</span>
+          <span className="mode-card-sub">Pick an environment below and it stays</span>
+        </button>
+        <button className={`mode-card${mode === "follow" ? " sel" : ""}`} role="radio" aria-checked={mode === "follow"} onClick={() => { setMode("follow"); setThemeMode("follow"); }}>
+          <span className="mode-card-title">Follow the room</span>
+          <span className="mode-card-sub">The environment changes with the game or room you enter</span>
+        </button>
+      </div>
 
       <div>
         <p className="eyebrow" style={{ marginBottom: "var(--space-2)" }}>Signature environments</p>
         <div className="env-feature-grid">
           {THEMES.filter((t) => t.family === "signature").map((t) => (
-            <EnvironmentTile key={t.id} theme={t} active={selected === t.id} onPick={() => choose(t)} featured />
+            <EnvironmentTile key={t.id} theme={t} active={mode === "pinned" && selected === t.id} onPick={() => choose(t)} featured />
           ))}
         </div>
       </div>
 
       <div className="pill-row" role="tablist" aria-label="Theme family">
-        <button className="pill" aria-pressed={!selected && !follow} onClick={() => choose(null)}>Vibe default</button>
         {families.filter((f) => f !== "signature").map((f) => (
-          <button key={f} className="pill" aria-pressed={family === f && !follow} onClick={() => setFamily(f)}>
+          <button key={f} className="pill" aria-pressed={family === f} onClick={() => setFamily(f)}>
             {f}
           </button>
         ))}
@@ -80,14 +89,14 @@ export function ThemePicker() {
 
       <div className="theme-grid">
         {familyThemes.map((t) => (
-          <EnvironmentTile key={t.id} theme={t} active={selected === t.id} onPick={() => choose(t)} />
+          <EnvironmentTile key={t.id} theme={t} active={mode === "pinned" && selected === t.id} onPick={() => choose(t)} />
         ))}
       </div>
       {familyThemes.length === 0 && (
         <p className="meta">No themes in this combination — pick another family or style.</p>
       )}
       <span className="meta">
-        {THEMES.length} environments across {families.length} families. The one you pick applies everywhere and stays.
+        {THEMES.length} environments across {families.length} families. Pick one and it applies everywhere and stays.
       </span>
     </div>
   );

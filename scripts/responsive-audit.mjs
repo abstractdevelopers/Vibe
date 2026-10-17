@@ -23,9 +23,9 @@ async function main() {
     await page.reload({ waitUntil: "networkidle2" });
   }
 
-  const tabs = ["Home", "Explore", "Circles", "You"];
+  const tabs = ["Home", "Circles", "Play", "Explore"];
   const menuItems = [
-    "View profile",
+    "Your profile",
     "Edit profile",
     "Start something",
     "Events",

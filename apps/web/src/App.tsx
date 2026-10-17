@@ -60,7 +60,7 @@ const SettingsScreen = lazy(() => import("./screens/Settings").then((m) => ({ de
 const RoomStudio = lazy(() => import("./components/RoomStudio").then((m) => ({ default: m.RoomStudio })));
 import { NavContext, useNav, type Route } from "./nav";
 import { useRealtime } from "./realtime";
-import { restoreTheme } from "./theme-runtime";
+import { applyTheme, restoreTheme, rotateAutoTheme, themeMode, ROTATION_MS } from "./theme-runtime";
 import { Avatar } from "./components/Avatar";
 import type { Me } from "./types";
 
@@ -168,6 +168,12 @@ export function App() {
     if (saved) document.documentElement.dataset.theme = saved;
     // Restore the chosen environment, so the app opens as the viewer left it.
     restoreTheme();
+    // In auto mode the mood also changes during a long visit, not only between
+    // them — every 30s it drifts to the next signature world.
+    const id = window.setInterval(() => {
+      if (themeMode() === "auto") applyTheme(rotateAutoTheme());
+    }, ROTATION_MS);
+    return () => window.clearInterval(id);
   }, []);
 
   const bump = () => setRefreshKey((k) => k + 1);
@@ -502,6 +508,8 @@ function AccountMenu({
             <div style={{ fontWeight: 700 }}>{me.displayName}</div>
             <div className="meta">@{me.handle}</div>
           </div>
+
+          <p className="menu-group" role="presentation">Your profile</p>
           <button
             className="menu-item"
             role="menuitem"
@@ -510,17 +518,7 @@ function AccountMenu({
               onOpenProfile();
             }}
           >
-            <UserIcon width={17} height={17} /> View profile
-          </button>
-          <button
-            className="menu-item"
-            role="menuitem"
-            onClick={() => {
-              setOpen(false);
-              onOpenYou();
-            }}
-          >
-            <SettingsIcon width={17} height={17} /> Your space
+            <UserIcon width={17} height={17} /> Your profile
           </button>
           <button
             className="menu-item"
@@ -532,6 +530,18 @@ function AccountMenu({
           >
             <EditIcon width={17} height={17} /> Edit profile
           </button>
+          <button
+            className="menu-item"
+            role="menuitem"
+            onClick={() => {
+              setOpen(false);
+              onOpenYou();
+            }}
+          >
+            <HomeIcon width={17} height={17} /> Your space
+          </button>
+
+          <p className="menu-group" role="presentation">Create</p>
           <button
             className="menu-item"
             role="menuitem"
@@ -562,38 +572,8 @@ function AccountMenu({
           >
             <RadioIcon width={17} height={17} /> Live Now
           </button>
-          <button
-            className="menu-item"
-            role="menuitem"
-            onClick={() => {
-              setOpen(false);
-              nav.push({ name: "pass" });
-            }}
-          >
-            <PassIcon width={17} height={17} /> Vibe Pass
-          </button>
-          <button
-            className="menu-item"
-            role="menuitem"
-            onClick={() => {
-              setOpen(false);
-              nav.push({ name: "assist" });
-            }}
-          >
-            <SparklesIcon width={17} height={17} /> Assist
-          </button>
-          {me.isAdmin && (
-            <button
-              className="menu-item"
-              role="menuitem"
-              onClick={() => {
-                setOpen(false);
-                nav.push({ name: "admin" });
-              }}
-            >
-              <ShieldIcon width={17} height={17} /> Operator console
-            </button>
-          )}
+
+          <p className="menu-group" role="presentation">Money</p>
           <button
             className="menu-item"
             role="menuitem"
@@ -629,11 +609,45 @@ function AccountMenu({
             role="menuitem"
             onClick={() => {
               setOpen(false);
+              nav.push({ name: "pass" });
+            }}
+          >
+            <PassIcon width={17} height={17} /> Vibe Pass
+          </button>
+
+          <p className="menu-group" role="presentation">More</p>
+          <button
+            className="menu-item"
+            role="menuitem"
+            onClick={() => {
+              setOpen(false);
+              nav.push({ name: "assist" });
+            }}
+          >
+            <SparklesIcon width={17} height={17} /> Assist
+          </button>
+          <button
+            className="menu-item"
+            role="menuitem"
+            onClick={() => {
+              setOpen(false);
               nav.push({ name: "advertising" });
             }}
           >
             <MegaphoneIcon width={17} height={17} /> Advertising
           </button>
+          {me.isAdmin && (
+            <button
+              className="menu-item"
+              role="menuitem"
+              onClick={() => {
+                setOpen(false);
+                nav.push({ name: "admin" });
+              }}
+            >
+              <ShieldIcon width={17} height={17} /> Operator console
+            </button>
+          )}
           <button
             className="menu-item"
             role="menuitem"

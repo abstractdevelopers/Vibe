@@ -140,6 +140,11 @@ export function chooseTheme(theme: Theme | null): void {
 
 /** Re-apply whatever the viewer last chose. Safe to call at boot. */
 export function restoreTheme(): void {
+  const mode = themeMode();
+  if (mode === "auto") {
+    applyTheme(autoTheme());
+    return;
+  }
   const raw = localStorage.getItem(PICK_KEY);
   if (!raw) return;
   try {
@@ -164,4 +169,102 @@ export function pickedTheme(): Theme | null {
 /** Whether the environment should follow the activity you are in. On by default. */
 export function followActivity(): boolean {
   return localStorage.getItem(FOLLOW_KEY) !== "0";
+}
+
+export const MODE_KEY = "vibe.theme.mode";
+
+/** Auto, pinned, or following the activity. Auto is the default. */
+export type ThemeMode = "auto" | "pinned" | "follow";
+
+/**
+ * How the environment is chosen. Auto is the default and needs no storage: a
+ * viewer who has never touched the picker gets it, and a pinned theme is the
+ * only thing that turns it off. "follow" is the older behaviour (change with the
+ * room or game you are in) and is kept for anyone who set it.
+ */
+export function themeMode(): ThemeMode {
+  const raw = localStorage.getItem(MODE_KEY);
+  if (raw === "pinned" || raw === "follow" || raw === "auto") return raw;
+  return pickedTheme() ? "pinned" : "auto";
+}
+
+export function setThemeMode(mode: ThemeMode): void {
+  localStorage.setItem(MODE_KEY, mode);
+  if (mode !== "pinned") {
+    localStorage.removeItem(PICK_KEY);
+  }
+  window.dispatchEvent(new CustomEvent("vibe:theme"));
+}
+
+/**
+ * The environments auto mode rotates through, in order. Deliberately a small,
+ * authored set of the four signature worlds: they were designed to be the
+ * product's moods, they are the ones a visitor should meet first, and holding
+ * the list here keeps it out of the launch bundle.
+ */
+export const ROTATION: Array<Omit<Theme, "ramp"> & { ramp: Theme["ramp"] }> = [
+  {
+    id: "neon-arcade", name: "Neon Arcade", family: "signature", style: "neon",
+    accent: "#38e8ff", accentInk: "#04222a", accentSoft: "#1b6d84",
+    glowA: "radial-gradient(circle at 50% 50%, rgba(56,232,255,0.5), transparent 70%)",
+    glowB: "radial-gradient(circle at 50% 50%, rgba(255,74,196,0.4), transparent 70%)",
+    ramp: { hue: 232, tint: 26, light: 0 },
+  },
+  {
+    id: "cyber-arena", name: "Cyber Arena", family: "signature", style: "neon",
+    accent: "#ffab3d", accentInk: "#241300", accentSoft: "#8a5a1f",
+    glowA: "radial-gradient(circle at 50% 50%, rgba(255,171,61,0.5), transparent 70%)",
+    glowB: "radial-gradient(circle at 50% 50%, rgba(94,140,255,0.4), transparent 70%)",
+    ramp: { hue: 214, tint: 22, light: 0 },
+  },
+  {
+    id: "obsidian-lounge", name: "Obsidian Lounge", family: "signature", style: "dusk",
+    accent: "#e2b46a", accentInk: "#241703", accentSoft: "#8a6d3a",
+    glowA: "radial-gradient(circle at 50% 50%, rgba(226,180,106,0.45), transparent 70%)",
+    glowB: "radial-gradient(circle at 50% 50%, rgba(120,90,160,0.35), transparent 70%)",
+    ramp: { hue: 258, tint: 14, light: 0 },
+  },
+  {
+    id: "royal-chamber", name: "Royal Chamber", family: "signature", style: "classic",
+    accent: "#d9a441", accentInk: "#241703", accentSoft: "#8a6a2a",
+    glowA: "radial-gradient(circle at 50% 50%, rgba(217,164,65,0.45), transparent 70%)",
+    glowB: "radial-gradient(circle at 50% 50%, rgba(150,40,60,0.4), transparent 70%)",
+    ramp: { hue: 18, tint: 24, light: 0 },
+  },
+];
+
+/** How long each auto environment holds before the next. */
+export const ROTATION_MS = 30_000;
+const ROTATION_STEP_KEY = "vibe.theme.rotation.step";
+
+let current: Theme | null = null;
+
+/** Advance the persisted step and return that world. */
+function advance(): Theme {
+  let step: number;
+  try {
+    step = Number(localStorage.getItem(ROTATION_STEP_KEY) ?? "-1") + 1;
+    localStorage.setItem(ROTATION_STEP_KEY, String(step));
+  } catch {
+    step = Math.floor(Date.now() / ROTATION_MS);
+  }
+  const idx = ((step % ROTATION.length) + ROTATION.length) % ROTATION.length;
+  return ROTATION[idx]!;
+}
+
+/**
+ * The environment auto mode shows for this visit. It advances exactly once per
+ * page load — React's StrictMode invokes effects twice in development, and
+ * advancing per call would skip a world — then holds steady. So the mood changes
+ * every time someone opens Vibe, which is the point of auto.
+ */
+export function autoTheme(): Theme {
+  if (!current) current = advance();
+  return current;
+}
+
+/** Move to the next world. Used by the interval that keeps auto moving. */
+export function rotateAutoTheme(): Theme {
+  current = advance();
+  return current;
 }
