@@ -51,6 +51,39 @@ export async function buildApp(ctx: AppContext): Promise<FastifyInstance> {
   await app.register(cors, { origin: ctx.config.CORS_ORIGIN === "*" ? true : ctx.config.CORS_ORIGIN });
   await app.register(websocket);
 
+  // Baseline security headers. These are additive and cannot lock anyone out of
+  // the server: they only shape what a browser is allowed to do with a response.
+  // The API is same-origin with the web client (one image serves both), so the
+  // CSP can be strict; media-src allows the blob: URLs the WebRTC audio and
+  // banner uploads use, and connect-src allows the wss: realtime socket.
+  app.addHook("onSend", async (req, reply) => {
+    reply.header("X-Content-Type-Options", "nosniff");
+    reply.header("Referrer-Policy", "strict-origin-when-cross-origin");
+    reply.header("X-Frame-Options", "DENY");
+    reply.header("Permissions-Policy", "camera=(), geolocation=(self), microphone=(self)");
+    reply.header(
+      "Content-Security-Policy",
+      [
+        "default-src 'self'",
+        "img-src 'self' data: blob: https:",
+        "media-src 'self' blob:",
+        "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
+        "font-src 'self' https://fonts.gstatic.com",
+        "script-src 'self'",
+        "connect-src 'self' ws: wss:",
+        "frame-ancestors 'none'",
+        "base-uri 'self'",
+        "form-action 'self'",
+      ].join("; "),
+    );
+    // HSTS only over TLS. Sending it over plain HTTP is meaningless, and pinning
+    // it on a deployment that is still HTTP would be a footgun.
+    const proto = req.headers["x-forwarded-proto"];
+    if (proto === "https") {
+      reply.header("Strict-Transport-Security", "max-age=31536000; includeSubDomains");
+    }
+  });
+
   // Webhook signatures are computed over the exact bytes Bachs sent. Fastify's
   // JSON parser discards those bytes, so capture them on the webhook path only
   // and keep the parsed body too.

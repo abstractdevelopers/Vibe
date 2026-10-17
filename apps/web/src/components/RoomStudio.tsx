@@ -193,6 +193,16 @@ export function RoomStudio({ roomId, viewerId, viewerName, onBack, onLeft }: Pro
     const pc = new RTCPeerConnection({ iceServers: [{ urls: "stun:stun.l.google.com:19302" }] });
     peerConns.current.set(peerId, pc);
     localStream.current?.getTracks().forEach((t) => pc.addTrack(t, localStream.current!));
+    // Tune the audio sender for speech. Opus at ~32 kbps is clear for voice and
+    // keeps a broadcast host's uplink affordable for a large listener count,
+    // which is the real limit on how many people one broadcast can carry.
+    const audioSender = pc.getSenders().find((s) => s.track?.kind === "audio");
+    if (audioSender) {
+      const params = audioSender.getParameters();
+      if (!params.encodings || params.encodings.length === 0) params.encodings = [{}];
+      params.encodings[0]!.maxBitrate = 32_000;
+      void audioSender.setParameters(params).catch(() => { /* negotiated defaults are fine */ });
+    }
     pc.ontrack = (e) => attachAudio(peerId, e.streams[0]!);
     pc.onicecandidate = (e) => {
       if (e.candidate) signalRef.current({ type: "rtc.ice", to: peerId, payload: e.candidate.toJSON() });
@@ -277,7 +287,19 @@ export function RoomStudio({ roomId, viewerId, viewerName, onBack, onLeft }: Pro
   // The host is on the stage, so the host's mic is on by default.
   const ensureLocalStream = useCallback(async () => {
     if (localStream.current) return localStream.current;
-    const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+    // Speech-tuned capture. Echo cancellation matters most in a broadcast, where
+    // every listener's speaker can otherwise feed straight back into the host's
+    // mic; auto gain keeps a quiet host audible without clipping.
+    const stream = await navigator.mediaDevices.getUserMedia({
+      audio: {
+        echoCancellation: true,
+        noiseSuppression: true,
+        autoGainControl: true,
+        channelCount: 1,
+        sampleRate: 48000,
+      },
+      video: false,
+    });
     localStream.current = stream;
     return stream;
   }, []);
