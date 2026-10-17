@@ -8,6 +8,12 @@ COPY apps/api/package.json apps/api/
 COPY apps/web/package.json apps/web/
 COPY packages/shared/package.json packages/shared/
 RUN npm ci
+# The web client needs to know the API's origin at build time. Coolify passes
+# buildtime env vars as build args; without this ARG the value never reaches
+# Vite and the client falls back to same-origin requests. Empty is fine in
+# development, where Vite proxies /v1 instead.
+ARG VITE_API_URL
+ENV VITE_API_URL=${VITE_API_URL}
 COPY . .
 RUN npm run build
 

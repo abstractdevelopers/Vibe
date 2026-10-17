@@ -5,6 +5,27 @@
 
 const TOKEN_KEY = "vibe.token";
 
+/**
+ * Where the API lives.
+ *
+ * In development Vite proxies `/v1` and `/health` to the API, so a relative
+ * path is right. In production the client is served from the web origin and the
+ * API is a separate origin (`VITE_API_URL`, e.g. https://vibeapi.example), so
+ * every request has to be absolute. Baking it in at build time is what lets the
+ * two tiers live on different hosts; a relative path would call the web host.
+ */
+const API_BASE = (import.meta.env.VITE_API_URL ?? "").replace(/\/$/, "");
+
+export function apiUrl(path: string): string {
+  return `${API_BASE}${path}`;
+}
+
+/** The `wss://host` origin for the realtime socket, matching the API. */
+export function realtimeUrl(token: string): string {
+  const base = API_BASE || `${location.protocol === "https:" ? "wss" : "ws"}://${location.host}`;
+  return `${base.replace(/^http/, "ws")}/v1/realtime?token=${encodeURIComponent(token)}`;
+}
+
 export function getToken(): string | null {
   return localStorage.getItem(TOKEN_KEY);
 }
@@ -38,7 +59,7 @@ export async function api<T>(path: string, options: RequestOptions = {}): Promis
   if (token) headers.authorization = `Bearer ${token}`;
   if (options.idempotencyKey) headers["idempotency-key"] = options.idempotencyKey;
 
-  const res = await fetch(path, {
+  const res = await fetch(apiUrl(path), {
     method: options.method ?? (options.body !== undefined ? "POST" : "GET"),
     headers,
     body: options.body !== undefined ? JSON.stringify(options.body) : undefined,

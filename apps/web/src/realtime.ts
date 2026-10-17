@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { getToken } from "./api";
+import { getToken, realtimeUrl } from "./api";
 
 export interface RealtimeEvent {
   id: string;
@@ -33,8 +33,7 @@ export function useRealtime(onEvent: (event: RealtimeEvent) => void): void {
 
     const connect = () => {
       if (closed) return;
-      const proto = location.protocol === "https:" ? "wss" : "ws";
-      socket = new WebSocket(`${proto}://${location.host}/v1/realtime?token=${encodeURIComponent(token)}`);
+      socket = new WebSocket(realtimeUrl(token));
 
       socket.onopen = () => {
         retry = 0;
@@ -109,8 +108,7 @@ export function useRoomChannel(
     const connect = () => {
       if (closed) return;
       setStatus("connecting");
-      const proto = location.protocol === "https:" ? "wss" : "ws";
-      socket = new WebSocket(`${proto}://${location.host}/v1/realtime?token=${encodeURIComponent(token)}`);
+      socket = new WebSocket(realtimeUrl(token));
       socketRef.current = socket;
 
       socket.onopen = () => {

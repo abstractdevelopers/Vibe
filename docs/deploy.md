@@ -90,6 +90,26 @@ an SPA fallback so a deep link like `/settings` returns `index.html`. Requests
 under `/v1/` and `/health` keep returning JSON, including 404s. This is what
 makes a single image enough.
 
+## Two origins (web + API on separate hosts)
+
+The default is single-origin. To put the API on its own host (for example web at
+`https://vibe.example.com`, API at `https://vibeapi.example.com`):
+
+1. Set `VITE_API_URL=https://vibeapi.example.com` as a **buildtime** env var on
+   the app. The Dockerfile declares `ARG VITE_API_URL` and Vite bakes it into
+   the bundle; without the ARG the value never reaches the build and the client
+   silently falls back to same-origin requests.
+2. Set `PUBLIC_API_URL` and `PUBLIC_WEB_URL` to the API and web origins
+   respectively, and `CORS_ORIGIN` to the **web** origin (that is the only
+   cross-origin caller; the API does not call the web origin except in links).
+3. Point both hostnames at the server. Coolify's `domains` field takes a
+   comma-separated list; the first entry is primary.
+
+The API still serves `apps/web/dist` at the API origin. That is harmless — the
+client is reachable on both hosts — but the web origin is the one to publish.
+`api.ts` prefixes every request with `VITE_API_URL`, and `realtimeUrl` upgrades
+the same origin to `wss`, so the WebSocket follows the API host too.
+
 ## Deploy
 
 1. Tag the image with the commit SHA: `vibe:$(git rev-parse --short HEAD)`.
