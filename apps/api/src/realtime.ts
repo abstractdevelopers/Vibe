@@ -55,6 +55,8 @@ export interface RealtimeBus {
 export class PostgresBus implements RealtimeBus {
   private handler: ((scope: "room" | "circle" | "users", key: string, event: RealtimeEvent) => void) | null = null;
   private closed = false;
+  /** Identifies this instance so it can ignore its own NOTIFY echo. */
+  private readonly origin = `inst_${Math.random().toString(36).slice(2)}${Date.now().toString(36)}`;
   static readonly CHANNEL = "vibe_realtime";
   private static readonly MAX_PAYLOAD = 7000;
 
@@ -63,7 +65,11 @@ export class PostgresBus implements RealtimeBus {
     client.on("notification", (n) => {
       if (!n.payload || !this.handler) return;
       try {
-        const parsed = JSON.parse(n.payload) as { scope: "room" | "circle" | "users"; key: string; event: RealtimeEvent };
+        const parsed = JSON.parse(n.payload) as { scope: "room" | "circle" | "users"; key: string; event: RealtimeEvent; origin?: string };
+        // Postgres delivers a NOTIFY to the connection that sent it too. Those
+        // events were already delivered to local sockets by the publisher, so
+        // relaying them again would double every message.
+        if (parsed.origin === this.origin) return;
         this.handler(parsed.scope, parsed.key, parsed.event);
       } catch {
         /* ignore malformed bus frames */
@@ -76,11 +82,11 @@ export class PostgresBus implements RealtimeBus {
 
   publish(scope: "room" | "circle" | "users", key: string, event: RealtimeEvent): void {
     if (this.closed) return;
-    let payload = JSON.stringify({ scope, key, event });
+    let payload = JSON.stringify({ scope, key, event, origin: this.origin });
     if (payload.length > PostgresBus.MAX_PAYLOAD) {
       // Too big for NOTIFY. The event type and entity still travel, which is all
       // a client needs to refetch.
-      payload = JSON.stringify({ scope, key, event: { ...event, payload: { truncated: true } } });
+      payload = JSON.stringify({ scope, key, event: { ...event, payload: { truncated: true } }, origin: this.origin });
     }
     void this.client.query(`SELECT pg_notify($1, $2)`, [PostgresBus.CHANNEL, payload]).catch(() => undefined);
   }
