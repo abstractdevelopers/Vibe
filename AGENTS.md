@@ -56,6 +56,22 @@ Tests run against a real Postgres database (no mocks for the DB path). The
 harness in `apps/api/tests/helpers.ts` truncates tables between tests. Add a
 test for any state transition, retry, or duplicate-event path you touch.
 
+The web workspace has its own runner: `npm --workspace @vibe/web test`
+(vitest, `apps/web/tests/`). It covers the theme catalogue and its resolution,
+which is pure and needs no browser. Use it for any change to `themes.ts` /
+`theme-runtime.ts`.
+
+Running the API suite locally needs Postgres **and the migrations applied** —
+without them every DB-backed test fails with `relation "users" does not exist`,
+which looks like a code failure but is only an unmigrated database:
+
+```
+sudo dockerd &                # the daemon is not started for you
+sudo docker compose up -d postgres redis
+npm run migrate
+npm --workspace @vibe/api run test
+```
+
 ## Web client
 
 - `apps/web/src/nav.ts` holds a tiny in-memory navigation context: five tabs
@@ -318,6 +334,20 @@ test for any state transition, retry, or duplicate-event path you touch.
 - React-controlled inputs cannot be driven in a CDP probe by setting `.value`
   directly. Use the native setter
   (`Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,"value").set`).
+- A game's `category` from the API is a **family** (`cards`, `mind`, `action`),
+  not a base palette id (`whot`, `trivia`, `reaction`). `themeForGame` resolves
+  through `BASE_ALIASES` (per game), then the base of its own name, then
+  `FAMILY_BASE[category]`. Room kinds resolve through `ROOM_BASE_ALIASES`
+  (`movie` → the `watch` base, `other` → `voice`). Add an entry to the right map
+  when a new game or room kind is added; the tests in `apps/web/tests/` walk the
+  real ids and kinds the API serves.
+- The gift fee is `GIFT_FEE_BPS` (1500 = 15%), so the creator earns 85%. Never
+  hardcode the split in copy — derive it from `priceMinor`/`recipientMinor` in
+  the catalogue response. The sheet used to say 70%/30% and was wrong.
+- There is one create surface. `CreateSheet` holds content (post, poll, plan,
+  split) **and** a "Host something" section that opens `CreateSomethingSheet`
+  in place; the account menu's "Start something" routes into the same sheet. Do
+  not add a second create menu.
 
 ## Immersive activities addendum (rooms, location, launch seeding)
 
