@@ -694,5 +694,44 @@ Gotchas the harnesses encode, in case you write new checks:
 - **Live/voice rooms are a WebRTC mesh.** The server relays SDP/ICE over the
   realtime socket and never carries media; `MESH_SPEAKER_LIMIT` is 8 speakers
   before an SFU is needed. Room kinds (voice/listen/movie/sports/music/other)
-  share one config; they differ by label, media source and playback mode, not by
-  transport. Read routes for live/rooms still require a session.
+  share one transport; each has its own panel in `RoomKindPanels.tsx` — a match
+  room shows a scoreboard, a listen/music room shows a queue, a watch party
+  shows its licensed-service link. Read routes for live/rooms require a session.
+- **A room has a format: `stage` (open mic) or `broadcast`.** Open mic meshes
+  every speaker with every other. Broadcast has only the host publish, so
+  listeners connect to the host alone and the room carries far more of them —
+  but it is still peer-to-peer and still bounded by the host's uplink. Say so in
+  the UI; never imply unlimited scale. The layout lives on `activity_rooms` and
+  is chosen at creation or in the host's edit sheet.
+- **A scoreboard must cite its source.** `PUT /rooms/:id/score` requires
+  `sourceName` and the score is always returned with it. A score with no source
+  is a rumour; the route refuses the write rather than storing an unattributed
+  one. Same rule for a room's `dataSource`.
+- **The realtime hub is indexed, not scanned.** `RealtimeHub` keeps `byRoom`,
+  `byCircle`, `byUser` and `bySocket` maps so a fan-out costs its audience, not
+  the total socket count, and join/leave are O(1). If you add a new publish
+  scope, index it the same way — a scan is O(100k) per event at scale.
+- **`REALTIME_BUS=postgres` is required for more than one API container.** With
+  `memory`, room events only reach sockets on the same instance. The
+  `PostgresBus` tags every publish with an origin id and drops its own NOTIFY
+  echo, because Postgres delivers a NOTIFY back to the sender and the hub
+  already delivered locally. Set `REALTIME_MAX_SOCKETS` per instance and read
+  `/v1/health/realtime` for autoscaling. The same seam takes Redis later.
+- **Realtime clients must honour the close code.** 4401 means the session is
+  gone (stop reconnecting), 4429 means the instance is at capacity (back off
+  longer). Ignoring the code loops a revoked session forever and hammers a
+  saturated instance.
+- **Sessions are cached briefly.** `resolveSession` caches by token hash for a
+  few seconds (`SESSION_CACHE_TTL_MS`), off under `NODE_ENV=test`. A logout
+  calls `invalidateSession` so a revoked token stops immediately. Do not extend
+  the TTL without accepting a revocation window.
+- **Multi-instance background work must claim rows atomically.** `drainOutbox`
+  uses `FOR UPDATE SKIP LOCKED` and bumps `attempts` before sending, so two
+  instances never email the same person twice. Any future cron-style job needs
+  the same treatment.
+- **Security headers are app-level and cannot lock out the server.** `app.ts`
+  sets CSP, nosniff, X-Frame-Options and Permissions-Policy on every response,
+  and HSTS only when `x-forwarded-proto` is https. None of it touches SSH, ufw,
+  or the Docker firewall — a "harden the app" request must not change host
+  access. `/v1/openapi.json` documents every route; the CSP is strict because the
+  API and web client are same-origin (one image).
