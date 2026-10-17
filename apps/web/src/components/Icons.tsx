@@ -83,6 +83,10 @@ import {
   CalendarPlus,
   Link2,
   PartyPopper,
+  Play,
+  Hand,
+  Volume2,
+  VolumeX,
 } from "lucide-react";
 
 /** Sensible optical defaults; callers override size/stroke when needed. */
@@ -167,4 +171,9 @@ export const LinkIcon = icon(Link2);
 /** A cheer is a celebration, not a sparkle — keep it distinct from the
  *  decorative SparklesIcon used elsewhere in the shell. */
 export const CheerIcon = icon(PartyPopper);
+export const PlayIcon = icon(Play);
+export const HandIcon = icon(Hand);
+export const MicOnIcon = icon(Volume2);
+export const MicOffIcon = icon(VolumeX);
+export const FlameIcon = icon(Flame);
 

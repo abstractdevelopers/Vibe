@@ -1,20 +1,24 @@
 import { useEffect } from "react";
-import { applyTheme, getTheme, type Theme } from "../themes";
+import { applyTheme, followActivity, pickedTheme, type Theme } from "../theme-runtime";
 
 /**
- * Tint the app for whatever the viewer is doing, when "follow activity" is on.
+ * Give a screen its own environment, when the viewer has not chosen one.
  *
- * A manual pick always wins; the activity theme only applies in follow mode and
- * is reverted when the screen unmounts, so leaving a game returns the app to the
- * viewer's own choice.
+ * Precedence is deliberate and simple:
+ *   1. A theme the viewer picked by hand always wins — their choice is not
+ *      overridden by walking into a room.
+ *   2. Otherwise, if "follow activity" is on (it is on by default), the screen's
+ *      own environment applies, so a Whot table feels like a Whot table and a
+ *      listening party feels like one.
+ *   3. Otherwise the brand default shows through.
+ *
+ * Leaving the screen reverts to whatever the viewer's standing choice is.
  */
 export function useActivityTheme(theme: Theme | null): void {
   useEffect(() => {
     if (!theme) return;
-    const follow = localStorage.getItem("vibe.theme.follow") === "1";
-    const manual = localStorage.getItem("vibe.vibetheme");
-    if (!follow || manual) return;
+    if (!followActivity() || pickedTheme()) return;
     applyTheme(theme);
-    return () => applyTheme(getTheme(localStorage.getItem("vibe.vibetheme")));
+    return () => applyTheme(pickedTheme());
   }, [theme?.id]);
 }

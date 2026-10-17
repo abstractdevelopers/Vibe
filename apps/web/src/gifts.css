@@ -32,8 +32,13 @@
   cursor: default;
 }
 .gift-option[aria-pressed="true"] {
-  border-color: color-mix(in srgb, var(--violet) 60%, transparent);
-  background: color-mix(in srgb, var(--violet) 14%, transparent);
+  border-color: color-mix(in srgb, var(--interactive) 60%, transparent);
+  background: color-mix(in srgb, var(--interactive) 14%, transparent);
+}
+.gift-art {
+  display: grid;
+  place-items: center;
+  height: 44px;
 }
 .gift-emoji {
   font-size: 26px;
@@ -47,7 +52,7 @@
   position: absolute;
   top: 6px;
   right: 6px;
-  color: var(--violet-soft);
+  color: var(--accent-soft);
   display: inline-flex;
 }
 
@@ -90,7 +95,7 @@
   border-radius: var(--radius-card);
   border: 1px solid var(--border);
   background:
-    radial-gradient(120% 80% at 50% 0%, color-mix(in srgb, var(--violet) 14%, transparent), transparent 70%),
+    radial-gradient(120% 80% at 50% 0%, color-mix(in srgb, var(--interactive) 14%, transparent), transparent 70%),
     color-mix(in srgb, var(--surface-3) 55%, transparent);
   color: var(--text);
   cursor: pointer;
@@ -103,27 +108,26 @@
 .paid-gift-tile:focus-visible {
   transform: translateY(-4px) rotateX(8deg) scale(1.04);
   box-shadow:
-    0 10px 24px color-mix(in srgb, var(--violet) 24%, transparent),
-    0 2px 0 color-mix(in srgb, var(--violet) 30%, transparent);
-  border-color: color-mix(in srgb, var(--violet) 55%, var(--border));
+    0 10px 24px color-mix(in srgb, var(--interactive) 24%, transparent),
+    0 2px 0 color-mix(in srgb, var(--interactive) 30%, transparent);
+  border-color: color-mix(in srgb, var(--interactive) 55%, var(--border));
 }
 .paid-gift-tile.selected {
-  border-color: color-mix(in srgb, var(--violet) 70%, transparent);
-  background: color-mix(in srgb, var(--violet) 16%, transparent);
+  border-color: color-mix(in srgb, var(--interactive) 70%, transparent);
+  background: color-mix(in srgb, var(--interactive) 16%, transparent);
 }
 .paid-gift-tile .paid-gift-emoji {
-  font-size: 30px;
-  line-height: 1;
-  /* A layered drop shadow plus a lift gives the emoji physical depth. */
+  display: grid;
+  place-items: center;
+  height: 46px;
+  /* A layered drop shadow plus a lift gives the mark physical depth. */
   filter: drop-shadow(0 4px 6px rgba(0, 0, 0, 0.45));
   transform: translateZ(18px);
 }
-.paid-gift-tile.tier-2 .paid-gift-emoji { font-size: 38px; }
 .paid-gift-tile.tier-3 .paid-gift-emoji {
-  font-size: 46px;
   filter:
     drop-shadow(0 4px 6px rgba(0, 0, 0, 0.45))
-    drop-shadow(0 0 14px color-mix(in srgb, var(--violet) 60%, transparent));
+    drop-shadow(0 0 14px color-mix(in srgb, var(--interactive) 60%, transparent));
 }
 .paid-gift-name { font-weight: 600; font-size: var(--text-supporting); }
 .paid-gift-price { font-size: var(--text-caption); color: var(--muted); }
@@ -158,7 +162,7 @@
   border-radius: var(--radius-card);
   border: 1px solid var(--border);
   background:
-    radial-gradient(140% 100% at 0% 0%, color-mix(in srgb, var(--violet) 22%, transparent), transparent 65%),
+    radial-gradient(140% 100% at 0% 0%, color-mix(in srgb, var(--interactive) 22%, transparent), transparent 65%),
     var(--surface-2);
 }
 .wallet-amount {
@@ -236,12 +240,26 @@
   display: grid;
   place-items: center;
   animation: gift-hero 1800ms cubic-bezier(0.16, 1, 0.3, 1) forwards;
-}
-.gift-burst-hero-emoji {
-  font-size: clamp(96px, 34vw, 200px);
-  line-height: 1;
   filter: drop-shadow(0 18px 40px rgba(0, 0, 0, 0.55));
 }
+.gift-burst-hero svg { animation: gift-hero-spin 1800ms cubic-bezier(0.16, 1, 0.3, 1) forwards; }
+
+/* A shock ring expands behind the hero — the "hit" of the send. */
+.gift-burst-ring {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 40px;
+  height: 40px;
+  margin: -20px 0 0 -20px;
+  border-radius: 50%;
+  border: 3px solid var(--gift-glow, var(--accent));
+  opacity: 0;
+  animation: gift-ring 1100ms var(--ease-out, ease-out) forwards;
+}
+.gift-burst-ring.delay { animation-delay: 180ms; }
+.gift-burst.tier-2 .gift-burst-ring { border-width: 4px; }
+.gift-burst.tier-3 .gift-burst-ring { border-width: 5px; }
 .gift-burst-count {
   position: absolute;
   right: -0.1em;
@@ -260,6 +278,16 @@
   75%  { transform: scale(1) rotate(0deg); opacity: 1; }
   100% { transform: scale(1.35) translateY(-40px); opacity: 0; }
 }
+@keyframes gift-hero-spin {
+  0%   { transform: rotate(0deg) scale(1); }
+  32%  { transform: rotate(-6deg) scale(1.06); }
+  60%  { transform: rotate(4deg) scale(1); }
+  100% { transform: rotate(0deg) scale(1); }
+}
+@keyframes gift-ring {
+  0%   { transform: scale(0.4); opacity: 0.9; }
+  100% { transform: scale(9); opacity: 0; }
+}
 
 .gift-burst-float {
   position: absolute;
@@ -269,9 +297,9 @@
   will-change: transform, opacity;
 }
 @keyframes gift-float {
-  0%   { transform: translate(0, 0) scale(0.6); opacity: 0; }
+  0%   { transform: translate(0, 0) scale(0.6) rotate(0deg); opacity: 0; }
   15%  { opacity: 1; }
-  100% { transform: translate(var(--drift, 0px), -110vh) scale(1.1); opacity: 0; }
+  100% { transform: translate(var(--drift, 0px), -110vh) scale(1.1) rotate(24deg); opacity: 0; }
 }
 
 .gift-burst-label {
@@ -297,6 +325,8 @@
    the hero briefly, no movement, no floaters. */
 @media (prefers-reduced-motion: reduce) {
   .gift-burst-hero { animation: none; opacity: 1; }
+  .gift-burst-hero svg { animation: none; }
+  .gift-burst-ring { display: none; }
   .gift-burst-float { display: none; }
   .gift-burst-label { animation: none; opacity: 1; }
 }

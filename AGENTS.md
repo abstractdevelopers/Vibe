@@ -62,8 +62,30 @@ test for any state transition, retry, or duplicate-event path you touch.
   plus a stack of detail routes (inbox, profile, plan, expense, edit-profile,
   settings, place). It is not a router — swap it for one when deep links
   matter. Detail screens take an id.
+- The five tabs are **Home, Circles, Create, Play, Explore**. Play is the game
+  world (its own tab, so Explore no longer repeats a Games entry). The Inbox is
+  a top-bar button, not a tab. Profile and settings are reached from the account
+  menu (`AccountMenu`), which also has a "Your space" item that opens the You
+  tab — so the old You tab was not lost, only demoted out of the bar.
 - Icons come from `lucide-react`, re-exported through
-  `components/Icons.tsx`. Never hand-roll SVG paths or use emoji.
+  `components/Icons.tsx`. Never hand-roll SVG paths or use emoji **for an
+  icon**. This is the icon rule, not an artwork rule — see the next point.
+- Emoji are banned outright in the client. They render differently on every
+  platform and read as a toy. Two icon replacements to reuse: `CheerIcon`
+  (lucide `PartyPopper`, not the decorative `SparklesIcon`) and `FlameIcon`.
+- **Artwork is a separate category from icons.** A game cover, a gift mark and a
+  card face are drawn, not iconography, so they live as hand-authored SVG in
+  dedicated components, on a shared grid and with a shared material treatment:
+  - `components/GameArt.tsx` — `GameArt` (the mark) and `GameCover` (the tile
+    cover, one look per category, hue agreeing with the theme family).
+  - `components/GiftArt.tsx` — every free and paid gift, plus the live-room
+    reactions, keyed by gift id. `tier` (paid gifts) only scales the halo; it
+    never encodes a price.
+  - `components/CardFaces.tsx` — `ShapeMark`/`SuitMark` (Whot shapes, standard
+    suits), `Piece` (checkers/Reversi discs), and `WHOT_SHAPES`/`SHAPE_NAME`.
+  Colour is inherited (`currentColor`) or passed in, so artwork recolours with
+  the environment. When you add a gift or a game, add its mark here — do not
+  fall back to an emoji.
 - Empty states use `components/EmptyState.tsx` (icon + title + one line of
   help + an optional next action). Do not build one-off empty markup — the
   old `.empty` blocks rendered illegible text on the dark surfaces.
@@ -275,6 +297,18 @@ test for any state transition, retry, or duplicate-event path you touch.
   environment variable wins over `--mode` for the React dev/prod define.
 
 ## Web client gotchas
+- The environment/theme runtime lives in `theme-runtime.ts`; `themes.ts` is the
+  catalogue only and imports the runtime, so a screen that only needs to apply a
+  theme does not pull in all ~136 themes. `App.tsx` restores the saved pick at
+  boot (`restoreTheme`) and sets `document.documentElement.dataset.theme` /
+  `dataset.vibe`. `applyTheme(theme | null)` sets `--accent`, the surface ramp
+  and `--brand-gradient`; `null` means "follow the room/game" (see
+  `useActivityTheme`, `themeForRoom`, `themeForGame`).
+- Every interactive colour must come from a token, never a hardcoded hue. The
+  theme defect (a primary button that stayed transparent under a new
+  environment) was caused by `--violet`/`--coral` being baked into
+  `styles.css`/`gifts.css`/`messaging.css`. Use `--interactive` / `--accent`.
+  Remaining literal hues live only in `tokens.css`.
 - Comment activity updates the count via a local delta
   (`onCommentChange`), **not** `onChanged()`. `onChanged()` bumps the global
   `refreshKey`, which reloads the feed and remounts the card, collapsing the

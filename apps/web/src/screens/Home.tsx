@@ -10,6 +10,7 @@ import {
   HeartIcon,
   ImageIcon,
   InboxIcon,
+  MegaphoneIcon,
   PollIcon,
   ReplyIcon,
   SendIcon,
@@ -353,8 +354,17 @@ function FeedCard({
     }
   }
 
+  // The type tag: a poll and an announcement should not look like plain text.
+  const typeTag: Record<string, { label: string; Icon: typeof PollIcon } | undefined> = {
+    poll: { label: "Poll", Icon: PollIcon },
+    announcement: { label: "Announcement", Icon: MegaphoneIcon },
+    carousel: { label: "Gallery", Icon: ImageIcon },
+    video: { label: "Video", Icon: ImageIcon },
+  };
+  const tag = typeTag[item.type];
+
   return (
-    <article className="post">
+    <article className={`post type-${item.type}${item.isSponsored ? " sponsored" : ""}`}>
       {item.isSponsored && (
         <div className="row spread" style={{ marginBottom: "var(--space-2)" }}>
           <span className="sponsored-tag">Sponsored</span>
@@ -391,6 +401,11 @@ function FeedCard({
         <span className="audience-tag">{audienceLabel(item.audience)}</span>
       </div>
 
+      {tag && (
+        <span className={`post-type-tag type-${item.type}`}>
+          <tag.Icon width={12} height={12} /> {tag.label}
+        </span>
+      )}
       {editing ? (
         <div className="card" style={{ margin: "var(--space-2) 0" }}>
           <label htmlFor={`edit-${item.id}`}>Edit your post</label>

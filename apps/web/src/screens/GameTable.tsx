@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { api, ApiError } from "../api";
 import { ScreenHeader } from "../components/ScreenHeader";
 import { SpinnerIcon } from "../components/Icons";
+import { ShapeMark, SuitMark, Piece, WHOT_SHAPES, SHAPE_NAME } from "../components/CardFaces";
 import { useActivityTheme } from "../components/useActivityTheme";
 import { themeForGame } from "../themes";
 
@@ -25,9 +26,7 @@ interface Session {
   winnerId: string | null;
 }
 
-const SHAPE_GLYPH: Record<string, string> = { circle: "⬤", triangle: "▲", cross: "✚", square: "◼", star: "★", whot: "★" };
-const SHAPE_NAME: Record<string, string> = { circle: "Circle", triangle: "Triangle", cross: "Cross", square: "Square", star: "Star" };
-const SUIT_GLYPH: Record<string, string> = { S: "♠", H: "♥", D: "♦", C: "♣" };
+const SUIT_NAME: Record<string, string> = { S: "spades", H: "hearts", D: "diamonds", C: "clubs" };
 const RANK_LABEL: Record<number, string> = { 1: "A", 11: "J", 12: "Q", 13: "K" };
 
 function money(minor: number, currency: string): string {
@@ -195,9 +194,9 @@ function WhotBoard({ state, busy, act, readOnly }: any) {
           </div>
           <div className="row" style={{ gap: "var(--space-2)", flexWrap: "wrap" }}>
             <span className="meta">Call shape for Whot:</span>
-            {(["circle", "triangle", "cross", "square", "star"] as const).map((s) => (
+            {WHOT_SHAPES.map((s) => (
               <button key={s} className="pill" aria-pressed={callShape === s} onClick={() => setCallShape(s)}>
-                {SHAPE_GLYPH[s]} {SHAPE_NAME[s]}
+                <ShapeMark shape={s} size={16} /> {SHAPE_NAME[s]}
               </button>
             ))}
           </div>
@@ -215,7 +214,7 @@ function PlayingCard({ card }: { card: any }) {
   return (
     <span className={`playing-card ${whot ? "whot" : card.shape}`}
       aria-label={whot ? "Whot 20" : `${SHAPE_NAME[card.shape]} ${card.number}`}>
-      <span className="playing-card-shape" aria-hidden>{SHAPE_GLYPH[card.shape] ?? "?"}</span>
+      <span className="playing-card-shape" aria-hidden><ShapeMark shape={card.shape} size={26} /></span>
       <span className="playing-card-number">{card.number}</span>
     </span>
   );
@@ -226,8 +225,8 @@ function PlayingCard({ card }: { card: any }) {
 function StdCard({ card }: { card: { rank: number; suit: string } }) {
   const red = card.suit === "H" || card.suit === "D";
   return (
-    <span className={`playing-card std ${red ? "red" : ""}`} aria-label={`${rankText(card.rank)}${SUIT_GLYPH[card.suit] ?? ""}`}>
-      <span className="playing-card-shape" aria-hidden>{SUIT_GLYPH[card.suit] ?? "?"}</span>
+    <span className={`playing-card std ${red ? "red" : ""}`} aria-label={`${rankText(card.rank)} of ${SUIT_NAME[card.suit] ?? card.suit}`}>
+      <span className="playing-card-shape" aria-hidden><SuitMark suit={card.suit} size={26} /></span>
       <span className="playing-card-number">{rankText(card.rank)}</span>
     </span>
   );
@@ -274,7 +273,7 @@ function CardBoard({ session, state, busy, act, readOnly }: any) {
     return (
       <section className="stack">
         <div className="game-market card">
-          <span className="meta">Top card · suit {SUIT_GLYPH[state.activeSuit] ?? state.activeSuit} · deck {state.deckCount}</span>
+          <span className="meta">Top card · suit {SUIT_NAME[state.activeSuit] ?? state.activeSuit} · deck {state.deckCount}</span>
           {state.discardTop && <StdCard card={state.discardTop} />}
         </div>
         <h2 className="section-title">Your hand</h2>
@@ -378,11 +377,11 @@ function GridBoard({ session, state, busy, act, readOnly }: any) {
     const [sel, setSel] = useState<[number, number] | null>(null);
     const cell = (r: number, c: number) => {
       const v = state.board[r][c];
-      if (id === "reversi") return v === null ? "" : v === 0 ? "⚫" : "⚪";
-      if (v === 0) return "";
-      const man = v === 1 || v === 3 ? "⚫" : "⚪";
-      const king = v === 2 || v === 4 ? "♛" : "";
-      return man + king;
+      if (id === "reversi") return v === null ? null : <Piece tone={v === 0 ? "dark" : "light"} />;
+      if (v === 0) return null;
+      const tone: "light" | "dark" = v === 1 || v === 3 ? "dark" : "light";
+      const king = v === 2 || v === 4;
+      return <Piece tone={tone} king={king} />;
     };
     return (
       <section className="stack">
@@ -446,7 +445,7 @@ function GridBoard({ session, state, busy, act, readOnly }: any) {
           <button key={`${r}-${c}`} className="line-cell"
             disabled={busy || readOnly || !state.yourTurn || (gravity ? state.board[0][c] !== null : v !== null)}
             onClick={() => void act("/move", { move: gravity ? { col: c } : { row: r, col: c } })}>
-            {v === null ? "" : v === you ? "●" : "○"}
+            {v === null ? null : <Piece tone={v === you ? "dark" : "light"} />}
           </button>
         )))}
       </div>
@@ -497,7 +496,7 @@ function DotsBoard({ state, busy, act, readOnly }: any) {
               onClick={() => void act("/move", { move: { kind: "v", r: ri, c: c / 2 } })} />;
           }
           const boxOwner = state.boxOwner[(r - 1) / 2]?.[(c - 1) / 2];
-          return <span key={`${r}-${c}`} className={`box ${boxOwner >= 0 ? "owned" : ""}`}>{boxOwner >= 0 ? (boxOwner === 0 ? "●" : "○") : ""}</span>;
+          return <span key={`${r}-${c}`} className={`box ${boxOwner >= 0 ? "owned" : ""}`}>{boxOwner >= 0 ? <Piece tone={boxOwner === 0 ? "dark" : "light"} /> : null}</span>;
         }))}
       </div>
       <div className="meta">You {state.scores?.[0]} · Them {state.scores?.[1]}</div>

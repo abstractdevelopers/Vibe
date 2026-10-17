@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { api, ApiError, idempotencyKey } from "../api";
 import { CloseIcon } from "./Icons";
 import { GiftBurst, type GiftBurstSpec } from "./GiftBurst";
+import { GiftArt } from "./GiftArt";
 
 interface PaidGift {
   id: string;
@@ -94,7 +95,7 @@ export function PaidGiftSheet({
       // Celebrate on this screen, then hand off to the provider's hosted
       // checkout. Redirecting instantly meant the animation was never seen; the
       // burst now plays first and the redirect is an explicit action.
-      setBurst({ id: Date.now(), emoji: chosen.emoji, label: chosen.label, count: quantity });
+      setBurst({ id: Date.now(), giftId: chosen.id, label: chosen.label, count: quantity, tier: chosen.tier });
       setRedirectUrl(purchase.redirectUrl);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Could not start that purchase");
@@ -163,7 +164,7 @@ export function PaidGiftSheet({
                   onClick={() => setSelected(g.id)}
                   aria-pressed={selected === g.id}
                 >
-                  <span className="paid-gift-emoji" aria-hidden="true">{g.emoji}</span>
+                  <span className="paid-gift-emoji" aria-hidden="true"><GiftArt id={g.id} size={g.tier === 3 ? 46 : g.tier === 2 ? 38 : 32} tier={g.tier} /></span>
                   <span className="paid-gift-name">{g.label}</span>
                   <span className="paid-gift-price">{formatMinor(g.priceMinor, g.currency)}</span>
                 </button>

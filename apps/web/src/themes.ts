@@ -1,33 +1,30 @@
 /**
- * Vibe activity themes.
+ * Vibe environments — the catalogue.
  *
- * A theme tints the app for whatever you are doing: a card game feels ember-warm,
- * a casino table feels midnight-gold, a music room feels neon-pink. Themes are
- * not just a colour pick — each one carries an accent, the ink that stays legible
- * on that accent, and the two glow colours the atmospheric backdrop drifts.
+ * A theme is not a colour pick; it is a whole environment. Every theme carries a
+ * surface ramp (the void, four surfaces, borders and ink), an accent, a legible
+ * ink for that accent, and the two atmospheric glows the backdrop drifts.
+ * Applying one rewrites the surface ramp on the document root, so the entire
+ * interface — not just the buttons — changes character. The runtime that does
+ * that lives in `theme-runtime.ts`; this file is only the catalogue.
  *
- * The palette is authored, not random. Thirty intentional base palettes are
- * declared by hand (hue + how bright the accent should burn), then rendered in
- * four house styles — classic, dusk, neon, aurora — for 120 coherent themes.
- * Every accent's ink is chosen by luminance, so text on a theme's accent is
- * always legible.
+ * The named environments are hand-authored, each with its own material story:
+ *
+ *   Neon Arcade     — an arcade at night. Deep indigo glass, electric cyan and
+ *                     magenta light, high-energy.
+ *   Obsidian Lounge — dark luxury. Near-black stone, restrained brass, warm low
+ *                     light, quiet and expensive.
+ *   Cyber Arena     — competitive futuresport. Cold steel panels, sharp amber
+ *                     warning light, structured.
+ *   Royal Chamber   — an exclusive hall. Oxblood velvet, aged gold, candlelight.
+ *
+ * Every other theme is generated from an authored base palette and one of the
+ * four house styles, so the catalogue is broad without any of it being random.
  */
+import type { Theme } from "./theme-runtime";
 
-export interface Theme {
-  id: string;
-  name: string;
-  family: string;
-  style: string;
-  /** Hex, drives buttons and highlights. */
-  accent: string;
-  /** Legible ink on the accent. */
-  accentInk: string;
-  /** The two atmosphere glows. */
-  glowA: string;
-  glowB: string;
-}
-
-// ---- Colour maths ---------------------------------------------------------
+export type { Surfaces, Theme } from "./theme-runtime";
+export { applyTheme, rampFor, chooseTheme, restoreTheme, pickedTheme, followActivity } from "./theme-runtime";
 
 function hslToHex(h: number, s: number, l: number): string {
   const a = (s / 100) * Math.min(l / 100, 1 - l / 100);
@@ -48,7 +45,7 @@ function luminance(hex: string): number {
 
 /** Dark ink for bright accents, white for dark ones. Keeps labels legible. */
 function inkFor(accent: string): string {
-  return luminance(accent) > 0.4 ? "#12131a" : "#ffffff";
+  return luminance(accent) > 0.42 ? "#12131a" : "#ffffff";
 }
 
 function rgba(hex: string, alpha: number): string {
@@ -56,13 +53,42 @@ function rgba(hex: string, alpha: number): string {
   return `rgba(${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255}, ${alpha})`;
 }
 
-function glow(hex: string): string {
-  return `radial-gradient(circle at 50% 50%, ${rgba(hex, 0.5)}, transparent 70%)`;
+function glow(hex: string, alpha = 0.5): string {
+  return `radial-gradient(circle at 50% 50%, ${rgba(hex, alpha)}, transparent 70%)`;
 }
 
-// ---- Base palettes --------------------------------------------------------
+// ---- Authored environments ------------------------------------------------
 
-interface Base { id: string; name: string; family: string; hue: number; accentLight: number; glowHue: number }
+const NAMED: Theme[] = [
+  {
+    id: "neon-arcade", name: "Neon Arcade", family: "signature", style: "neon",
+    accent: "#22e0d6", accentInk: inkFor("#22e0d6"), accentSoft: "#7af4ec",
+    glowA: glow("#1de0ff", 0.55), glowB: glow("#ff3db4", 0.45),
+    ramp: { hue: 232, tint: 34, light: 0 },
+  },
+  {
+    id: "obsidian-lounge", name: "Obsidian Lounge", family: "signature", style: "dusk",
+    accent: "#d8b26a", accentInk: inkFor("#d8b26a"), accentSoft: "#e6cd97",
+    glowA: glow("#c99a4e", 0.4), glowB: glow("#7a5a2e", 0.35),
+    ramp: { hue: 28, tint: 10, light: -1 },
+  },
+  {
+    id: "cyber-arena", name: "Cyber Arena", family: "signature", style: "neon",
+    accent: "#ffb020", accentInk: inkFor("#ffb020"), accentSoft: "#ffcf6b",
+    glowA: glow("#ff8a1e", 0.5), glowB: glow("#2ad0ff", 0.34),
+    ramp: { hue: 214, tint: 22, light: -1 },
+  },
+  {
+    id: "royal-chamber", name: "Royal Chamber", family: "signature", style: "classic",
+    accent: "#e0b23c", accentInk: inkFor("#e0b23c"), accentSoft: "#f0cf7a",
+    glowA: glow("#b8332f", 0.42), glowB: glow("#8a6a22", 0.38),
+    ramp: { hue: 348, tint: 26, light: 1 },
+  },
+];
+
+// ---- Generated catalogue --------------------------------------------------
+
+interface Base { id: string; name: string; family: string; hue: number; accentLight: number; glowHue: number; tint?: number }
 
 const BASES: Base[] = [
   // Games — cards
@@ -109,17 +135,18 @@ const BASES: Base[] = [
   { id: "wallet", name: "Wallet Gold", family: "social", hue: 46, accentLight: 60, glowHue: 30 },
 ];
 
-interface Style { id: string; name: string; sat: number; lightShift: number; glowSat: number; glowLight: number }
+interface Style { id: string; name: string; sat: number; lightShift: number; glowSat: number; glowLight: number; tint: number }
 
 const STYLES: Style[] = [
-  { id: "classic", name: "Classic", sat: 74, lightShift: 0, glowSat: 78, glowLight: 56 },
-  { id: "dusk", name: "Dusk", sat: 52, lightShift: -8, glowSat: 60, glowLight: 46 },
-  { id: "neon", name: "Neon", sat: 92, lightShift: 4, glowSat: 100, glowLight: 62 },
-  { id: "aurora", name: "Aurora", sat: 64, lightShift: 2, glowSat: 70, glowLight: 58 },
+  { id: "classic", name: "Classic", sat: 74, lightShift: 0, glowSat: 78, glowLight: 56, tint: 14 },
+  { id: "dusk", name: "Dusk", sat: 52, lightShift: -8, glowSat: 60, glowLight: 46, tint: 9 },
+  { id: "neon", name: "Neon", sat: 92, lightShift: 4, glowSat: 100, glowLight: 62, tint: 30 },
+  { id: "aurora", name: "Aurora", sat: 64, lightShift: 2, glowSat: 70, glowLight: 58, tint: 20 },
 ];
 
 function build(): Theme[] {
-  const out: Theme[] = [];
+  const out: Theme[] = [...NAMED];
+
   for (const base of BASES) {
     for (const style of STYLES) {
       const accent = hslToHex(base.hue, style.sat, base.accentLight + style.lightShift);
@@ -132,11 +159,14 @@ function build(): Theme[] {
         style: style.id,
         accent,
         accentInk: inkFor(accent),
+        accentSoft: hslToHex(base.hue, Math.max(40, style.sat - 20), Math.min(78, base.accentLight + 14)),
         glowA: glow(glowA),
         glowB: glow(glowB),
+        ramp: { hue: base.tint ?? base.hue, tint: style.tint, light: 0 },
       });
     }
   }
+
   return out;
 }
 
@@ -157,7 +187,7 @@ export function getTheme(id: string | null | undefined): Theme | null {
 export function themeForGame(gameId: string, category?: string): Theme {
   return getTheme(`${gameId}-classic`)
     ?? getTheme(`${category}-classic`)
-    ?? getTheme(`board-classic`)!;
+    ?? getTheme("board-classic")!;
 }
 
 export function themeForRoom(kind: string): Theme {
@@ -170,19 +200,4 @@ export function themeForId(seed: string, family = "social"): Theme {
   const pool = THEMES.filter((t) => t.family === family);
   const list = pool.length > 0 ? pool : THEMES;
   return list[h % list.length]!;
-}
-
-/** Apply a theme to the document. Pass null to restore the brand default. */
-export function applyTheme(theme: Theme | null): void {
-  const root = document.documentElement;
-  if (!theme) {
-    root.dataset.vibe = "";
-    for (const prop of ["--accent", "--accent-ink", "--theme-glow-a", "--theme-glow-b"]) root.style.removeProperty(prop);
-    return;
-  }
-  root.dataset.vibe = theme.id;
-  root.style.setProperty("--accent", theme.accent);
-  root.style.setProperty("--accent-ink", theme.accentInk);
-  root.style.setProperty("--theme-glow-a", theme.glowA);
-  root.style.setProperty("--theme-glow-b", theme.glowB);
 }

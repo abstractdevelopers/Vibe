@@ -45,6 +45,9 @@ body {
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
   overflow-x: hidden;
+  /* The surface ramp is rewritten when a theme is applied; this lets the page
+     settle into the new environment instead of snapping. */
+  transition: background-color var(--motion-slow) var(--ease-out), color var(--motion-slow) var(--ease-out);
 }
 
 /* ---- Atmospheric backdrop: drifting colour field + grain ----
@@ -167,6 +170,20 @@ h4 {
   letter-spacing: var(--tracking-wide);
   text-transform: uppercase;
   color: var(--text-muted);
+}
+
+/* The welcome eyebrow is three words on one line with the accent between them,
+   so it reads as a positioning line rather than a label. */
+.auth-eyebrow {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin-bottom: var(--space-3);
+  color: var(--text-secondary);
+}
+.auth-eyebrow-dot {
+  color: var(--accent);
+  font-weight: 800;
 }
 
 .meta {
@@ -335,8 +352,8 @@ h4 {
   font-size: 11px;
   font-weight: 600;
   color: var(--text-secondary);
-  background: color-mix(in srgb, var(--violet) 18%, transparent);
-  border: 1px solid color-mix(in srgb, var(--violet) 40%, transparent);
+  background: color-mix(in srgb, var(--interactive) 18%, transparent);
+  border: 1px solid color-mix(in srgb, var(--interactive) 40%, transparent);
   border-radius: var(--radius-pill);
   white-space: nowrap;
 }
@@ -376,10 +393,10 @@ h4 {
   border-radius: var(--radius-card);
   background: linear-gradient(
     100deg,
-    color-mix(in srgb, var(--violet) 22%, transparent),
+    color-mix(in srgb, var(--interactive) 22%, transparent),
     color-mix(in srgb, var(--coral) 18%, transparent)
   );
-  border: 1px solid color-mix(in srgb, var(--violet) 35%, transparent);
+  border: 1px solid color-mix(in srgb, var(--interactive) 35%, transparent);
 }
 .eq {
   display: inline-flex;
@@ -405,7 +422,7 @@ h4 {
 
 .ticket-card {
   margin: 0 var(--space-4) var(--space-3);
-  border-color: color-mix(in srgb, var(--violet) 45%, transparent);
+  border-color: color-mix(in srgb, var(--interactive) 45%, transparent);
 }
 
 /* The Live entry card on Explore. */
@@ -420,7 +437,7 @@ h4 {
   background: linear-gradient(
     100deg,
     color-mix(in srgb, var(--coral) 16%, transparent),
-    color-mix(in srgb, var(--violet) 14%, transparent)
+    color-mix(in srgb, var(--interactive) 14%, transparent)
   );
 }
 .live-cta .meta {
@@ -435,10 +452,10 @@ h4 {
   border-radius: var(--radius-card);
   background: linear-gradient(
     120deg,
-    color-mix(in srgb, var(--violet) 24%, transparent),
+    color-mix(in srgb, var(--interactive) 24%, transparent),
     color-mix(in srgb, var(--coral) 16%, transparent)
   );
-  border: 1px solid color-mix(in srgb, var(--violet) 40%, transparent);
+  border: 1px solid color-mix(in srgb, var(--interactive) 40%, transparent);
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -539,8 +556,8 @@ h4 {
 }
 
 .bottom-nav button[aria-current="page"] svg {
-  color: var(--coral);
-  filter: drop-shadow(0 0 10px rgba(255, 92, 108, 0.7));
+  color: var(--accent);
+  filter: drop-shadow(0 0 10px color-mix(in srgb, var(--accent) 70%, transparent));
 }
 
 /* Raised create action */
@@ -656,7 +673,7 @@ h4 {
 
 .btn.violet {
   color: #fff;
-  background: linear-gradient(140deg, var(--violet), #5b48e0);
+  background: linear-gradient(140deg, var(--interactive), #5b48e0);
   border-color: transparent;
   box-shadow: var(--shadow-violet);
 }
@@ -744,8 +761,8 @@ h4 {
 
 /* A sponsored card is set apart without shouting: a hairline and a tint. */
 .post.sponsored {
-  border: 1px solid color-mix(in srgb, var(--violet) 35%, var(--border));
-  background: color-mix(in srgb, var(--violet) 5%, transparent);
+  border: 1px solid color-mix(in srgb, var(--interactive) 35%, var(--border));
+  background: color-mix(in srgb, var(--interactive) 5%, transparent);
 }
 
 .btn:disabled {
@@ -799,9 +816,9 @@ input:focus,
 textarea:focus,
 select:focus {
   outline: none;
-  border-color: color-mix(in srgb, var(--violet) 65%, transparent);
+  border-color: color-mix(in srgb, var(--interactive) 65%, transparent);
   background: color-mix(in srgb, var(--void) 35%, transparent);
-  box-shadow: 0 0 0 4px color-mix(in srgb, var(--violet) 18%, transparent);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--interactive) 18%, transparent);
 }
 
 select {
@@ -854,7 +871,7 @@ select {
 
 .pill[aria-pressed="true"] {
   color: #fff;
-  background: linear-gradient(135deg, var(--violet), #5b48e0);
+  background: linear-gradient(135deg, var(--interactive), #5b48e0);
   border-color: transparent;
   box-shadow: var(--shadow-violet);
 }
@@ -891,7 +908,7 @@ select {
 }
 
 .avatar.violet {
-  background: linear-gradient(140deg, var(--violet), var(--blue));
+  background: linear-gradient(140deg, var(--interactive), var(--blue));
 }
 
 .avatar.coral {
@@ -1010,7 +1027,7 @@ select {
   color: var(--text-secondary);
   background: color-mix(in srgb, var(--surface-2) 70%, transparent);
   border: 1px solid var(--border);
-  border-left: 3px solid var(--violet);
+  border-left: 3px solid var(--interactive);
   border-radius: var(--radius-sm);
   margin-bottom: var(--space-3);
 }
@@ -1103,8 +1120,8 @@ select {
 }
 
 .option[aria-pressed="true"] {
-  border-color: color-mix(in srgb, var(--violet) 70%, transparent);
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--violet) 60%, transparent),
+  border-color: color-mix(in srgb, var(--interactive) 70%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--interactive) 60%, transparent),
     0 0 24px -8px rgba(121, 104, 245, 0.7);
 }
 
@@ -1116,7 +1133,7 @@ select {
 .option-fill {
   position: absolute;
   inset: 0 auto 0 0;
-  background: linear-gradient(90deg, color-mix(in srgb, var(--violet) 34%, transparent), transparent);
+  background: linear-gradient(90deg, color-mix(in srgb, var(--interactive) 34%, transparent), transparent);
   transition: width var(--motion-slow) var(--ease-out);
   pointer-events: none;
 }
@@ -1205,8 +1222,8 @@ select {
 }
 
 .react-btn[aria-pressed="true"] {
-  color: var(--coral);
-  background: color-mix(in srgb, var(--coral) 14%, transparent);
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
 }
 
 .react-btn svg {
@@ -1442,7 +1459,7 @@ select {
 }
 
 .row-link:hover {
-  color: var(--coral);
+  color: var(--accent);
 }
 
 .divider {
@@ -1506,6 +1523,40 @@ select {
 .post {
   padding: var(--space-4) 0 var(--space-2);
   border-bottom: 1px solid var(--hairline);
+}
+
+/* ---- Per-type presentation ----
+   A poll, an announcement and a gallery should not read as the same thing. Each
+   gets a small, quiet distinction: a type tag in the accent, and for an
+   announcement a lit left rule. This is identity, not decoration — the feed is
+   still flat and editorial. */
+.post-type-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin-bottom: var(--space-2);
+  padding: 3px 9px;
+  border-radius: var(--radius-pill);
+  font-size: var(--text-meta);
+  font-weight: 700;
+  letter-spacing: var(--tracking-wide);
+  text-transform: uppercase;
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  border: 1px solid color-mix(in srgb, var(--accent) 28%, transparent);
+}
+.post.type-poll { padding-left: var(--space-3); border-left: 2px solid color-mix(in srgb, var(--accent) 45%, transparent); }
+.post.type-announcement {
+  padding-left: var(--space-3);
+  border-left: 3px solid var(--accent);
+  background: linear-gradient(90deg, color-mix(in srgb, var(--accent) 8%, transparent), transparent 40%);
+}
+.post.type-announcement .post-body { font-weight: 600; }
+.post.type-video .post-type-tag,
+.post.type-carousel .post-type-tag {
+  color: var(--text-secondary);
+  background: color-mix(in srgb, var(--surface-3) 70%, transparent);
+  border-color: var(--border);
 }
 
 .post-head {
@@ -1631,8 +1682,8 @@ select {
   border-color: var(--border-strong);
 }
 .tool-btn.violet:hover {
-  color: var(--violet-soft);
-  border-color: color-mix(in srgb, var(--violet) 60%, transparent);
+  color: var(--accent-soft);
+  border-color: color-mix(in srgb, var(--interactive) 60%, transparent);
 }
 .tool-btn.coral:hover {
   color: var(--coral-soft);
@@ -1663,8 +1714,8 @@ select {
   width: 52px;
   height: 52px;
   margin-bottom: var(--space-1);
-  color: var(--violet-soft);
-  background: color-mix(in srgb, var(--violet) 14%, transparent);
+  color: var(--accent-soft);
+  background: color-mix(in srgb, var(--interactive) 14%, transparent);
   border-radius: var(--radius-pill);
   animation: empty-float 5s var(--ease-out) infinite alternate;
 }
@@ -1741,7 +1792,7 @@ select {
   cursor: pointer;
 }
 .dropzone:hover {
-  border-color: var(--violet);
+  border-color: var(--interactive);
   color: var(--text-secondary);
 }
 .thumb-row {
@@ -1862,7 +1913,7 @@ select {
   padding: var(--space-3) var(--space-3) var(--space-3) var(--space-4);
   background: var(--surface-2);
   border: 1px solid var(--border);
-  border-left: 3px solid var(--violet);
+  border-left: 3px solid var(--interactive);
   border-radius: var(--radius-sm);
   box-shadow: 0 12px 32px rgb(0 0 0 / 32%);
   color: var(--text-primary);
@@ -1884,7 +1935,7 @@ select {
   padding: 0 var(--space-3);
   background: none;
   border: none;
-  color: var(--violet);
+  color: var(--interactive);
   font-weight: 600;
   font-size: var(--text-supporting);
   cursor: pointer;
@@ -1892,7 +1943,7 @@ select {
 }
 
 .toast-action:hover {
-  background: color-mix(in srgb, var(--violet) 14%, transparent);
+  background: color-mix(in srgb, var(--interactive) 14%, transparent);
 }
 
 .toast-close {
@@ -2004,8 +2055,8 @@ select {
   font-size: var(--text-meta);
   padding: 1px 7px;
   border-radius: var(--radius-pill);
-  border: 1px solid var(--violet);
-  color: var(--violet);
+  border: 1px solid var(--interactive);
+  color: var(--interactive);
 }
 
 .room-posts {
@@ -2041,7 +2092,7 @@ select {
 /* ---- Accessibility ---- */
 
 :focus-visible {
-  outline: 3px solid var(--violet);
+  outline: 3px solid var(--interactive);
   outline-offset: 2px;
   border-radius: 8px;
 }
@@ -2174,8 +2225,8 @@ select {
   flex: 0 0 auto;
 }
 .switch.on {
-  background: var(--violet);
-  border-color: var(--violet);
+  background: var(--interactive);
+  border-color: var(--interactive);
 }
 .switch-knob {
   position: absolute;
@@ -2211,7 +2262,7 @@ select {
 }
 /* Keyboard focus lands on the hidden input; show it on the track instead. */
 .switch-wrap:focus-within .switch {
-  outline: 2px solid var(--violet-soft);
+  outline: 2px solid var(--accent-soft);
   outline-offset: 2px;
 }
 
@@ -2271,7 +2322,7 @@ select {
   display: block;
   height: 100%;
   border-radius: 999px;
-  background: linear-gradient(90deg, var(--violet), var(--coral));
+  background: linear-gradient(90deg, var(--accent-soft), var(--accent));
   transition: width 400ms var(--ease-out);
 }
 .energy-value { font-variant-numeric: tabular-nums; font-weight: 700; }
@@ -2298,15 +2349,15 @@ select {
 }
 /* A speaking seat glows and lifts, so the room reads as alive. */
 .stage-seat.speaking {
-  border-color: color-mix(in srgb, var(--violet) 60%, transparent);
-  box-shadow: 0 0 0 2px color-mix(in srgb, var(--violet) 45%, transparent), 0 8px 24px -12px var(--violet);
+  border-color: color-mix(in srgb, var(--interactive) 60%, transparent);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--interactive) 45%, transparent), 0 8px 24px -12px var(--interactive);
   transform: translateY(-2px);
   animation: seat-pulse 1.4s ease-in-out infinite;
 }
 .stage-seat.muted { opacity: 0.6; }
 @keyframes seat-pulse {
-  0%, 100% { box-shadow: 0 0 0 2px color-mix(in srgb, var(--violet) 40%, transparent), 0 8px 24px -12px var(--violet); }
-  50% { box-shadow: 0 0 0 4px color-mix(in srgb, var(--violet) 55%, transparent), 0 10px 30px -10px var(--violet); }
+  0%, 100% { box-shadow: 0 0 0 2px color-mix(in srgb, var(--interactive) 40%, transparent), 0 8px 24px -12px var(--interactive); }
+  50% { box-shadow: 0 0 0 4px color-mix(in srgb, var(--interactive) 55%, transparent), 0 10px 30px -10px var(--interactive); }
 }
 .stage-name { font-size: var(--text-meta); font-weight: 600; max-width: 80px; }
 .stage-role { font-size: 10px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--text-muted); }
