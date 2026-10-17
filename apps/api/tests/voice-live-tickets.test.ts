@@ -139,7 +139,7 @@ describe("ticketed live rooms", () => {
     expect(ticket.json().ticket.status).toBe("granted");
   });
 
-  it("splits a ticket 70/30 and credits the host's balance", async () => {
+  it("splits a ticket 85/15 and credits the host's balance", async () => {
     const host = await registerUser(h.app, "earninghost");
     const fan = await registerUser(h.app, "payer");
     const room = await createRoom(host.token, {
@@ -160,8 +160,8 @@ describe("ticketed live rooms", () => {
     await h.app.inject({ method: "POST", url: "/v1/webhooks/payments", headers, payload: raw });
 
     const balance = await h.app.inject({ method: "GET", url: "/v1/money/balance", headers: auth(host.token) });
-    // 70% of ₦1,000 is ₦700, held for 7 days, so it shows as pending.
-    expect(balance.json().pendingMinor).toBe(70_000);
+    // 85% of ₦1,000 is ₦850, held for 7 days, so it shows as pending.
+    expect(balance.json().pendingMinor).toBe(85_000);
   });
 
   it("does not double-grant a ticket on a redelivered webhook", async () => {

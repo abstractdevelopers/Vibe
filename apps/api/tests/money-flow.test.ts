@@ -96,7 +96,7 @@ async function makeAdmin(user: TestUser): Promise<void> {
 }
 
 describe("a paid gift writes a balanced journal", () => {
-  it("credits the creator 70% and books 30% revenue", async () => {
+  it("credits the creator 85% and books 15% revenue", async () => {
     const buyer = await registerUser(h.app, "gfbuyer");
     const creator = await registerUser(h.app, "gfcreator");
 
@@ -115,8 +115,8 @@ describe("a paid gift writes a balanced journal", () => {
     expect(hook.json().gift.applied).toBe(true);
 
     expect(await journalCount("gift_purchase")).toBe(1);
-    expect(await accountTotal("platform_revenue")).toBe(90_000); // 30%
-    expect(await accountTotal("creator_earnings")).toBe(210_000); // 70%
+    expect(await accountTotal("platform_revenue")).toBe(45_000); // 15%
+    expect(await accountTotal("creator_earnings")).toBe(255_000); // 85%
 
     // A redelivery of the same event is deduplicated and writes nothing new.
     await postWebhook({ id: "evt_gf_1", type: "collection.succeeded", reference, amountMinor });
@@ -125,7 +125,7 @@ describe("a paid gift writes a balanced journal", () => {
 });
 
 describe("a live ticket writes a ticket_purchase journal", () => {
-  it("grants entry and books the 70/30 split to the host", async () => {
+  it("grants entry and books the 85/15 split to the host", async () => {
     const host = await registerUser(h.app, "tkhost");
     const guest = await registerUser(h.app, "tkguest");
 
@@ -160,8 +160,8 @@ describe("a live ticket writes a ticket_purchase journal", () => {
     expect(hook.json().ticket.applied).toBe(true);
 
     expect(await journalCount("ticket_purchase")).toBe(1);
-    expect(await accountTotal("platform_revenue")).toBe(30_000);
-    expect(await accountTotal("creator_earnings")).toBe(70_000);
+    expect(await accountTotal("platform_revenue")).toBe(15_000);
+    expect(await accountTotal("creator_earnings")).toBe(85_000);
 
     const granted = await h.app.inject({
       method: "GET",
@@ -218,8 +218,8 @@ describe("a Vibe Yens top-up writes a wallet_topup journal", () => {
   });
 });
 
-describe("a paid order moves to paid with no ledger journal", () => {
-  it("transitions on the webhook and records the order", async () => {
+describe("a paid order writes an order_purchase journal", () => {
+  it("books 15% to Vibe and 85% to the merchant, and reverses on refund", async () => {
     const merchant = await registerUser(h.app, "ordmerchant");
     const buyer = await registerUser(h.app, "ordbuyer");
     await makeAdmin(merchant);
@@ -247,9 +247,25 @@ describe("a paid order moves to paid with no ledger journal", () => {
     const paid = await h.app.inject({ method: "GET", url: `/v1/orders/${orderId}`, headers: auth(buyer.token) });
     expect(paid.json().status).toBe("paid");
 
-    // Orders are not on the ledger yet; they must not invent a journal.
-    expect(await journalCount("gift_purchase")).toBe(0);
-    const journals = await h.pool.query("SELECT count(*)::int AS n FROM ledger_journals");
-    expect(journals.rows[0].n).toBe(0);
+    // The order is now on the books: 15% revenue, 85% owed to the merchant.
+    expect(await journalCount("order_purchase")).toBe(1);
+    expect(await accountTotal("platform_revenue")).toBe(75_000);
+    expect(await accountTotal("creator_earnings")).toBe(425_000);
+    const linked = await h.pool.query("SELECT journal_id, fee_bps FROM orders WHERE id = $1", [orderId]);
+    expect(linked.rows[0].journal_id).not.toBeNull();
+    expect(linked.rows[0].fee_bps).toBe(1500);
+
+    // A redelivered success must not double-book.
+    await postWebhook({ id: "evt_ord_2", type: "collection.succeeded", reference, amountMinor: 500_000 });
+    expect(await journalCount("order_purchase")).toBe(1);
+
+    // A refund mirrors the original exactly.
+    const refund = await postWebhook({ id: "evt_ord_ref", type: "refund_succeeded", reference, amountMinor: 500_000 });
+    expect(refund.statusCode).toBe(202);
+    expect(await journalCount("order_refund")).toBe(1);
+    expect(await accountTotal("platform_revenue")).toBe(0);
+    expect(await accountTotal("creator_earnings")).toBe(0);
+    const after = await h.app.inject({ method: "GET", url: `/v1/orders/${orderId}`, headers: auth(buyer.token) });
+    expect(after.json().status).toBe("refunded");
   });
 });

@@ -127,8 +127,8 @@ function serializeRoom(room: RoomRow, now = new Date()) {
   };
 }
 
-/** The audience fee the platform keeps on a ticket, in basis points (30%). */
-const TICKET_FEE_BPS = 3000;
+/** The audience fee the platform keeps on a ticket, in basis points (15%). */
+const TICKET_FEE_BPS = 1500;
 
 const createRoomSchema = z.object({
   // voice = open audio stage; listen = music-forward listening room.

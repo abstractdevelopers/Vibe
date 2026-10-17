@@ -86,8 +86,8 @@ describe("gift split arithmetic", () => {
   });
 
   it("keeps the advertised rate", () => {
-    expect(GIFT_FEE_BPS).toBe(3000);
-    expect(splitGift(100_000, GIFT_FEE_BPS)).toEqual({ feeMinor: 30_000, recipientMinor: 70_000 });
+    expect(GIFT_FEE_BPS).toBe(1500);
+    expect(splitGift(100_000, GIFT_FEE_BPS)).toEqual({ feeMinor: 15_000, recipientMinor: 85_000 });
   });
 });
 
@@ -114,9 +114,9 @@ describe("paid gifts end to end", () => {
     expect(body.gifts.length).toBe(GIFT_CATALOGUE.length);
     const rose = body.gifts.find((g: any) => g.id === "rose");
     expect(rose.priceMinor).toBe(20_000);
-    expect(rose.recipientMinor).toBe(14_000);
+    expect(rose.recipientMinor).toBe(17_000);
     // The buyer is told the split before they pay.
-    expect(body.policy).toContain("30%");
+    expect(body.policy).toContain("15%");
   });
 
   it("refuses a gift to yourself", async () => {
@@ -138,10 +138,10 @@ describe("paid gifts end to end", () => {
     });
     expect(res.statusCode).toBe(202);
     const body = res.json();
-    // 2 x ₦2,000 = ₦4,000; Vibe keeps ₦1,200; creator earns ₦2,800.
+    // 2 x ₦2,000 = ₦4,000; Vibe keeps ₦600; creator earns ₦3,400.
     expect(body.amountMinor).toBe(400_000);
-    expect(body.feeMinor).toBe(120_000);
-    expect(body.recipientMinor).toBe(280_000);
+    expect(body.feeMinor).toBe(60_000);
+    expect(body.recipientMinor).toBe(340_000);
     // The critical assertion: a checkout session is not a payment.
     expect(body.status).toBe("pending");
 
@@ -192,8 +192,8 @@ describe("paid gifts end to end", () => {
 
     // The books balance, and the split is exactly as advertised.
     await assertBooksBalance(h);
-    expect(await accountTotal(h, "platform_revenue")).toBe(120_000);
-    expect(await accountTotal(h, "creator_earnings")).toBe(280_000);
+    expect(await accountTotal(h, "platform_revenue")).toBe(60_000);
+    expect(await accountTotal(h, "creator_earnings")).toBe(340_000);
 
     // The gift is delivered exactly once.
     const gifts = await h.pool.query("SELECT count(*) AS n FROM paid_gifts WHERE recipient_id = $1", [creator.id]);
@@ -225,7 +225,7 @@ describe("paid gifts end to end", () => {
     expect(again.body.gift.reason).toBe("already_paid");
 
     await assertBooksBalance(h);
-    expect(await accountTotal(h, "creator_earnings")).toBe(280_000);
+    expect(await accountTotal(h, "creator_earnings")).toBe(340_000);
     const gifts = await h.pool.query("SELECT count(*) AS n FROM paid_gifts WHERE recipient_id = $1", [creator.id]);
     expect(Number(gifts.rows[0].n)).toBe(1);
   });
@@ -257,9 +257,9 @@ describe("paid gifts end to end", () => {
     const res = await h.app.inject({ method: "GET", url: "/v1/money/balance", headers: auth(creator.token) });
     expect(res.statusCode).toBe(200);
     const body = res.json();
-    expect(body.lifetimeEarnedMinor).toBe(280_000);
+    expect(body.lifetimeEarnedMinor).toBe(340_000);
     // Newly earned money is held, so it is not yet available.
-    expect(body.pendingMinor).toBe(280_000);
+    expect(body.pendingMinor).toBe(340_000);
     expect(body.availableMinor).toBe(0);
     expect(body.minPayoutMinor).toBe(MIN_PAYOUT_MINOR);
   });

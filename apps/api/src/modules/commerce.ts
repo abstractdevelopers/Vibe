@@ -7,6 +7,8 @@ import { newId } from "../ids.js";
 import { parse, publicUser, requireAdmin, requireUser, type AppContext, type UserLike } from "../http.js";
 import { requireIdempotencyKey, runIdempotent } from "../idempotency.js";
 import { trackSafe } from "./analytics.js";
+import { ORDER_FEE_BPS } from "../money/catalogue.js";
+import { settleOrderPurchase, refundOrderPurchase } from "../money/settlement.js";
 import type { ProviderPaymentEvent } from "../payments/provider.js";
 
 /**
@@ -133,7 +135,11 @@ export async function transitionOrder(
  */
 export async function applyProviderEvent(db: pg.Pool, event: ProviderPaymentEvent): Promise<boolean> {
   if (!event.orderReference) return false;
-  const order = await queryOne<{ id: string }>(db, "SELECT id FROM orders WHERE reference = $1", [event.orderReference]);
+  const order = await queryOne<{ id: string; status: string }>(
+    db,
+    "SELECT id, status FROM orders WHERE reference = $1",
+    [event.orderReference],
+  );
   if (!order) return false;
   const target =
     event.type === "payment_succeeded"
@@ -144,16 +150,36 @@ export async function applyProviderEvent(db: pg.Pool, event: ProviderPaymentEven
           ? "refunded"
           : null;
   if (!target) return false;
-  try {
-    const result = await transitionOrder(db, order.id, target, `provider:${event.type}`);
-    return result.changed;
-  } catch (err) {
+  if (order.status === target) return false;
+  if (!canTransition(order.status, target)) {
     // An illegal transition (e.g. a success for an already-cancelled order) is
     // a real-money anomaly an operator must see. The event is already recorded,
     // so acknowledge it rather than making the provider retry forever.
-    if (err instanceof ApiError && err.status === 400) return false;
-    throw err;
+    return false;
   }
+  // The order flip and its ledger entry are one transaction: a paid order can
+  // never exist without its books, and a redelivered webhook finds the status
+  // already at the target and returns without double-booking.
+  await withTransaction(db, async (tx) => {
+    await tx.query("UPDATE orders SET status = $2, updated_at = now() WHERE id = $1", [order.id, target]);
+    await tx.query(
+      `INSERT INTO order_events (id, order_id, from_status, to_status, reason, actor_id)
+       VALUES ($1, $2, $3, $4, $5, NULL)`,
+      [newId(), order.id, order.status, target, `provider:${event.type}`],
+    );
+    if (target === "paid") {
+      const res = await settleOrderPurchase(tx, { orderId: order.id, feeBps: ORDER_FEE_BPS });
+      if (!res.applied && res.reason !== "already_posted") {
+        throw new Error(`order settlement failed: ${res.reason}`);
+      }
+    } else if (target === "refunded") {
+      const res = await refundOrderPurchase(tx, { orderId: order.id });
+      if (!res.applied && res.reason !== "not_posted") {
+        throw new Error(`order refund failed: ${res.reason}`);
+      }
+    }
+  });
+  return true;
 }
 
 export function commerceRoutes(ctx: AppContext) {

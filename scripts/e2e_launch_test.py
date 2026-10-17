@@ -242,9 +242,9 @@ if PROVIDER == "bachs":
 else:
     SKIP.append("purchase returns a checkout redirect (provider is 'stub')")
     print(f"  SKIP  purchase returns a checkout redirect (provider={PROVIDER})")
-check("the split is 70/30 in the recipient's favour", lambda: (
+check("the split is 85/15 in the recipient's favour", lambda: (
     lambda: (_ for _ in ()).throw(AssertionError(f"fee={purchase.get('feeMinor')} recip={purchase.get('recipientMinor')}"))
-    if purchase.get("feeMinor") != 6000 or purchase.get("recipientMinor") != 14000 else None
+    if purchase.get("feeMinor") != 3000 or purchase.get("recipientMinor") != 17000 else None
 )())
 
 check("replaying the same idempotency key does not double-charge", lambda: (

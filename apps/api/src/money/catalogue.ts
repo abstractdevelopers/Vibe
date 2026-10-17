@@ -21,8 +21,10 @@ export interface CatalogueGift {
   sortOrder: number;
 }
 
-/** Vibe's share of a gift. 30% — the remainder is creator earnings. */
-export const GIFT_FEE_BPS = 3000;
+/** Vibe's share of a gift, in basis points (15%). */
+export const GIFT_FEE_BPS = 1500;
+/** The platform's cut of a marketplace order, in basis points (15%). */
+export const ORDER_FEE_BPS = 1500;
 
 export const GIFT_CATALOGUE: CatalogueGift[] = [
   { id: "rose", label: "Rose", hint: "A small thank you", emoji: "🌹", tier: 1, priceMinor: 20_000, currency: "NGN", feeBps: GIFT_FEE_BPS, sortOrder: 10 },

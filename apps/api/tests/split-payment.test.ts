@@ -162,17 +162,17 @@ describe("split payment, end to end", () => {
     await h.close();
   });
 
-  it("credits the creator 70% when a gift is paid", async () => {
-    // Fireworks is ₦3,000; the creator's 70% is ₦2,100.
+  it("credits the creator 85% when a gift is paid", async () => {
+    // Fireworks is ₦3,000; the creator's 85% is ₦2,550.
     await buyAndPay("fireworks", 1);
 
     const balance = await creatorBalance(h.pool, creator.id, "NGN");
-    expect(balance.lifetimeEarnedMinor).toBe(210_000);
+    expect(balance.lifetimeEarnedMinor).toBe(255_000);
     // Inside the hold window it is earned but not yet withdrawable.
-    expect(balance.pendingMinor).toBe(210_000);
+    expect(balance.pendingMinor).toBe(255_000);
     expect(balance.availableMinor).toBe(0);
-    expect(await accountTotal("platform_revenue")).toBe(90_000);
-    expect(await accountTotal("creator_earnings")).toBe(210_000);
+    expect(await accountTotal("platform_revenue")).toBe(45_000);
+    expect(await accountTotal("creator_earnings")).toBe(255_000);
   });
 
   it("registers a bank account through the payout provider", async () => {
@@ -195,7 +195,7 @@ describe("split payment, end to end", () => {
     await ageEarnings();
     const res = await h.app.inject({ method: "GET", url: "/v1/money/balance", headers: auth(creator.token) });
     expect(res.statusCode).toBe(200);
-    expect(res.json().availableMinor).toBe(210_000);
+    expect(res.json().availableMinor).toBe(255_000);
   });
 
   it("requests a payout without marking it paid", async () => {
@@ -206,15 +206,15 @@ describe("split payment, end to end", () => {
       method: "POST",
       url: "/v1/money/payouts",
       headers: { ...auth(creator.token), "idempotency-key": "wd-1" },
-      payload: { destinationId, amountMinor: 210_000 },
+      payload: { destinationId, amountMinor: 255_000 },
     });
     expect(res.statusCode).toBe(202);
     expect(res.json().status).toBe("requested");
     expect(payouts.payouts).toHaveLength(1);
-    expect(payouts.payouts[0]!.amountMinor).toBe(210_000);
+    expect(payouts.payouts[0]!.amountMinor).toBe(255_000);
 
     // Not paid: no ledger debit has happened yet.
-    expect(await accountTotal("creator_earnings")).toBe(210_000);
+    expect(await accountTotal("creator_earnings")).toBe(255_000);
     // The provider accepted it and is processing; only a webhook can finish it.
     const row = await h.pool.query("SELECT status FROM payouts WHERE reference = $1", [res.json().reference]);
     expect(row.rows[0].status).toBe("processing");
@@ -222,7 +222,7 @@ describe("split payment, end to end", () => {
 
   it("reserves the requested amount so it cannot back a second payout", async () => {
     const res = await h.app.inject({ method: "GET", url: "/v1/money/balance", headers: auth(creator.token) });
-    expect(res.json().inFlightMinor).toBe(210_000);
+    expect(res.json().inFlightMinor).toBe(255_000);
     expect(res.json().availableMinor).toBe(0);
   });
 
@@ -234,7 +234,7 @@ describe("split payment, end to end", () => {
       id: "evt_payout_paid_1",
       type: "payout.paid",
       reference,
-      amountMinor: 210_000,
+      amountMinor: 255_000,
     });
     expect(statusCode).toBe(202);
     expect(body.payout.applied).toBe(true);
@@ -245,7 +245,7 @@ describe("split payment, end to end", () => {
 
     // The creator's earnings liability has fallen to zero and cash left.
     expect(await accountTotal("creator_earnings")).toBe(0);
-    expect(await accountTotal("creator_payouts")).toBe(210_000);
+    expect(await accountTotal("creator_payouts")).toBe(255_000);
   });
 
   it("is idempotent: a redelivered payout webhook does not pay twice", async () => {
@@ -257,7 +257,7 @@ describe("split payment, end to end", () => {
       id: "evt_payout_paid_1",
       type: "payout.paid",
       reference,
-      amountMinor: 210_000,
+      amountMinor: 255_000,
     });
     // Same event id: deduplicated at the inbox before it reaches settlement.
     expect(body.status).toBe("duplicate_ignored");
@@ -272,13 +272,13 @@ describe("split payment, end to end", () => {
       id: "evt_payout_reversed_1",
       type: "payout.reversed",
       reference,
-      amountMinor: 210_000,
+      amountMinor: 255_000,
     });
     expect(body.payout.applied).toBe(true);
 
     const row = await h.pool.query("SELECT status FROM payouts WHERE reference = $1", [reference]);
     expect(row.rows[0].status).toBe("reversed");
-    expect(await accountTotal("creator_earnings")).toBe(210_000);
+    expect(await accountTotal("creator_earnings")).toBe(255_000);
   });
 
   it("marks a failed payout without debiting, releasing the reservation", async () => {
@@ -293,7 +293,7 @@ describe("split payment, end to end", () => {
       method: "POST",
       url: "/v1/money/payouts",
       headers: { ...auth(creator.token), "idempotency-key": "wd-2" },
-      payload: { destinationId, amountMinor: 210_000 },
+      payload: { destinationId, amountMinor: 255_000 },
     });
     expect(requested.statusCode).toBe(202);
     const reference = requested.json().reference as string;
@@ -302,16 +302,16 @@ describe("split payment, end to end", () => {
       id: "evt_payout_failed_1",
       type: "payout.failed",
       reference,
-      amountMinor: 210_000,
+      amountMinor: 255_000,
     });
     expect(body.payout.applied).toBe(true);
 
     const row = await h.pool.query("SELECT status FROM payouts WHERE reference = $1", [reference]);
     expect(row.rows[0].status).toBe("failed");
     // Nothing was debited, so the earnings are intact and available again.
-    expect(await accountTotal("creator_earnings")).toBe(210_000);
+    expect(await accountTotal("creator_earnings")).toBe(255_000);
     const balance = await creatorBalance(h.pool, creator.id, "NGN");
-    expect(balance.availableMinor).toBe(210_000);
+    expect(balance.availableMinor).toBe(255_000);
     expect(balance.inFlightMinor).toBe(0);
   });
 });

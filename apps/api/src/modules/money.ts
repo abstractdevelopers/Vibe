@@ -88,7 +88,7 @@ export function moneyRoutes(ctx: AppContext) {
         feeBps: GIFT_CATALOGUE[0]!.feeBps,
         // Stated plainly: what a buyer pays, what Vibe keeps, what the creator gets.
         policy:
-          "A paid gift costs the price shown. Vibe keeps 30% and the creator earns 70%, payable to their bank account after a 7-day hold.",
+          "A paid gift costs the price shown. Vibe keeps 15% and the creator earns 85%, payable to their bank account after a 7-day hold.",
       };
     });
 

@@ -4,12 +4,15 @@ import { newId } from "../ids.js";
 import {
   postGiftPurchase,
   postGiftRefund,
+  postOrderPurchase,
+  postOrderRefund,
   postPayout,
   postPayoutReversal,
   postTicketPurchase,
   postTicketRefund,
   postWalletTopup,
 } from "./ledger.js";
+import { splitGift } from "./catalogue.js";
 
 /**
  * Fulfilment: turning a signature-verified provider event into money state.
@@ -408,4 +411,100 @@ export async function refundTicketPurchase(
     );
     return { applied: true, purchaseId: purchase.id };
   });
+}
+
+
+/**
+ * Apply a verified payment for a marketplace order.
+ *
+ * An order is different from a gift: the platform keeps a cut and the rest is
+ * owed to the merchant. Both are written here, in the same transaction that
+ * flips the order to paid, so a paid order can never exist without its books.
+ * The order id is the reference, and the unique order row is the lock, so a
+ * redelivered webhook cannot double-book.
+ */
+export async function settleOrderPurchase(
+  tx: pg.PoolClient,
+  input: { orderId: string; feeBps: number },
+): Promise<GiftSettlementResult> {
+  const order = await queryOne<{
+    id: string; status: string; amount_minor: string; currency: string; reference: string;
+    merchant_id: string; journal_id: string | null;
+  }>(
+    tx as unknown as pg.Pool,
+    `SELECT id, status, amount_minor, currency, reference, merchant_id, journal_id
+       FROM orders WHERE id = $1 FOR UPDATE`,
+    [input.orderId],
+  );
+  if (!order) return { applied: false, reason: "unknown_order" };
+  if (order.journal_id) return { applied: false, reason: "already_posted" };
+
+  const merchant = await queryOne<{ owner_id: string }>(
+    tx as unknown as pg.Pool,
+    "SELECT owner_id FROM merchants WHERE id = $1",
+    [order.merchant_id],
+  );
+  if (!merchant) return { applied: false, reason: "merchant_missing" };
+
+  const amountMinor = Number(order.amount_minor);
+  const { feeMinor } = splitGift(amountMinor, input.feeBps);
+  const journalId = await postOrderPurchase(tx, {
+    reference: order.reference,
+    merchantOwnerId: merchant.owner_id,
+    amountMinor,
+    feeMinor,
+    currency: order.currency,
+  });
+  await tx.query(
+    `UPDATE orders SET journal_id = $2, fee_bps = $3, updated_at = now() WHERE id = $1`,
+    [order.id, journalId, input.feeBps],
+  );
+  await tx.query(
+    `INSERT INTO money_audit (actor_id, action, entity_type, entity_id, amount_minor, currency, metadata)
+     VALUES (NULL, 'order.paid', 'order', $1, $2, $3, $4)`,
+    [order.id, amountMinor, order.currency, JSON.stringify({ journalId, feeMinor })],
+  );
+  return { applied: true };
+}
+
+/** Reverse a paid order after a refund, mirroring the original journal exactly. */
+export async function refundOrderPurchase(
+  tx: pg.PoolClient,
+  input: { orderId: string },
+): Promise<GiftSettlementResult> {
+  const order = await queryOne<{
+    id: string; status: string; amount_minor: string; currency: string; reference: string;
+    merchant_id: string; journal_id: string | null; fee_bps: number | null;
+  }>(
+    tx as unknown as pg.Pool,
+    `SELECT id, status, amount_minor, currency, reference, merchant_id, journal_id, fee_bps
+       FROM orders WHERE id = $1 FOR UPDATE`,
+    [input.orderId],
+  );
+  if (!order) return { applied: false, reason: "unknown_order" };
+  if (!order.journal_id) return { applied: false, reason: "not_posted" };
+
+  const merchant = await queryOne<{ owner_id: string }>(
+    tx as unknown as pg.Pool,
+    "SELECT owner_id FROM merchants WHERE id = $1",
+    [order.merchant_id],
+  );
+  if (!merchant) return { applied: false, reason: "merchant_missing" };
+
+  const amountMinor = Number(order.amount_minor);
+  const { feeMinor } = splitGift(amountMinor, order.fee_bps ?? 0);
+  await postOrderRefund(tx, {
+    reference: order.reference,
+    merchantOwnerId: merchant.owner_id,
+    amountMinor,
+    feeMinor,
+    currency: order.currency,
+  });
+  await tx.query(`UPDATE orders SET journal_id = NULL, updated_at = now() WHERE id = $1`, [order.id]);
+  await tx.query(
+    `INSERT INTO money_audit (actor_id, action, entity_type, entity_id, amount_minor, currency, metadata)
+     VALUES (NULL, 'order.refunded', 'order', $1, $2, $3, $4)`,
+    [order.id, amountMinor, order.currency, JSON.stringify({ feeMinor })],
+  );
+  return { applied: true };
 }

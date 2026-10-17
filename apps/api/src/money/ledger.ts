@@ -37,6 +37,8 @@ export type JournalKind =
   | "payout_reversal"
   | "ticket_purchase"
   | "ticket_refund"
+  | "order_purchase"
+  | "order_refund"
   | "adjustment"
   | "wallet_topup"
   | "wallet_transfer"
@@ -296,6 +298,74 @@ export async function postTicketRefund(
     entries,
   });
 }
+/**
+ * A paid marketplace order. Cash arrives at the provider (debit clearing), split
+ * into what Vibe keeps (credit platform_revenue) and what it owes the merchant
+ * (credit creator_earnings for the merchant's owner). Merchant earnings use the
+ * same hold as a creator's, so a payout releases them the same way.
+ */
+export async function postOrderPurchase(
+  tx: pg.PoolClient,
+  input: {
+    reference: string;
+    merchantOwnerId: string;
+    amountMinor: number;
+    feeMinor: number;
+    currency: string;
+  },
+): Promise<string> {
+  const clearing = await accountId(tx, "provider_clearing", input.currency, null);
+  const revenue = await accountId(tx, "platform_revenue", input.currency, null);
+  const entries: Entry[] = [
+    { accountId: clearing, direction: "debit", amountMinor: input.amountMinor },
+  ];
+  if (input.feeMinor > 0) entries.push({ accountId: revenue, direction: "credit", amountMinor: input.feeMinor });
+  const merchantMinor = input.amountMinor - input.feeMinor;
+  if (merchantMinor > 0) {
+    const earnings = await accountId(tx, "creator_earnings", input.currency, input.merchantOwnerId);
+    entries.push({ accountId: earnings, direction: "credit", amountMinor: merchantMinor });
+  }
+  return writeJournal(tx, {
+    kind: "order_purchase",
+    currency: input.currency,
+    reference: input.reference,
+    memo: "Marketplace order",
+    entries,
+  });
+}
+
+/** The exact mirror of an order purchase, for a refunded order. */
+export async function postOrderRefund(
+  tx: pg.PoolClient,
+  input: {
+    reference: string;
+    merchantOwnerId: string;
+    amountMinor: number;
+    feeMinor: number;
+    currency: string;
+  },
+): Promise<string> {
+  const clearing = await accountId(tx, "provider_clearing", input.currency, null);
+  const revenue = await accountId(tx, "platform_revenue", input.currency, null);
+  const entries: Entry[] = [
+    { accountId: clearing, direction: "credit", amountMinor: input.amountMinor },
+  ];
+  if (input.feeMinor > 0) entries.push({ accountId: revenue, direction: "debit", amountMinor: input.feeMinor });
+  const merchantMinor = input.amountMinor - input.feeMinor;
+  if (merchantMinor > 0) {
+    const earnings = await accountId(tx, "creator_earnings", input.currency, input.merchantOwnerId);
+    entries.push({ accountId: earnings, direction: "debit", amountMinor: merchantMinor });
+  }
+  return writeJournal(tx, {
+    kind: "order_refund",
+    currency: input.currency,
+    reference: input.reference,
+    memo: "Marketplace order refund",
+    entries,
+  });
+}
+
+
 
 export interface Balance {
   currency: string;
