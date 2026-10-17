@@ -316,6 +316,24 @@ export function battleRoutes(ctx: AppContext) {
            ON CONFLICT (battle_id, user_id) DO UPDATE SET side = EXCLUDED.side, created_at = now()`,
           [id, user.id, input.side],
         );
+        // Voting also records which side the viewer is on, so the screen can
+        // light up their side without a second call. A staked backer cannot
+        // vote for the other side — that would make their own stake ambiguous.
+        const existing = await tx.query<{ side: string; stake_minor: string }>(
+          "SELECT side, stake_minor FROM battle_participants WHERE battle_id = $1 AND user_id = $2",
+          [id, user.id],
+        );
+        const prior = existing.rows[0];
+        if (!prior) {
+          await tx.query(
+            "INSERT INTO battle_participants (battle_id, user_id, side, stake_minor) VALUES ($1,$2,$3,0)",
+            [id, user.id, input.side],
+          );
+        } else if (num(prior.stake_minor) > 0 && prior.side !== input.side) {
+          throw ApiError.badRequest("You have staked on the other side");
+        } else if (num(prior.stake_minor) === 0) {
+          await tx.query("UPDATE battle_participants SET side = $3 WHERE battle_id = $1 AND user_id = $2", [id, user.id, input.side]);
+        }
       });
       const row = await queryOne<BattleRow>(ctx.pool, "SELECT * FROM battles WHERE id = $1", [id]);
       return { battle: await battleView(ctx, row!, user.id) };

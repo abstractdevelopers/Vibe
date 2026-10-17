@@ -101,10 +101,13 @@ describe("battles", () => {
     const voted = await h.app.inject({ method: "POST", url: `/v1/battles/${id}/vote`, headers: auth(voter.token), payload: { side: "b" } });
     expect(voted.statusCode).toBe(200);
     expect(voted.json().battle.tally).toEqual({ a: 0, b: 1 });
+    // Voting records which side the viewer is on, so the screen can light it up.
+    expect(voted.json().battle.mySide).toBe("b");
 
     // Voting again changes the vote rather than adding one: one vote per user.
     const revote = await h.app.inject({ method: "POST", url: `/v1/battles/${id}/vote`, headers: auth(voter.token), payload: { side: "a" } });
     expect(revote.json().battle.tally).toEqual({ a: 1, b: 0 });
+    expect(revote.json().battle.mySide).toBe("a");
 
     const closed = await h.app.inject({ method: "POST", url: `/v1/battles/${id}/close`, headers: auth(host.token) });
     expect(closed.statusCode).toBe(200);
