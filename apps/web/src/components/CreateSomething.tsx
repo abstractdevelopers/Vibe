@@ -16,8 +16,8 @@ interface Merchant { id: string; name: string; verificationStatus: string }
 
 type Panel = "menu" | "room" | "merchant" | "event" | "product" | "campaign";
 
-export function CreateSomethingSheet({ onClose, onCreated }: { onClose: () => void; onCreated: () => void }) {
-  const [panel, setPanel] = useState<Panel>("menu");
+export function CreateSomethingSheet({ onClose, onCreated, initialPanel = "menu" }: { onClose: () => void; onCreated: () => void; initialPanel?: Panel }) {
+  const [panel, setPanel] = useState<Panel>(initialPanel);
   const [error, setError] = useState<string | null>(null);
 
   return (

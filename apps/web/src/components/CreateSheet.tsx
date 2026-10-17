@@ -17,6 +17,8 @@ import {
   UsersIcon,
 } from "../components/Icons";
 import { useMediaUpload } from "../media";
+import { CreateSomethingSheet } from "./CreateSomething";
+import { RadioIcon, TicketIcon, StoreIcon, MegaphoneIcon } from "../components/Icons";
 
 export type CreateMode = "post" | "poll" | "plan" | "expense" | "media";
 
@@ -41,6 +43,7 @@ export function CreateSheet({ me, initialMode = "post", onClose, onCreated }: Pr
   const [mode, setMode] = useState<Mode>(initialMode);
   const [circles, setCircles] = useState<CircleSummary[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [hostOpen, setHostOpen] = useState(false);
   const active = MODES.find((m) => m.id === mode)!;
 
   useEffect(() => {
@@ -100,7 +103,46 @@ export function CreateSheet({ me, initialMode = "post", onClose, onCreated }: Pr
         {mode === "poll" && <PollForm circles={circles} onDone={onCreated} setError={setError} />}
         {mode === "plan" && <PlanForm circles={circles} onDone={onCreated} setError={setError} />}
         {mode === "expense" && <ExpenseForm me={me} circles={circles} onDone={onCreated} setError={setError} />}
+
+        {/* Hosting is the same intent as posting — you are making something for
+            people — so it lives in this sheet rather than behind a second,
+            unrelated menu. Picking one opens the host form in place. */}
+        <div className="stack" style={{ marginTop: "var(--space-4)" }}>
+          <p className="eyebrow" style={{ margin: 0 }}>Host something</p>
+          <div className="host-grid">
+            <button className="host-tile" onClick={() => setHostOpen(true)}>
+              <RadioIcon width={18} height={18} />
+              <strong>Live room</strong>
+              <span className="meta">Sports, movie or music</span>
+            </button>
+            <button className="host-tile" onClick={() => setHostOpen(true)}>
+              <TicketIcon width={18} height={18} />
+              <strong>Event</strong>
+              <span className="meta">Ticketed or free</span>
+            </button>
+            <button className="host-tile" onClick={() => setHostOpen(true)}>
+              <StoreIcon width={18} height={18} />
+              <strong>Business</strong>
+              <span className="meta">Open a store</span>
+            </button>
+            <button className="host-tile" onClick={() => setHostOpen(true)}>
+              <MegaphoneIcon width={18} height={18} />
+              <strong>Ad campaign</strong>
+              <span className="meta">Promote something</span>
+            </button>
+          </div>
+        </div>
       </div>
+
+      {hostOpen && (
+        <CreateSomethingSheet
+          onClose={() => setHostOpen(false)}
+          onCreated={() => {
+            setHostOpen(false);
+            onCreated();
+          }}
+        />
+      )}
     </div>
   );
 }

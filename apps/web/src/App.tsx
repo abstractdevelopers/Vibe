@@ -18,7 +18,6 @@ import { StorefrontScreen, ProductScreen, OrdersScreen, OrderScreen, SellerOrder
 import { EventsScreen } from "./screens/Events";
 import { LiveScreen } from "./screens/Live";
 import { CreateSheet } from "./components/CreateSheet";
-import { CreateSomethingSheet } from "./components/CreateSomething";
 import {
   ChatIcon,
   CirclesIcon,
@@ -91,7 +90,6 @@ export function App() {
   const [unread, setUnread] = useState(0);
   const [createOpen, setCreateOpen] = useState(false);
   const [createMode, setCreateMode] = useState<CreateMode>("post");
-  const [startOpen, setStartOpen] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
 
   const openCreate = (mode: CreateMode) => {
@@ -244,7 +242,7 @@ export function App() {
                 onMeChanged={loadMe}
                 onOpenProfile={() => push({ name: "profile", userId: me.id })}
                 onOpenYou={() => { goToTabs(); setTab("you"); }}
-                onStartSomething={() => setStartOpen(true)}
+                onStartSomething={() => openCreate("post")}
               />
             </div>
           </header>
@@ -387,18 +385,6 @@ export function App() {
             <NavButton id="explore" label="Explore" Icon={CompassIcon} tab={tab} setTab={setTab} route={route} onNavigate={goToTabs} />
           </nav>
         </>
-      )}
-
-      {startOpen && me && (
-        <CreateSomethingSheet
-          onClose={() => setStartOpen(false)}
-          onCreated={() => {
-            setStartOpen(false);
-            setRoute({ name: "tabs" });
-            setTab("explore");
-            bump();
-          }}
-        />
       )}
 
       {createOpen && me && (
