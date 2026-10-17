@@ -866,6 +866,13 @@ Gotchas the harnesses encode, in case you write new checks:
   uses `FOR UPDATE SKIP LOCKED` and bumps `attempts` before sending, so two
   instances never email the same person twice. Any future cron-style job needs
   the same treatment.
+- **A staked game takes a rake; a battle must not.** Games move a stake into
+  `game_pot` and pay the winner minus `GAME_RAKE_BPS`. Battles reuse the same
+  pot and the same journal kinds but pay the winning side the whole pot. That
+  is not an oversight: a rake on a vote outcome is the line between a feature
+  and a gambling product, and Part D says a user should not have to risk money
+  to be heard. `postBattlePayout` has no rake parameter, so it cannot be passed
+  one by mistake. A stake decides what you win, never who wins.
 - **Voice needs TURN, not just STUN, and music needs its own audio profile.**
   `coturn` runs on the host (ports 3478 tcp/udp and 49152–65535 udp). The API
   mints short-lived credentials from `TURN_SECRET` at `/v1/rtc/ice` using
