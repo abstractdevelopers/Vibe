@@ -62,6 +62,7 @@ function eventView(e: {
   price_minor: number; currency: string; state: string; circle_id: string | null;
   image_url: string | null;
   organizer_id: string; handle: string; display_name: string; avatar_url: string | null;
+  host_kind: string | null; host_disclosure: string | null;
   booking_verified: boolean; booking_provider: string | null; booking_ref: string | null;
 }) {
   return {
@@ -79,7 +80,10 @@ function eventView(e: {
     currency: e.currency,
     state: e.state,
     circleId: e.circle_id,
-    organizer: publicUser({ id: e.organizer_id, handle: e.handle, display_name: e.display_name, avatar_url: e.avatar_url }),
+    organizer: publicUser({
+      id: e.organizer_id, handle: e.handle, display_name: e.display_name, avatar_url: e.avatar_url,
+      host_kind: e.host_kind, host_disclosure: e.host_disclosure,
+    }),
     // A booking is only shown as confirmed when a provider reference backs it.
     booking: e.booking_verified
       ? { verified: true, provider: e.booking_provider, reference: e.booking_ref }
@@ -144,7 +148,7 @@ export function eventsRoutes(ctx: AppContext) {
       const limit = Math.min(Number(q.limit ?? 20) || 20, 50);
       const rows = await queryMany<Parameters<typeof eventView>[0]>(
         ctx.pool,
-        `SELECT e.*, u.handle, u.display_name, u.avatar_url
+        `SELECT e.*, u.handle, u.display_name, u.avatar_url, u.host_kind, u.host_disclosure
            FROM events e JOIN users u ON u.id = e.organizer_id
           WHERE e.state = 'published'
             AND ($1::text IS NULL OR e.city = $1)
@@ -161,7 +165,7 @@ export function eventsRoutes(ctx: AppContext) {
       const { id } = req.params as { id: string };
       const e = await queryOne<Parameters<typeof eventView>[0] & { organizer_id: string; state: string }>(
         ctx.pool,
-        `SELECT e.*, u.handle, u.display_name, u.avatar_url
+        `SELECT e.*, u.handle, u.display_name, u.avatar_url, u.host_kind, u.host_disclosure
            FROM events e JOIN users u ON u.id = e.organizer_id
           WHERE e.id = $1`,
         [id],

@@ -51,6 +51,8 @@ describe("events, check-in, pass and loyalty", () => {
     expect((list.json().events as Array<{ id: string }>).some((e) => e.id === id)).toBe(true);
     const detail = await h.app.inject({ method: "GET", url: `/v1/events/${id}` });
     expect(detail.statusCode).toBe(200);
+    // A human organizer is disclosed as a person.
+    expect(detail.json().organizer.hostKind).toBe("person");
 
     // A draft is not public.
     const draft = await h.app.inject({
@@ -62,6 +64,22 @@ describe("events, check-in, pass and loyalty", () => {
     });
     const hidden = await h.app.inject({ method: "GET", url: `/v1/events/${draft.json().id}` });
     expect(hidden.statusCode).toBe(404);
+  });
+
+  it("discloses an official host on the events it organizes", async () => {
+    // An official account is not a person and the event must say so.
+    await h.pool.query(
+      `UPDATE users SET host_kind = 'official', host_disclosure = 'Run by Vibe' WHERE id = $1`,
+      [organizer.id],
+    );
+    try {
+      const id = await makeEvent();
+      const res = await h.app.inject({ method: "GET", url: `/v1/events/${id}` });
+      expect(res.json().organizer.hostKind).toBe("official");
+      expect(res.json().organizer.hostDisclosure).toBe("Run by Vibe");
+    } finally {
+      await h.pool.query(`UPDATE users SET host_kind = 'person', host_disclosure = NULL WHERE id = $1`, [organizer.id]);
+    }
   });
 
   it("checks a person in with a valid code, once", async () => {
