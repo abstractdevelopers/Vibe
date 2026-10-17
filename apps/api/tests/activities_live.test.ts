@@ -207,3 +207,34 @@ describe("GPS-driven explore", () => {
     expect(res.json().location).toBeNull();
   });
 });
+
+describe("realtime room access", () => {
+  it("lets anyone subscribe to a public room, but only members to a private one", async () => {
+    const { canAccessRoom } = await import("../src/modules/activities-live.js");
+    const publicRoom = (await h.app.inject({
+      method: "POST", url: "/v1/activities/rooms", headers: auth(host.token),
+      payload: { kind: "voice", title: "Open mic", startsAt: soon().toISOString(), durationMinutes: 60, visibility: "public" },
+    })).json().room;
+    const privateRoom = (await h.app.inject({
+      method: "POST", url: "/v1/activities/rooms", headers: auth(host.token),
+      payload: { kind: "voice", title: "Closed", startsAt: soon().toISOString(), durationMinutes: 60, visibility: "private" },
+    })).json().room;
+
+    const ctx = { pool: h.pool } as never;
+    // A public room is open to any signed-in user.
+    expect(await canAccessRoom(ctx, publicRoom.id, fan.id)).toBe(true);
+    // A private room is not — not even for a fan who is not a member.
+    expect(await canAccessRoom(ctx, privateRoom.id, fan.id)).toBe(false);
+    // The host always has access to their own private room.
+    expect(await canAccessRoom(ctx, privateRoom.id, host.id)).toBe(true);
+    // After joining, the fan is a member and may subscribe.
+    await h.app.inject({ method: "POST", url: `/v1/activities/rooms/${privateRoom.id}/join`, headers: auth(host.token), payload: {} });
+    await h.pool.query(
+      `INSERT INTO room_members (room_id, user_id) VALUES ($1,$2) ON CONFLICT DO NOTHING`,
+      [privateRoom.id, fan.id],
+    );
+    expect(await canAccessRoom(ctx, privateRoom.id, fan.id)).toBe(true);
+    // An unknown room is never accessible.
+    expect(await canAccessRoom(ctx, "00000000-0000-0000-0000-000000000000", fan.id)).toBe(false);
+  });
+});

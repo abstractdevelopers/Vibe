@@ -46,6 +46,13 @@ const schema = z.object({
   EMAIL_BASE_URL: z.string().url().default("https://api.resend.com"),
   // Database connection pool ceiling. Keep below Postgres max_connections.
   PGPOOL_MAX: z.coerce.number().int().min(1).max(200).default(10),
+  // Cross-instance realtime. `memory` is a single process (default); `postgres`
+  // relays room/circle events through LISTEN/NOTIFY so members spread across many
+  // containers still all hear them. See the scale plan.
+  REALTIME_BUS: z.enum(["memory", "postgres"]).default("memory"),
+  // Refuse new realtime sockets past this many, so one instance degrades by
+  // shedding load instead of running out of memory. 0 means no limit.
+  REALTIME_MAX_SOCKETS: z.coerce.number().int().min(0).default(0),
 });
 
 export type Config = z.infer<typeof schema> & { isProduction: boolean };

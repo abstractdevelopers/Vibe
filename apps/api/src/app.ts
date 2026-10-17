@@ -32,7 +32,7 @@ import { passRoutes } from "./modules/pass.js";
 import { aiRoutes } from "./modules/ai.js";
 import { pushRoutes } from "./modules/push.js";
 import { searchRoutes } from "./modules/search.js";
-import { activityRoutes } from "./modules/activities-live.js";
+import { activityRoutes, canAccessRoom } from "./modules/activities-live.js";
 import { locationRoutes } from "./modules/location.js";
 import { launchRoutes } from "./modules/launch.js";
 import { moneyRoutes } from "./modules/money.js";
@@ -98,6 +98,14 @@ export async function buildApp(ctx: AppContext): Promise<FastifyInstance> {
 
   app.get("/health", async () => ({ status: "ok", provider: ctx.provider.name }));
   app.get("/v1/health", async () => ({ status: "ok" }));
+  // Readiness carries the one number that matters for realtime scaling: how many
+  // sockets this instance is holding. A load balancer or autoscaler can read it.
+  app.get("/v1/health/realtime", async () => ({
+    status: ctx.hub.atCapacity() ? "at_capacity" : "ok",
+    sockets: ctx.hub.socketCount(),
+    bus: ctx.config.REALTIME_BUS,
+    maxSockets: ctx.config.REALTIME_MAX_SOCKETS,
+  }));
 
   // Publish a machine-readable route index. Every route is registered through
   // this hook, so the document cannot drift from the code. Request/response
@@ -180,6 +188,22 @@ export async function buildApp(ctx: AppContext): Promise<FastifyInstance> {
       socket.close(4401, "unauthorized");
       return;
     }
+    // Load shedding: past the configured ceiling, refuse new sockets with a
+    // distinct close code so a client can back off rather than hammer. The
+    // process stays healthy and existing calls are unaffected.
+    if (ctx.hub.atCapacity()) {
+      socket.close(4429, "at capacity");
+      return;
+    }
+    // Bound what one socket can hold and how fast it can talk, so a single
+    // client cannot exhaust memory or drown the hub. Signalling frames are tiny;
+    // 64 KB is generous.
+    const MAX_FRAME_BYTES = 64 * 1024;
+    const FRAME_BURST = 60;
+    const FRAME_WINDOW_MS = 10_000;
+    let frameCount = 0;
+    let frameWindowStart = Date.now();
+
     const circleIds = await circleIdsFor(ctx.pool, user.id);
     const unsubscribe = ctx.hub.subscribe(socket, user.id, circleIds);
     socket.send(JSON.stringify({ type: "realtime.ready", entityId: user.id, payload: { circleIds } }));
@@ -187,31 +211,53 @@ export async function buildApp(ctx: AppContext): Promise<FastifyInstance> {
     // Inbound frames are only used for room presence and WebRTC signalling.
     // Everything durable (a gift, a message, a stage change) still goes through
     // an HTTP route that authorizes and persists it; the socket never writes.
+    //
+    // Handling is serialized per socket (`chain`), so a `room.join` that has to
+    // check access completes before any signalling frame that follows it is
+    // relayed. Without the queue an offer could be published before the socket
+    // was registered in the room, and the answer would never arrive.
+    let chain: Promise<void> = Promise.resolve();
     socket.on("message", (raw: Buffer) => {
+      // Flood guard: a well-behaved client sends a handful of frames a second at
+      // most (presence + ICE candidates). Anything above the burst is dropped
+      // rather than closed, so a transient spike does not kill a live call.
+      const now = Date.now();
+      if (now - frameWindowStart > FRAME_WINDOW_MS) { frameWindowStart = now; frameCount = 0; }
+      frameCount += 1;
+      if (frameCount > FRAME_BURST) return;
+
+      const text = raw.toString();
+      if (text.length > MAX_FRAME_BYTES) return;
       let msg: { type?: string; roomId?: string; to?: string; payload?: unknown };
       try {
-        msg = JSON.parse(raw.toString());
+        msg = JSON.parse(text);
       } catch {
         return;
       }
       if (!msg?.type || !msg.roomId) return;
-      if (msg.type === "room.join") {
-        ctx.hub.joinRoom(socket, msg.roomId);
-        return;
-      }
-      if (msg.type === "room.leave") {
-        ctx.hub.leaveRoom(socket, msg.roomId);
-        return;
-      }
-      // WebRTC signalling: relay to the room, addressed to one peer. The server
-      // is a dumb relay here; it never inspects or stores the SDP/ICE.
-      if (msg.type === "rtc.offer" || msg.type === "rtc.answer" || msg.type === "rtc.ice") {
-        ctx.hub.publishToRoom(
-          msg.roomId,
-          { type: msg.type, entityId: msg.roomId, payload: { from: user.id, to: msg.to, data: msg.payload } },
-          socket,
-        );
-      }
+
+      chain = chain.then(async () => {
+        if (msg.type === "room.join") {
+          // Authorize before joining: a private room is only for its host and
+          // members. Without this any session could listen to any room.
+          const allowed = await canAccessRoom(ctx, msg.roomId!, user.id).catch(() => false);
+          if (allowed) ctx.hub.joinRoom(socket, msg.roomId!);
+          return;
+        }
+        if (msg.type === "room.leave") {
+          ctx.hub.leaveRoom(socket, msg.roomId!);
+          return;
+        }
+        // WebRTC signalling: relay to the room, addressed to one peer. The
+        // server is a dumb relay here; it never inspects or stores the SDP/ICE.
+        if (msg.type === "rtc.offer" || msg.type === "rtc.answer" || msg.type === "rtc.ice") {
+          ctx.hub.publishToRoom(
+            msg.roomId!,
+            { type: msg.type, entityId: msg.roomId!, payload: { from: user.id, to: msg.to, data: msg.payload } },
+            socket,
+          );
+        }
+      }).catch(() => undefined);
     });
 
     socket.on("close", () => {

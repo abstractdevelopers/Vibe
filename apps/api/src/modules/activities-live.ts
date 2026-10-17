@@ -948,6 +948,29 @@ async function loadRoom(ctx: AppContext, id: string, viewerId: string | null) {
   return serializeRoom(room);
 }
 
+/**
+ * Can this user subscribe to a room's realtime channel? A public room is open to
+ * any signed-in viewer; a private room only to its host and members. This is the
+ * same rule `assertCanSee` enforces over HTTP, exported so the websocket path
+ * applies it too — otherwise any session could listen to any room's events.
+ */
+export async function canAccessRoom(ctx: AppContext, roomId: string, userId: string): Promise<boolean> {
+  const room = await queryOne<{ host_id: string; visibility: string }>(
+    ctx.pool,
+    `SELECT host_id, visibility FROM activity_rooms WHERE id = $1`,
+    [roomId],
+  );
+  if (!room) return false;
+  if (room.visibility !== "private") return true;
+  if (room.host_id === userId) return true;
+  const member = await queryOne(
+    ctx.pool,
+    `SELECT 1 FROM room_members WHERE room_id = $1 AND user_id = $2`,
+    [roomId, userId],
+  );
+  return Boolean(member);
+}
+
 async function assertCanSee(ctx: AppContext, id: string, viewerId: string): Promise<RoomRow> {
   const room = await queryOne<RoomRow>(ctx.pool, `${ROOM_SELECT} WHERE r.id = $1`, [id]);
   if (!room) throw ApiError.notFound("Room not found");

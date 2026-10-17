@@ -31,6 +31,8 @@ export const testConfig: Config = {
   EMAIL_FROM: "Vibe <no-reply@test.local>",
   EMAIL_BASE_URL: "https://api.resend.com",
   PGPOOL_MAX: 10,
+  REALTIME_BUS: "memory",
+  REALTIME_MAX_SOCKETS: 0,
   isProduction: false,
 };
 

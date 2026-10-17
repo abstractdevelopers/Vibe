@@ -1,7 +1,7 @@
 import { loadConfig, webhookSecretFor } from "./config.js";
 import { createPool } from "./db.js";
 import { buildApp } from "./app.js";
-import { RealtimeHub } from "./realtime.js";
+import { PostgresBus, RealtimeHub, type RealtimeBus } from "./realtime.js";
 import { createPaymentProvider } from "./payments/provider.js";
 import { createPayoutProvider } from "./payments/payouts.js";
 import { createMailer, drainOutbox } from "./modules/mailer.js";
@@ -10,7 +10,16 @@ import { prune as pruneRateLimits } from "./modules/ratelimit.js";
 async function main(): Promise<void> {
   const config = loadConfig();
   const pool = createPool(config.DATABASE_URL, config.PGPOOL_MAX);
-  const hub = new RealtimeHub();
+
+  // Cross-instance realtime. With `postgres`, one dedicated connection LISTENs
+  // and every publish is relayed to the other containers, so room events reach
+  // members wherever they are connected.
+  let bus: RealtimeBus | undefined;
+  if (config.REALTIME_BUS === "postgres") {
+    const busClient = await pool.connect();
+    bus = new PostgresBus(busClient, console);
+  }
+  const hub = new RealtimeHub(bus, config.REALTIME_MAX_SOCKETS);
   const provider = createPaymentProvider(config.PAYMENTS_PROVIDER, webhookSecretFor(config), {
     apiKey: config.BACHS_API_KEY,
     baseUrl: config.BACHS_BASE_URL,
@@ -44,6 +53,7 @@ async function main(): Promise<void> {
 
   const shutdown = async () => {
     clearInterval(outboxTimer);
+    await bus?.close();
     await app.close();
     await pool.end();
     process.exit(0);
