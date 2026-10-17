@@ -768,6 +768,24 @@ Gotchas the harnesses encode, in case you write new checks:
   stays pending and no journal is written.
 - **Coolify deploys are manual.** There is no GitHub webhook, so a push does
   not deploy. Trigger one with POST /api/v1/deploy?uuid=<app-uuid>.
+- **The app runs on two origins.** Web is `https://vibe.launchverse.site`, API is
+  `https://vibeapi.launchverse.site`. The client learns the API origin at build
+  time from `VITE_API_URL` (a **buildtime** env var; the Dockerfile declares
+  `ARG VITE_API_URL`). If that ARG is missing the value never reaches Vite and
+  the client silently calls the web host instead. `CORS_ORIGIN` is the **web**
+  origin; `PUBLIC_API_URL` is the API origin. Both hostnames point at the same
+  Coolify app (`domains` is a comma-separated list). Two things break the split
+  in ways that look like an outage, not a config error: a wrong `VITE_API_URL`
+  (client calls the static host) and a `connect-src` CSP without the API origin
+  (browser blocks every call). Both are covered by tests.
+- **Bachs delivers webhooks to the API origin.** The endpoint
+  `whe_2Pf3V2c5qnZnTUYf` ("Vibe production") is registered at
+  `https://vibeapi.launchverse.site/v1/webhooks/payments` and subscribes to
+  `checkout.completed`, `collection.succeeded`, `collection.failed`,
+  `collection.underpaid`, `refund.paid`, `payout.paid`, `payout.failed`. Move it
+  with `PATCH /v1/webhooks/endpoints/{id}` (scope `webhooks:write`) when the API
+  origin changes, or collections and payouts stop settling. The signing secret is
+  not returned by PATCH; it is unchanged unless rotated.
 - **Games are server-authoritative and stake through the ledger.** A game
   session stores its full engine state; every move is validated against that
   state, persisted with a sequence, and only then broadcast, so a client cannot
