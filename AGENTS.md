@@ -672,3 +672,27 @@ Gotchas the harnesses encode, in case you write new checks:
   readable with no session; drafts and cancelled events stay visible only to
   their organizer or an operator. Explore already served published events
   without auth; keep the two surfaces consistent.
+- **Every game implements one engine contract.** `apps/api/src/games/engine.ts`
+  defines create/apply/view/turnUserId/finished/winnerId/autoMove; the routes in
+  `modules/games.ts` never look at rules. Adding a game is: implement the
+  interface, register it in `games/registry.ts`, and mark the catalogue row
+  `playable` with its `engine` id. `tests/game-engines.test.ts` drives every
+  registered engine to a finish through its own `autoMove` — if that test fails,
+  the game is not safe to stake.
+- **A staked game must always settle.** War and Simon cap their rounds so a game
+  cannot run forever; a draw refunds every stake (`settleGame` with `refund`),
+  and a refund zeroes `pot_minor` so it cannot pay twice. Randomness that decides
+  money (dice, spins, crash points) is drawn from a seed in the state, never from
+  the client — Snakes rolls server-side for exactly this reason.
+- **Party games are picks or guesses from a fixed set, not free text.** A server
+  can only settle a game it can judge, and settlement is what staking depends on.
+- **Themes are authored, not random.** `apps/web/src/themes.ts` holds 34 base
+  palettes × 4 styles = 136 themes; each computes its accent ink by luminance so
+  text stays legible. The atmosphere glows read `--theme-glow-a/--theme-glow-b`,
+  which `applyTheme` sets alongside `--accent`. "Follow activity" (Settings) tints
+  the app to the current game via `useActivityTheme`; a manual pick always wins.
+- **Live/voice rooms are a WebRTC mesh.** The server relays SDP/ICE over the
+  realtime socket and never carries media; `MESH_SPEAKER_LIMIT` is 8 speakers
+  before an SFU is needed. Room kinds (voice/listen/movie/sports/music/other)
+  share one config; they differ by label, media source and playback mode, not by
+  transport. Read routes for live/rooms still require a session.
