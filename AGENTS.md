@@ -866,6 +866,14 @@ Gotchas the harnesses encode, in case you write new checks:
   uses `FOR UPDATE SKIP LOCKED` and bumps `attempts` before sending, so two
   instances never email the same person twice. Any future cron-style job needs
   the same treatment.
+- **Voice needs TURN, not just STUN, and music needs its own audio profile.**
+  `coturn` runs on the host (ports 3478 tcp/udp and 49152–65535 udp). The API
+  mints short-lived credentials from `TURN_SECRET` at `/v1/rtc/ice` using
+  coturn's REST scheme; the secret is never shipped to the browser. The client
+  (`apps/web/src/rtc.ts`) fetches ICE servers before building a peer, and picks
+  the audio profile by room kind — `listen`/`music` get ~128 kbps stereo with
+  noise suppression and auto-gain off, because those are speech filters and both
+  damage music. Never hardcode `iceServers` in the component again.
 - **Security headers are app-level and cannot lock out the server.** `app.ts`
   sets CSP, nosniff, X-Frame-Options and Permissions-Policy on every response,
   and HSTS only when `x-forwarded-proto` is https. None of it touches SSH, ufw,
