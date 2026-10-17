@@ -365,6 +365,47 @@ export function GameArt({
 }
 
 /**
+ * The palette for each game world.
+ *
+ * One table drives the covers, the featured band and the category shelf, so the
+ * arcade reads as a single lit place: a cards room is plum and neon pink, a
+ * board room is cold blue steel, a casino floor is gold on lacquer. Each entry
+ * carries the two plate colours, the accent its artwork is drawn in, and the
+ * motif that textures the plate. Kept here rather than in the component so the
+ * hero and the tile can never drift apart.
+ */
+export type WorldMotif = "grid" | "rays" | "chips" | "spark" | "circuit" | "confetti";
+export interface World {
+  label: string;
+  from: string;
+  to: string;
+  accent: string;
+  motif: WorldMotif;
+  /** One line of atmosphere for the category header. */
+  tagline: string;
+}
+
+export const GAME_WORLDS: Record<string, World> = {
+  cards: { label: "Cards", from: "#2a1430", to: "#120a1c", accent: "#ff7ab8", motif: "spark", tagline: "Bluff, match and call it." },
+  board: { label: "Board", from: "#0e2036", to: "#08111f", accent: "#5cc8ff", motif: "grid", tagline: "Slow hands, long evenings." },
+  casino: { label: "Casino", from: "#2a1f0a", to: "#140f05", accent: "#ffc247", motif: "chips", tagline: "Fast rounds, real nerve." },
+  mind: { label: "Mind", from: "#0f2a2c", to: "#07171a", accent: "#4fe0c6", motif: "circuit", tagline: "Words, memory, quick thinking." },
+  action: { label: "Action", from: "#2c1408", to: "#160a04", accent: "#ff9d3c", motif: "rays", tagline: "Reflex and nerve." },
+  party: { label: "Party", from: "#2a0f2c", to: "#160818", accent: "#e07aff", motif: "confetti", tagline: "Loud games for a group." },
+};
+
+export const DEFAULT_WORLD: World = {
+  label: "Arcade", from: "#1a1c2c", to: "#0c0d16", accent: "#8f9bff", motif: "spark", tagline: "Everything in the arcade.",
+};
+
+export function worldFor(category?: string): World {
+  return (category && GAME_WORLDS[category]) || DEFAULT_WORLD;
+}
+
+/** Every world, in the order the shelf should show them. */
+export const WORLD_ORDER = ["cards", "board", "mind", "action", "casino", "party"];
+
+/**
  * A game's cover: the mark on a lit, textured plate. This is the artwork for a
  * card in a grid — composed from the game's own environment colours rather than
  * a single repeated template, so a casino game and a board game read differently
@@ -383,18 +424,7 @@ export function GameCover({
   size?: number;
   className?: string;
 }): JSX.Element {
-  // Each category gets a material treatment; the hue comes from the same family
-  // the theme system uses, so cover and environment agree.
-  const look: Record<string, { from: string; to: string; accent: string; motif: "grid" | "rays" | "chips" | "spark" }> = {
-    cards: { from: "#2a1430", to: "#120a1c", accent: "#ff7ab8", motif: "spark" },
-    board: { from: "#0e2036", to: "#08111f", accent: "#5cc8ff", motif: "grid" },
-    casino: { from: "#2a1f0a", to: "#140f05", accent: "#ffc247", motif: "chips" },
-    mind: { from: "#0f2a2c", to: "#07171a", accent: "#4fe0c6", motif: "grid" },
-    action: { from: "#2c1408", to: "#160a04", accent: "#ff9d3c", motif: "rays" },
-    party: { from: "#2a0f2c", to: "#160818", accent: "#e07aff", motif: "spark" },
-    default: { from: "#1a1c2c", to: "#0c0d16", accent: "#8f9bff", motif: "spark" },
-  };
-  const l = look[category ?? ""] ?? look.default!;
+  const l = worldFor(category);
   const gid = `gc-${gameId}`;
   return (
     <svg
@@ -417,9 +447,20 @@ export function GameCover({
           <stop offset="0" stopColor={l.accent} stopOpacity="0.5" />
           <stop offset="1" stopColor={l.accent} stopOpacity="0" />
         </radialGradient>
+        {/* A soft floor light under the mark, so the plate reads as lit from
+            above rather than flatly filled. */}
+        <radialGradient id={`${gid}-floor`} cx="0.5" cy="1" r="0.7">
+          <stop offset="0" stopColor={l.accent} stopOpacity="0.34" />
+          <stop offset="1" stopColor={l.accent} stopOpacity="0" />
+        </radialGradient>
+        {/* The mark itself is filled with a slight vertical sheen so it has a
+            surface, not just a silhouette. */}
+        <linearGradient id={`${gid}-mark`} x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" stopColor={l.accent} />
+          <stop offset="1" stopColor={l.accent} stopOpacity="0.72" />
+        </linearGradient>
       </defs>
       <rect width="96" height="96" rx="18" fill={`url(#${gid})`} />
-      <rect width="96" height="96" rx="18" fill={`url(#${gid}-lit)`} />
       {l.motif === "grid" && (
         <g opacity="0.16" stroke={l.accent} strokeWidth="1">
           <path d="M0 24h96M0 48h96M0 72h96M24 0v96M48 0v96M72 0v96" />
@@ -436,11 +477,37 @@ export function GameCover({
           <circle cx="78" cy="20" r="7" />
         </g>
       )}
-      <rect width="96" height="96" rx="18" fill="none" stroke="rgba(255,255,255,0.12)" />
+      {l.motif === "circuit" && (
+        <g opacity="0.16" stroke={l.accent} strokeWidth="1.1" fill="none">
+          <path d="M0 30h30V0M66 96V66h30M96 34H70V0M0 70h26v26" />
+          <circle cx="30" cy="30" r="2.4" fill={l.accent} stroke="none" />
+          <circle cx="70" cy="66" r="2.4" fill={l.accent} stroke="none" />
+        </g>
+      )}
+      {l.motif === "confetti" && (
+        <g opacity="0.26" fill={l.accent}>
+          <rect x="14" y="18" width="6" height="3" rx="1.5" transform="rotate(24 14 18)" />
+          <rect x="76" y="26" width="6" height="3" rx="1.5" transform="rotate(-32 76 26)" />
+          <rect x="22" y="74" width="6" height="3" rx="1.5" transform="rotate(-14 22 74)" />
+          <rect x="70" y="72" width="6" height="3" rx="1.5" transform="rotate(38 70 72)" />
+          <circle cx="48" cy="14" r="2" />
+        </g>
+      )}
+      {l.motif === "spark" && (
+        <g opacity="0.2" fill={l.accent}>
+          <path d="M18 70l1.6 4.4L24 76l-4.4 1.6L18 82l-1.6-4.4L12 76l4.4-1.6z" />
+          <path d="M78 22l1.3 3.4L83 27l-3.7 1.3L78 32l-1.3-3.7L73 27l3.7-1.6z" />
+        </g>
+      )}
+      <rect width="96" height="96" rx="18" fill={`url(#${gid}-lit)`} />
+      <rect width="96" height="96" rx="18" fill={`url(#${gid}-floor)`} />
       {/* The mark is drawn on the shared 48×48 grid and centred on the plate. */}
       <g transform="translate(24 24)">
-        {(MARKS[gameId] ?? CATEGORY_MARKS[category ?? ""] ?? MARKS.dice!)(l.accent)}
+        {(MARKS[gameId] ?? CATEGORY_MARKS[category ?? ""] ?? MARKS.dice!)(`url(#${gid}-mark)`)}
       </g>
+      {/* An inner rim: the plate's edge catching the room light. */}
+      <rect x="0.75" y="0.75" width="94.5" height="94.5" rx="17.25" fill="none" stroke="rgba(255,255,255,0.14)" />
+      <rect width="96" height="96" rx="18" fill="none" stroke="rgba(0,0,0,0.35)" />
     </svg>
   );
 }

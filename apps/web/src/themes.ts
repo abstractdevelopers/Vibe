@@ -90,6 +90,12 @@ const NAMED: Theme[] = [
 
 interface Base { id: string; name: string; family: string; hue: number; accentLight: number; glowHue: number; tint?: number }
 
+/**
+ * The base palette each generated theme descends from. `id` is the *base* id —
+ * it is deliberately not the same thing as a game id or a category. A game is
+ * matched to a base by `BASE_ALIASES`, then by category, then by family; see
+ * `baseForGame`.
+ */
 const BASES: Base[] = [
   // Games — cards
   { id: "whot", name: "Whot Table", family: "cards", hue: 8, accentLight: 62, glowHue: 22 },
@@ -135,6 +141,50 @@ const BASES: Base[] = [
   { id: "wallet", name: "Wallet Gold", family: "social", hue: 46, accentLight: 60, glowHue: 30 },
 ];
 
+/**
+ * The one base palette that represents a whole family, used when a game has no
+ * base of its own. Without this a game in a family with no `-classic` base (say
+ * `mind`) fell through to the board palette, so a memory game wore a board
+ * environment. `board-classic` is itself the board family's base.
+ */
+const FAMILY_BASE: Record<string, string> = {
+  cards: "whot",
+  board: "board-classic",
+  mind: "trivia",
+  action: "reaction",
+  casino: "casino",
+  party: "party",
+  rooms: "voice",
+  social: "circle",
+};
+
+/**
+ * Games the catalogue has no base for, pointed at the base whose mood fits.
+ * Kept explicit so a new game is a deliberate choice rather than a silent
+ * fallback to whatever the family happens to be.
+ */
+export const BASE_ALIASES: Record<string, string> = {
+  gofish: "whot",
+  crazyeights: "whot",
+  baccarat: "poker",
+  dots: "gomoku",
+  wordchain: "wordplay",
+  wordscramble: "wordplay",
+  dice: "casino",
+  plinko: "crash",
+  scrabble: "wordplay",
+  monopoly: "board-classic",
+  chess: "board-classic",
+  ludo: "board-classic",
+  draughts: "checkers",
+  othello: "reversi",
+  uno: "whot",
+  dominos: "gomoku",
+  backgammon: "board-classic",
+  solitaire: "blackjack",
+};
+
+
 interface Style { id: string; name: string; sat: number; lightShift: number; glowSat: number; glowLight: number; tint: number }
 
 const STYLES: Style[] = [
@@ -175,23 +225,51 @@ export const THEME_COUNT = THEMES.length;
 
 const byId = new Map(THEMES.map((t) => [t.id, t]));
 
+/** The base palette ids, so a lookup can tell a base from a family name. */
+const BASE_IDS = new Set(BASES.map((b) => b.id));
+
 export function getTheme(id: string | null | undefined): Theme | null {
   return id ? byId.get(id) ?? null : null;
 }
 
 /**
- * Resolve a theme for a piece of content. Games map by id (falling back to their
- * category), rooms by kind, and anything else by a stable hash of its id, so a
- * Circle always wears the same colours.
+ * Which base palette a game should wear.
+ *
+ * Order matters and each step exists for a reason:
+ *   1. An explicit alias, for a game whose id is not a base (gofish, chess…).
+ *   2. The game's own base, when the catalogue has one (whot, poker…).
+ *   3. The family's base, so a memory game gets the mind palette rather than
+ *      whatever `getTheme(undefined)` would have returned.
+ *
+ * This is the function that was broken: it used to look up `${category}-classic`
+ * and, when that missed, silently fall back to the *board* palette — so most
+ * games wore the wrong environment.
+ */
+export function baseForGame(gameId: string, category?: string): string {
+  const alias = BASE_ALIASES[gameId];
+  if (alias && BASE_IDS.has(alias)) return alias;
+  if (BASE_IDS.has(gameId)) return gameId;
+  if (category && FAMILY_BASE[category]) return FAMILY_BASE[category]!;
+  return "board-classic";
+}
+
+/** Which base palette a room kind should wear. */
+export function baseForRoom(kind: string): string {
+  if (BASE_IDS.has(kind)) return kind;
+  return FAMILY_BASE.rooms!;
+}
+
+/**
+ * Resolve a theme for a piece of content. Games map by base, rooms by kind, and
+ * anything else by a stable hash of its id, so a Circle always wears the same
+ * colours.
  */
 export function themeForGame(gameId: string, category?: string): Theme {
-  return getTheme(`${gameId}-classic`)
-    ?? getTheme(`${category}-classic`)
-    ?? getTheme("board-classic")!;
+  return getTheme(`${baseForGame(gameId, category)}-classic`) ?? getTheme("board-classic")!;
 }
 
 export function themeForRoom(kind: string): Theme {
-  return getTheme(`${kind}-classic`) ?? getTheme("voice-classic")!;
+  return getTheme(`${baseForRoom(kind)}-classic`) ?? getTheme("voice-classic")!;
 }
 
 export function themeForId(seed: string, family = "social"): Theme {

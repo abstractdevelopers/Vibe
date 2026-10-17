@@ -3,8 +3,8 @@ import { api, ApiError, idempotencyKey } from "../api";
 import { useNav } from "../nav";
 import { ScreenHeader } from "../components/ScreenHeader";
 import { EmptyState } from "../components/EmptyState";
-import { GameArt, GameCover } from "../components/GameArt";
-import { SpinnerIcon, UsersIcon, PlayIcon, RadioIcon, TrophyIcon, ClockIcon } from "../components/Icons";
+import { GameArt, GameCover, WORLD_ORDER, worldFor } from "../components/GameArt";
+import { SpinnerIcon, UsersIcon, PlayIcon, RadioIcon, TrophyIcon } from "../components/Icons";
 import { themeForGame } from "../themes";
 import { applyTheme, followActivity, pickedTheme } from "../theme-runtime";
 
@@ -59,24 +59,6 @@ interface Session {
   players: SessionPlayer[];
 }
 
-const CATEGORY_LABEL: Record<string, string> = {
-  cards: "Cards",
-  board: "Board",
-  casino: "Casino",
-  mind: "Mind games",
-  action: "Action",
-  party: "Party",
-};
-
-const CATEGORY_BLURB: Record<string, string> = {
-  cards: "Classics you already know how to play.",
-  board: "Slow games for long evenings.",
-  casino: "Fast, high-energy rounds.",
-  mind: "Word, memory and trivia.",
-  action: "Reflex and nerve.",
-  party: "Loud games for a group.",
-};
-
 function money(minor: number, currency: string): string {
   return `${(minor / 100).toLocaleString(undefined, { maximumFractionDigits: 0 })} ${currency}`;
 }
@@ -119,7 +101,6 @@ export function GamesScreen({ onBack }: { onBack?: () => void }) {
     return acc;
   }, [games]);
 
-  const categories = useMemo(() => Object.keys(byCategory), [byCategory]);
   const shown = category ? (byCategory[category] ?? []) : (games ?? []);
 
   // The room takes on the environment of whatever game is in focus.
@@ -147,25 +128,28 @@ export function GamesScreen({ onBack }: { onBack?: () => void }) {
 
       {error && <div className="notice danger" role="alert">{error}</div>}
 
-      {/* Featured table — the front door of the arcade. */}
+      {/* The marquee. A lit band carrying the arcade's identity, the game in
+          focus, and the one action that matters: enter. */}
       {featured && (
-        <button
-          className="play-feature"
-          onClick={() => setPicked(featured)}
-          aria-label={`${featured.name} — ${featured.blurb}`}
-        >
-          <span className="play-feature-art">
-            <GameCover gameId={featured.id} category={featured.category} name="" size={132} />
-          </span>
-          <span className="play-feature-body">
-            <span className="eyebrow">Featured</span>
-            <strong className="play-feature-name">{featured.name}</strong>
-            <span className="meta">{featured.blurb}</span>
-            <span className="play-feature-cta">
-              <PlayIcon width={16} height={16} /> Start a table
-            </span>
-          </span>
-        </button>
+        <section className="marquee" aria-label="Featured game">
+          <div className="marquee-glow" aria-hidden="true" />
+          <div className="marquee-body">
+            <span className="marquee-eyebrow">Now featured</span>
+            <h2 className="marquee-name">{featured.name}</h2>
+            <p className="marquee-blurb">{featured.blurb}</p>
+            <div className="marquee-meta">
+              <span className="chip"><UsersIcon width={12} height={12} /> {featured.minPlayers}–{featured.maxPlayers} players</span>
+              {featured.stakeEnabled && <span className="chip chip-gold">Stakes</span>}
+              <span className="chip">{worldFor(featured.category).label}</span>
+            </div>
+            <button className="btn primary marquee-cta" onClick={() => setPicked(featured)}>
+              <PlayIcon width={17} height={17} /> {featured.availability === "playable" ? "Start a table" : "Coming soon"}
+            </button>
+          </div>
+          <div className="marquee-art" aria-hidden="true">
+            <GameCover gameId={featured.id} category={featured.category} name="" size={188} />
+          </div>
+        </section>
       )}
 
       {/* Live now — real sessions, with an honest empty state. */}
@@ -181,67 +165,102 @@ export function GamesScreen({ onBack }: { onBack?: () => void }) {
             text="Start one below and it appears here for anyone to join."
           />
         ) : (
-          <div className="play-live-list">
+          <div className="live-rail">
             {sessions.map((s) => (
-              <button key={s.id} className="play-live-row" onClick={() => nav.push({ name: "game", sessionId: s.id })}>
-                <GameCover gameId={s.gameId} category={s.category} name="" size={46} />
-                <span className="grow" style={{ textAlign: "left", minWidth: 0 }}>
-                  <strong className="truncate">{s.gameName}</strong>
-                  <span className="meta truncate">
-                    {s.status === "active" ? "In play" : "Lobby"} · {s.players.length}/{s.maxPlayers} ·{" "}
-                    {s.players.find((p) => p.id === s.hostId)?.displayName ?? "someone"}'s table
-                  </span>
+              <button key={s.id} className="live-card" onClick={() => nav.push({ name: "game", sessionId: s.id })}>
+                <span className="live-card-top">
+                  <GameCover gameId={s.gameId} category={s.category} name="" size={44} />
+                  <span className={`live-dot${s.status === "active" ? " playing" : ""}`} aria-hidden="true" />
                 </span>
-                {s.stakeMinor > 0 ? (
-                  <span className="chip chip-gold">{money(s.potMinor, s.currency)}</span>
-                ) : (
-                  <span className="chip">Free</span>
-                )}
+                <strong className="truncate">{s.gameName}</strong>
+                <span className="meta truncate">
+                  {s.status === "active" ? "In play" : "Lobby"} · {s.players.length}/{s.maxPlayers}
+                </span>
+                <span className="meta truncate">
+                  {s.players.find((p) => p.id === s.hostId)?.displayName ?? "someone"}'s table
+                </span>
+                <span className={s.stakeMinor > 0 ? "chip chip-gold" : "chip"}>
+                  {s.stakeMinor > 0 ? money(s.potMinor, s.currency) : "Free"}
+                </span>
               </button>
             ))}
           </div>
         )}
       </section>
 
-      {/* Category shelf. */}
+      {/* The worlds. Each category is a lit room; choosing one changes the
+          whole environment, not just a filter. */}
       <section className="stack">
-        <h2 className="section-title">Browse</h2>
-        <div className="play-shelf">
-          <button className="play-cat" aria-pressed={category === null} onClick={() => setCategory(null)}>
-            <span className="play-cat-name">Everything</span>
-            <span className="meta">{games?.length ?? 0} games</span>
-          </button>
-          {categories.map((c) => (
-            <button key={c} className="play-cat" aria-pressed={category === c} onClick={() => setCategory(c)}>
-              <span className="play-cat-name">{CATEGORY_LABEL[c] ?? c}</span>
-              <span className="meta">{byCategory[c]!.length} games</span>
-            </button>
-          ))}
+        <div className="row spread">
+          <h2 className="section-title">Worlds</h2>
+          {category && (
+            <button className="link-button" onClick={() => setCategory(null)}>Clear</button>
+          )}
         </div>
-        {category && CATEGORY_BLURB[category] && <p className="meta">{CATEGORY_BLURB[category]}</p>}
+        <div className="world-shelf">
+          <button className="world-tile" aria-pressed={category === null} onClick={() => setCategory(null)}>
+            <span className="world-tile-swatch" aria-hidden="true" />
+            <span className="world-tile-body">
+              <span className="world-tile-name">All worlds</span>
+              <span className="meta">{games?.length ?? 0} games</span>
+            </span>
+          </button>
+          {WORLD_ORDER.filter((c) => byCategory[c]?.length).map((c) => {
+            const w = worldFor(c);
+            return (
+              <button
+                key={c}
+                className="world-tile"
+                aria-pressed={category === c}
+                onClick={() => setCategory(c)}
+                style={{ ["--world" as string]: w.accent, ["--world-from" as string]: w.from, ["--world-to" as string]: w.to }}
+              >
+                <span className="world-tile-swatch" aria-hidden="true" />
+                <span className="world-tile-body">
+                  <span className="world-tile-name">{w.label}</span>
+                  <span className="meta truncate">{w.tagline}</span>
+                </span>
+                <span className="world-tile-count">{byCategory[c]!.length}</span>
+              </button>
+            );
+          })}
+        </div>
       </section>
 
       {/* The catalogue. */}
       {games === null && <div className="skeleton" aria-busy="true" />}
       {games && (
         <section className="stack">
+          <div className="row spread">
+            <h2 className="section-title">{category ? worldFor(category).label : "All games"}</h2>
+            <span className="meta">{shown.length} {shown.length === 1 ? "game" : "games"}</span>
+          </div>
           <div className="game-grid">
-            {shown.map((g) => (
-              <button
-                key={g.id}
-                className="game-tile"
-                onClick={() => setPicked(g)}
-                aria-label={`${g.name}${g.availability === "planned" ? " (coming soon)" : ""}`}
-              >
-                <GameCover gameId={g.id} category={g.category} name={g.name} size={64} className="game-tile-cover" />
-                <span className="game-tile-name">{g.name}</span>
-                <span className="meta">{g.minPlayers}–{g.maxPlayers} players</span>
-                <span className="game-tile-tags">
-                  {g.availability === "planned" && <span className="chip"><ClockIcon width={11} height={11} /> Soon</span>}
-                  {g.stakeEnabled && g.availability === "playable" && <span className="chip chip-gold">Stakes</span>}
-                </span>
-              </button>
-            ))}
+            {shown.map((g) => {
+              const w = worldFor(g.category);
+              return (
+                <button
+                  key={g.id}
+                  className="game-tile"
+                  onClick={() => setPicked(g)}
+                  style={{ ["--world" as string]: w.accent }}
+                  aria-label={`${g.name}${g.availability === "planned" ? " (coming soon)" : ""}`}
+                >
+                  <span className="game-tile-art">
+                    <GameCover gameId={g.id} category={g.category} name={g.name} size={64} className="game-tile-cover" />
+                    {g.availability === "planned" && <span className="game-tile-soon">Soon</span>}
+                  </span>
+                  <span className="game-tile-name">{g.name}</span>
+                  <span className="game-tile-players">
+                    <UsersIcon width={11} height={11} /> {g.minPlayers}–{g.maxPlayers}
+                  </span>
+                  <span className="game-tile-tags">
+                    {g.stakeEnabled && g.availability === "playable" && <span className="chip chip-gold">Stakes</span>}
+                    {g.availability === "playable" && <span className="chip chip-quiet">Playable</span>}
+                  </span>
+                </button>
+              );
+            })}
           </div>
         </section>
       )}
