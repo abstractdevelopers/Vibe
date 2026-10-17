@@ -30,6 +30,13 @@ const createEventSchema = z.object({
   place: z.string().max(300).optional(),
   city: z.string().max(80).optional(),
   area: z.string().max(80).optional(),
+  // Banner artwork. Same contract as a campaign creative and an avatar: an
+  // absolute http(s) URL or an uploaded media path.
+  imageUrl: z
+    .string()
+    .max(500)
+    .regex(/^(https?:\/\/|\/v1\/media\/[A-Za-z0-9._-]+$)/, "imageUrl must be an http(s) URL or a media path")
+    .optional(),
   priceMinor: z.number().int().nonnegative().default(0),
   currency: z.string().length(3).default("NGN"),
   circleId: z.string().uuid().optional(),
@@ -53,6 +60,7 @@ function eventView(e: {
   id: string; title: string; description: string | null; starts_at: Date; ends_at: Date | null;
   timezone: string; place: string | null; city: string | null; area: string | null;
   price_minor: number; currency: string; state: string; circle_id: string | null;
+  image_url: string | null;
   organizer_id: string; handle: string; display_name: string; avatar_url: string | null;
   booking_verified: boolean; booking_provider: string | null; booking_ref: string | null;
 }) {
@@ -66,6 +74,7 @@ function eventView(e: {
     place: e.place,
     city: e.city,
     area: e.area,
+    imageUrl: e.image_url,
     priceMinor: e.price_minor,
     currency: e.currency,
     state: e.state,
@@ -90,12 +99,13 @@ export function eventsRoutes(ctx: AppContext) {
       const created = await queryOne<{ id: string }>(
         ctx.pool,
         `INSERT INTO events (id, organizer_id, circle_id, merchant_id, title, description, starts_at, ends_at,
-                             timezone, place, city, area, price_minor, currency, booking_provider, booking_ref)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16) RETURNING id`,
+                             timezone, place, city, area, image_url, price_minor, currency, booking_provider, booking_ref)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17) RETURNING id`,
         [
           newId(), user.id, input.circleId ?? null, input.merchantId ?? null, input.title,
           input.description ?? null, input.startsAt, input.endsAt ?? null, input.timezone,
-          input.place ?? null, input.city ?? null, input.area ?? null, input.priceMinor,
+          input.place ?? null, input.city ?? null, input.area ?? null, input.imageUrl ?? null,
+          input.priceMinor,
           input.currency.toUpperCase(), input.bookingProvider ?? null, input.bookingRef ?? null,
         ],
       );

@@ -14,6 +14,7 @@ interface EventSummary {
   place: string | null;
   city: string | null;
   area: string | null;
+  imageUrl: string | null;
   priceMinor: number;
   currency: string;
   state: string;
@@ -73,6 +74,9 @@ function EventCard({ event }: { event: EventSummary }) {
   const [open, setOpen] = useState(false);
   return (
     <div className="card">
+      {event.imageUrl && (
+        <img className="event-banner" src={event.imageUrl} alt="" loading="lazy" />
+      )}
       <button
         className="grow"
         onClick={() => setOpen((v) => !v)}
@@ -164,6 +168,7 @@ function EventDetail({ eventId }: { eventId: string }) {
 
   return (
     <div style={{ marginTop: "var(--space-3)" }}>
+      {detail?.imageUrl && <img className="event-banner" src={detail.imageUrl} alt="" loading="lazy" />}
       {detail?.description && <p>{detail.description}</p>}
       <p className="meta">
         {detail ? detail.checkinCount : 0} checked in · Organizer {detail?.organizer.displayName}

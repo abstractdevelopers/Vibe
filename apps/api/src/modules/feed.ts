@@ -111,6 +111,8 @@ interface PostRow {
   reaction_count: number;
   comment_count: number;
   viewer_reacted: boolean;
+  gift_count: number;
+  viewer_cheered: boolean;
 }
 
 /** Audience + block + mute filtering. This is the only place feed visibility is decided. */
@@ -149,7 +151,9 @@ async function recentPosts(
             u.handle, u.display_name, u.avatar_url,
             (SELECT count(*) FROM reactions r WHERE r.post_id = p.id) AS reaction_count,
             (SELECT count(*) FROM comments c WHERE c.post_id = p.id AND c.deleted_at IS NULL) AS comment_count,
-            EXISTS(SELECT 1 FROM reactions r WHERE r.post_id = p.id AND r.user_id = $1) AS viewer_reacted
+            EXISTS(SELECT 1 FROM reactions r WHERE r.post_id = p.id AND r.user_id = $1) AS viewer_reacted,
+            (SELECT count(*) FROM post_gifts g WHERE g.post_id = p.id) AS gift_count,
+            EXISTS(SELECT 1 FROM post_gifts g WHERE g.post_id = p.id AND g.sender_id = $1) AS viewer_cheered
        FROM posts p JOIN users u ON u.id = p.author_id
       WHERE p.status = 'published'
         AND ($4::uuid IS NULL OR p.author_id = $4)
@@ -206,6 +210,8 @@ async function rankedPosts(
               (SELECT count(*) FROM reactions r WHERE r.post_id = p.id) AS reaction_count,
               (SELECT count(*) FROM comments c WHERE c.post_id = p.id AND c.deleted_at IS NULL) AS comment_count,
               EXISTS(SELECT 1 FROM reactions r WHERE r.post_id = p.id AND r.user_id = $1) AS viewer_reacted,
+              (SELECT count(*) FROM post_gifts g WHERE g.post_id = p.id) AS gift_count,
+              EXISTS(SELECT 1 FROM post_gifts g WHERE g.post_id = p.id AND g.sender_id = $1) AS viewer_cheered,
               (
                 -- Relationship: people you follow, and posts in your Circles.
                 (CASE WHEN EXISTS (SELECT 1 FROM follows f
@@ -333,6 +339,8 @@ async function attachActivities(db: Db, posts: PostRow[], viewerId: string) {
     reactionCount: post.reaction_count,
     commentCount: post.comment_count,
     viewerReacted: post.viewer_reacted,
+    giftCount: post.gift_count,
+    viewerCheered: post.viewer_cheered,
     activity: byPost.get(post.id) ?? null,
   }));
 }

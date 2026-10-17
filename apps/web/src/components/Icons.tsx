@@ -82,6 +82,7 @@ import {
   Goal,
   CalendarPlus,
   Link2,
+  PartyPopper,
 } from "lucide-react";
 
 /** Sensible optical defaults; callers override size/stroke when needed. */
@@ -163,4 +164,7 @@ export const FilmIcon = icon(Film);
 export const GoalIcon = icon(Goal);
 export const CalendarPlusIcon = icon(CalendarPlus);
 export const LinkIcon = icon(Link2);
+/** A cheer is a celebration, not a sparkle — keep it distinct from the
+ *  decorative SparklesIcon used elsewhere in the shell. */
+export const CheerIcon = icon(PartyPopper);
 

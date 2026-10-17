@@ -6,6 +6,7 @@ import {
   CommentIcon,
   EditIcon,
   GiftIcon,
+  CheerIcon,
   HeartIcon,
   ImageIcon,
   InboxIcon,
@@ -13,7 +14,6 @@ import {
   ReplyIcon,
   SendIcon,
   ShareIcon,
-  SparklesIcon,
   TrashIcon,
 } from "../components/Icons";
 import { EmptyState } from "../components/EmptyState";
@@ -446,10 +446,18 @@ function FeedCard({
           <button
             className="react-btn"
             onClick={() => setGifting(true)}
-            aria-label="Send a free cheer"
+            aria-label="Send a cheer"
+            aria-pressed={item.viewerCheered}
           >
-            <SparklesIcon />
+            <CheerIcon />
+            {item.giftCount > 0 ? item.giftCount : "Cheer"}
           </button>
+        )}
+        {isMine && item.giftCount > 0 && (
+          <span className="react-btn" aria-label={`${item.giftCount} cheers`} style={{ cursor: "default" }}>
+            <CheerIcon />
+            {item.giftCount}
+          </span>
         )}
         <button className="react-btn" onClick={() => void copyPostLink()} aria-label="Copy link">
           <ShareIcon />
@@ -497,7 +505,14 @@ function FeedCard({
         />
       )}
 
-      {gifting && <GiftSheet postId={item.id} authorName={item.author.displayName} onClose={() => setGifting(false)} />}
+      {gifting && (
+        <GiftSheet
+          postId={item.id}
+          authorName={item.author.displayName}
+          onClose={() => setGifting(false)}
+          onSent={onChanged}
+        />
+      )}
       {paidGifting && (
         <PaidGiftSheet
           recipientId={item.author.id}

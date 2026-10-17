@@ -20,10 +20,12 @@ export function GiftSheet({
   postId,
   authorName,
   onClose,
+  onSent,
 }: {
   postId: string;
   authorName: string;
   onClose: () => void;
+  onSent?: () => void;
 }) {
   const [gifts, setGifts] = useState<GiftOption[] | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -58,6 +60,8 @@ export function GiftSheet({
       // animation never claims something that did not happen.
       const label = (gifts ?? []).find((g) => g.id === kind)?.label ?? "gift";
       setBurst({ id: Date.now(), emoji: EMOJI[kind] ?? "🎁", label, count: 1 });
+      // Let the feed pick up the new gift count (the burst stays on screen).
+      onSent?.();
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Could not send that gift");
     } finally {

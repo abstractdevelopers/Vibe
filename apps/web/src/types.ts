@@ -50,6 +50,8 @@ export interface FeedItem {
   reactionCount: number;
   commentCount: number;
   viewerReacted: boolean;
+  giftCount: number;
+  viewerCheered: boolean;
   activity: PollActivity | null;
 }
 

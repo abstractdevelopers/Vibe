@@ -520,3 +520,32 @@ that is confirmed with Bachs and a lawyer.
   greeting is time-aware and the line under it rotates daily — both are pure
   presentation and carry no state.
 
+## End-to-end testing against a live deploy
+
+Two harnesses drive the deployed API over HTTP (no mocks). They live outside the
+repo, in the sandbox's persistent tools dir: `/workspace/.tools/e2e.py` (whole
+product surface) and `/workspace/.tools/payments_e2e.py` (the money path).
+`/root/payhook.sh` on the server signs a Bachs webhook with the real
+`BACHS_WEBHOOK_SECRET` so the payment → fulfilment chain is exercised for real.
+
+Gotchas the harnesses encode, in case you write new checks:
+
+- **`is_admin` has no writer in the product.** The operator console is only
+  reachable after `UPDATE users SET is_admin = true ...` out of band.
+- **A private Circle needs an accepted invite.** `POST /v1/circles/:id/invites`
+  returns a one-time `inviteToken`; the member joins via
+  `POST /v1/invites/:token/accept`. `POST /v1/plans` and `GET /v1/plans/:id`
+  are member-gated, so a non-member gets 403.
+- **Money routes require an `Idempotency-Key` header**: orders, checkout, gift
+  purchase, expenses. Omitting it is a 400, not a 500.
+- **`PAYMENTS_PROVIDER=bachs` points at `sandbox-api.bachs.io`.** Checkout
+  returns 202 and only creates a provider session; the order stays
+  `awaiting_payment` and fulfilment is refused until a signed webhook arrives.
+  `refunded` is not even an accepted `transition` target (422) — only a webhook
+  moves money back.
+- **Register/login are rate-limited per IP** (10/hour, 8/15min). Repeated runs
+  hit it; clear `DELETE FROM rate_limit_counters WHERE bucket LIKE 'register%'`
+  between runs rather than assuming a bug.
+- **`sshd` is `ssh.service` on Ubuntu**; `systemctl is-active sshd` is
+  misleadingly "inactive" even while SSH is up.
+

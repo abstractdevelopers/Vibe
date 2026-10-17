@@ -1258,6 +1258,53 @@ select {
   border-radius: var(--radius-pill);
 }
 
+/* The create and "start something" sheets use `.sheet-card` / `.sheet-head`.
+   Without these rules the card had no background, padding or rounding, so its
+   contents floated over the page as transparent, overlapping text. Mirror
+   `.sheet-inner` so every sheet reads as one surface. */
+.sheet-card {
+  width: 100%;
+  max-width: 620px;
+  max-height: 90vh;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: var(--space-4) var(--space-5) calc(var(--space-8) + env(safe-area-inset-bottom));
+  background: linear-gradient(180deg, var(--surface-1), var(--surface-0));
+  border: 1px solid var(--border);
+  border-bottom: none;
+  border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+  box-shadow: var(--shadow-lg);
+  animation: sheet-up var(--motion-slow) var(--ease-out);
+}
+
+.sheet-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding-bottom: var(--space-3);
+  margin-bottom: var(--space-3);
+  border-bottom: 1px solid var(--hairline);
+}
+
+.sheet-head h2 {
+  margin: 0;
+  font-size: var(--text-h3);
+  letter-spacing: var(--tracking-tight);
+}
+
+/* Event artwork: a wide banner that crops rather than stretches, so any
+   uploaded aspect ratio reads as a deliberate cover image. */
+.event-banner {
+  display: block;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  object-fit: cover;
+  border-radius: var(--radius-card);
+  margin-bottom: var(--space-3);
+  background: var(--surface-3);
+}
+
 @keyframes sheet-up {
   from {
     transform: translateY(100%);
@@ -2057,14 +2104,17 @@ select {
   }
 
   /* Sheets are the full width of the phone; the desktop 620px cap is moot. */
-  .sheet-inner {
+  .sheet-inner,
+  .sheet-card {
     padding: var(--space-3) var(--space-3) calc(var(--space-6) + env(safe-area-inset-bottom));
   }
 
-  /* The account menu is anchored to the right edge; keep it on screen. */
+  /* The account menu is anchored to the right edge; keep it on screen and end
+     it above the bottom nav so the last item ("Log out") is never covered. */
   .menu {
     min-width: 0;
     width: min(78vw, 260px);
+    max-height: calc(100vh - 176px);
   }
 
   .toast-host {

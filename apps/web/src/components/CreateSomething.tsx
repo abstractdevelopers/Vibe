@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { api, ApiError } from "../api";
+import { uploadImageFile } from "../media";
 import { ImageIcon, MegaphoneIcon, RadioIcon, StoreIcon, TicketIcon } from "../components/Icons";
 
 /**
@@ -281,7 +282,22 @@ function EventForm({ setError, onDone, onBack }: FormProps) {
   const [startsAt, setStartsAt] = useState("");
   const [city, setCity] = useState("");
   const [place, setPlace] = useState("");
+  const [imageUrl, setImageUrl] = useState("");
+  const [uploading, setUploading] = useState(false);
   const [busy, setBusy] = useState(false);
+
+  async function pickImage(file: File | undefined) {
+    if (!file) return;
+    setUploading(true);
+    setError(null);
+    try {
+      setImageUrl(await uploadImageFile(file, 1280));
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Could not upload that image");
+    } finally {
+      setUploading(false);
+    }
+  }
 
   async function submit() {
     setBusy(true); setError(null);
@@ -291,6 +307,7 @@ function EventForm({ setError, onDone, onBack }: FormProps) {
           title, description: description || undefined,
           startsAt: new Date(startsAt).toISOString(),
           city: city || undefined, place: place || undefined,
+          imageUrl: imageUrl || undefined,
         },
       });
       onDone();
@@ -312,7 +329,20 @@ function EventForm({ setError, onDone, onBack }: FormProps) {
       <input id="e-city" className="input" value={city} onChange={(e) => setCity(e.target.value)} />
       <label htmlFor="e-place">Venue</label>
       <input id="e-place" className="input" value={place} onChange={(e) => setPlace(e.target.value)} />
-      <button className="btn primary" disabled={busy || !title.trim() || !startsAt} onClick={() => void submit()}>
+      <label htmlFor="e-image">Banner image (optional)</label>
+      {imageUrl && <img className="event-banner" src={imageUrl} alt="" />}
+      <label className="dropzone">
+        <input
+          id="e-image"
+          type="file"
+          accept="image/*"
+          style={{ display: "none" }}
+          onChange={(e) => void pickImage(e.target.files?.[0])}
+        />
+        <ImageIcon width={18} height={18} />
+        <span className="meta">{uploading ? "Uploading…" : imageUrl ? "Replace banner" : "Add a banner image"}</span>
+      </label>
+      <button className="btn primary" disabled={busy || uploading || !title.trim() || !startsAt} onClick={() => void submit()}>
         {busy ? "Creating…" : "Create event"}
       </button>
     </div>
