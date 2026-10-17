@@ -58,6 +58,9 @@
   --accent-soft: var(--coral-soft);
   --interactive: var(--violet);
   --link: var(--blue);
+  /* The focus ring. A token so a themed surface cannot end up with an invisible
+     focus outline: it tracks the accent rather than a fixed colour. */
+  --focus: var(--accent);
 
   --success: #43c995;
   --warning: #ffc266;

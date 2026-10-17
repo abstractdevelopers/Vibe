@@ -130,7 +130,29 @@
     drop-shadow(0 0 14px color-mix(in srgb, var(--interactive) 60%, transparent));
 }
 .paid-gift-name { font-weight: 600; font-size: var(--text-supporting); }
-.paid-gift-price { font-size: var(--text-caption); color: var(--muted); }
+/* The rarity band. A gift's tier is real data from the catalogue, so it is
+   stated rather than implied: everyday, premium, rare. The colour marks the
+   tier without competing with the artwork. */
+.paid-gift-rarity {
+  font-size: 9.5px;
+  font-weight: 800;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  padding: 1px 6px;
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+}
+.paid-gift-rarity.r2 {
+  color: var(--accent);
+  border-color: color-mix(in srgb, var(--accent) 45%, transparent);
+}
+.paid-gift-rarity.r3 {
+  color: var(--accent-ink);
+  background: var(--accent);
+  border-color: transparent;
+}
+.paid-gift-price { font-size: var(--text-meta); color: var(--text-muted); }
 
 /* Full-screen burst when a tier-3 gift is sent. */
 .paid-gift-burst {

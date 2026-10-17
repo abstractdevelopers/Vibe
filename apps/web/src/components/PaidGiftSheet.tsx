@@ -8,7 +8,6 @@ interface PaidGift {
   id: string;
   label: string;
   hint: string;
-  emoji: string;
   tier: 1 | 2 | 3;
   priceMinor: number;
   currency: string;
@@ -34,6 +33,26 @@ function formatMinor(amountMinor: number, currency: string): string {
   const withThousands = whole.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",");
   return minor === 0 ? `${symbol}${withThousands}` : `${symbol}${withThousands}.${minor.toString().padStart(2, "0")}`;
 }
+
+/**
+ * The recipient's share, as the API actually computes it.
+ *
+ * This used to be the literal string "70%", left over from when the fee was
+ * 30%. The API pays 85% (GIFT_FEE_BPS 1500), so the sheet was telling people the
+ * wrong number about their own money. Derived from the catalogue response, which
+ * carries both the price and the recipient's share, so the two can never drift
+ * again — and it stays honest if the fee changes.
+ */
+function recipientShare(gift: PaidGift): number {
+  return gift.priceMinor > 0 ? Math.round((gift.recipientMinor / gift.priceMinor) * 100) : 0;
+}
+
+/** A gift's rarity, named so the catalogue can state it rather than imply it. */
+const RARITY: Record<PaidGift["tier"], string> = {
+  1: "Everyday",
+  2: "Premium",
+  3: "Rare",
+};
 
 /**
  * Paid gift picker.
@@ -166,6 +185,7 @@ export function PaidGiftSheet({
                 >
                   <span className="paid-gift-emoji" aria-hidden="true"><GiftArt id={g.id} size={g.tier === 3 ? 46 : g.tier === 2 ? 38 : 32} tier={g.tier} /></span>
                   <span className="paid-gift-name">{g.label}</span>
+                  <span className={`paid-gift-rarity r${g.tier}`}>{RARITY[g.tier]}</span>
                   <span className="paid-gift-price">{formatMinor(g.priceMinor, g.currency)}</span>
                 </button>
               ))}
@@ -187,11 +207,12 @@ export function PaidGiftSheet({
                     <strong>{formatMinor(total, chosen.currency)}</strong>
                   </div>
                   <div className="row spread">
-                    <span className="meta">{recipientName} earns (70%)</span>
+                    <span className="meta">{recipientName} earns ({recipientShare(chosen)}%)</span>
                     <strong>{formatMinor(chosen.recipientMinor * quantity, chosen.currency)}</strong>
                   </div>
                   <p className="meta" style={{ margin: "var(--space-2) 0 0" }}>
-                    Vibe keeps 30%. The creator can withdraw their share to a bank account after 7 days.
+                    Vibe keeps {100 - recipientShare(chosen)}%. The creator can withdraw their share to a bank
+                    account after a 7-day hold.
                   </p>
                 </div>
                 <button className="btn primary" disabled={busy} onClick={() => void buy()}>

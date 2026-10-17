@@ -1318,7 +1318,7 @@ select {
 
 .sheet-head h2 {
   margin: 0;
-  font-size: var(--text-h3);
+  font-size: var(--text-section);
   letter-spacing: var(--tracking-tight);
 }
 
@@ -1526,10 +1526,11 @@ select {
 }
 
 /* ---- Per-type presentation ----
-   A poll, an announcement and a gallery should not read as the same thing. Each
-   gets a small, quiet distinction: a type tag in the accent, and for an
-   announcement a lit left rule. This is identity, not decoration — the feed is
-   still flat and editorial. */
+   A poll, an announcement, a video and a gallery should not read as the same
+   thing. Each gets its own rule, its own tag colour and its own material, while
+   the feed stays flat and editorial — identity, not decoration. The colours are
+   fixed per type (not the environment accent) so a poll looks like a poll in
+   every theme; they are chosen to stay legible on the dark ramp. */
 .post-type-tag {
   display: inline-flex;
   align-items: center;
@@ -1541,22 +1542,39 @@ select {
   font-weight: 700;
   letter-spacing: var(--tracking-wide);
   text-transform: uppercase;
-  color: var(--accent);
-  background: color-mix(in srgb, var(--accent) 12%, transparent);
-  border: 1px solid color-mix(in srgb, var(--accent) 28%, transparent);
+  color: var(--tag, var(--accent));
+  background: color-mix(in srgb, var(--tag, var(--accent)) 13%, transparent);
+  border: 1px solid color-mix(in srgb, var(--tag, var(--accent)) 30%, transparent);
 }
-.post.type-poll { padding-left: var(--space-3); border-left: 2px solid color-mix(in srgb, var(--accent) 45%, transparent); }
+
+/* A poll invites a decision: an accent rule and a slightly inset body. */
+.post.type-poll {
+  --tag: #6fa8ff;
+  padding-left: var(--space-3);
+  border-left: 2px solid color-mix(in srgb, var(--tag) 55%, transparent);
+}
+/* An announcement is the loudest thing in the stream: a full accent rule, a
+   wash that fades out, and heavier body text. */
 .post.type-announcement {
+  --tag: var(--accent);
   padding-left: var(--space-3);
   border-left: 3px solid var(--accent);
-  background: linear-gradient(90deg, color-mix(in srgb, var(--accent) 8%, transparent), transparent 40%);
+  background: linear-gradient(90deg, color-mix(in srgb, var(--accent) 9%, transparent), transparent 42%);
 }
 .post.type-announcement .post-body { font-weight: 600; }
-.post.type-video .post-type-tag,
-.post.type-carousel .post-type-tag {
-  color: var(--text-secondary);
-  background: color-mix(in srgb, var(--surface-3) 70%, transparent);
-  border-color: var(--border);
+/* A video is a screening: a dark, cinematic frame and a play mark on the media. */
+.post.type-video {
+  --tag: #ff7ab8;
+}
+.post.type-video .post-media { border-color: color-mix(in srgb, var(--tag) 30%, var(--border)); }
+/* A gallery is a set: a tighter grid with visible seams. */
+.post.type-carousel {
+  --tag: #4fe0c6;
+}
+.post.type-carousel .post-media-grid {
+  grid-template-columns: 1fr 1fr;
+  gap: 3px;
+  background: var(--surface-0);
 }
 
 .post-head {
@@ -1916,7 +1934,7 @@ select {
   border-left: 3px solid var(--interactive);
   border-radius: var(--radius-sm);
   box-shadow: 0 12px 32px rgb(0 0 0 / 32%);
-  color: var(--text-primary);
+  color: var(--text);
   font-size: var(--text-supporting);
   animation: fade-in var(--motion-base) var(--ease-out);
 }

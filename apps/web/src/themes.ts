@@ -184,6 +184,17 @@ export const BASE_ALIASES: Record<string, string> = {
   solitaire: "blackjack",
 };
 
+/**
+ * Room kinds the catalogue has no base for, or whose name differs from its base.
+ * `movie` is the watch-party base; `other` is a plain gathering, so it takes the
+ * voice lounge rather than falling through to an unrelated palette.
+ */
+const ROOM_BASE_ALIASES: Record<string, string> = {
+  movie: "watch",
+  other: "voice",
+  watch: "watch",
+};
+
 
 interface Style { id: string; name: string; sat: number; lightShift: number; glowSat: number; glowLight: number; tint: number }
 
@@ -255,6 +266,8 @@ export function baseForGame(gameId: string, category?: string): string {
 
 /** Which base palette a room kind should wear. */
 export function baseForRoom(kind: string): string {
+  const alias = ROOM_BASE_ALIASES[kind];
+  if (alias && BASE_IDS.has(alias)) return alias;
   if (BASE_IDS.has(kind)) return kind;
   return FAMILY_BASE.rooms!;
 }

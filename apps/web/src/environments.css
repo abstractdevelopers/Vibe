@@ -430,6 +430,23 @@
 .studio.kind-sports {
   --kind-wash: repeating-linear-gradient(90deg, color-mix(in srgb, var(--accent) 10%, transparent) 0 14px, transparent 14px 28px);
 }
+/* A plain gathering has no motif of its own: it takes the room's own light, so
+   it reads as a warm default rather than an unstyled screen. */
+.studio.kind-other {
+  --kind-wash: radial-gradient(85% 100% at 50% 0%, color-mix(in srgb, var(--accent) 14%, transparent), transparent 72%);
+}
+
+/* The kind's character, on the room itself rather than only behind it. A
+   listening party is a hush with a wide stage; a match room is a scoreboard
+   with hard edges; a watch party is a dark cinema. These change the room's
+   material, never the position of a control. */
+.studio.kind-listen .studio-top,
+.studio.kind-music .studio-top {
+  border-bottom: 1px solid color-mix(in srgb, var(--accent) 22%, var(--border));
+}
+.studio.kind-sports .stage-seat { border-radius: var(--radius-sm); }
+.studio.kind-sports .energy-flame { color: var(--accent); }
+.studio.kind-other .stage-seat { border-radius: var(--radius-card); }
 
 .studio.kind-voice .stage-seat.speaking { border-color: color-mix(in srgb, var(--accent) 75%, transparent); }
 .studio.kind-listen .stage-seat { border-radius: var(--radius-pill); }
