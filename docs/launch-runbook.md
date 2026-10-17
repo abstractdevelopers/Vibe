@@ -93,6 +93,37 @@ The image runs, serves both tiers, and checkout stays stubbed. This is the
 intended path for a pilot. Set `NODE_ENV=production` once payments and email are
 configured.
 
+### Switching payments to live (real money)
+
+The Bachs adapter is already built and tested (`payments/provider.ts`, covered
+by `tests/bachs-provider.test.ts`), so going live is a **configuration change,
+not a code change**. It needs the merchant's own credentials — no one else can
+supply these, and the code deliberately refuses to start without them.
+
+1. Get these four values from the **merchant's** Bachs dashboard (the account
+   that will receive the money, not a shared or test account):
+   - `BACHS_API_KEY` — the secret API key (`sk_live_…`).
+   - `BACHS_WEBHOOK_SECRET` — the webhook signing secret. This is **not**
+     `PAYMENTS_WEBHOOK_SECRET`; when the provider is `bachs` the app reads the
+     Bachs secret and ignores the stub one.
+   - `BACHS_BASE_URL` — `https://api.bachs.io` for live (sandbox is
+     `https://sandbox-api.bachs.io`).
+2. In the Bachs dashboard, set the webhook endpoint to
+   `https://<PUBLIC_API_URL>/v1/webhooks/payments`. The app verifies
+   `X-Bachs-Signature-V2` (`t=<ts>,v1=<hmac>`) over the exact raw body, so the
+   secret must match the one on that endpoint.
+3. Set `PAYMENTS_PROVIDER=bachs` and the values above in the deploy environment.
+4. **Verify in sandbox first.** Run with `BACHS_BASE_URL=https://sandbox-api.bachs.io`
+   and the sandbox key, and walk one real checkout end to end. Confirm the order
+   flips to `paid` **only** after the webhook lands — never on the redirect.
+5. Only then point `BACHS_BASE_URL` at live and swap in the live key.
+
+**What must not change:** no code path may mark a payment, purchase or top-up
+complete without a signature-verified webhook. The checkout redirect is a hint,
+not proof. If a launch request says "make payments live", the answer is the
+configuration above plus the merchant's credentials — not new code, and not a
+relaxed config guard.
+
 ## Coolify steps
 
 1. New resource → Application → connect the `abstractdevelopers/Vibe` repo.
