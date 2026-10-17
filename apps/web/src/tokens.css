@@ -54,6 +54,8 @@
 
   --accent: var(--coral);
   --accent-ink: #1a0a0e; /* ink text on coral: white on coral fails contrast */
+  /* A softer companion to the accent. Themes overwrite both. */
+  --accent-soft: var(--coral-soft);
   --interactive: var(--violet);
   --link: var(--blue);
 
@@ -64,8 +66,19 @@
   /* ---- Atmosphere ---- */
   --glow-coral: radial-gradient(circle at 50% 50%, rgba(255, 92, 108, 0.5), transparent 70%);
   --glow-violet: radial-gradient(circle at 50% 50%, rgba(121, 104, 245, 0.42), transparent 70%);
-  --brand-gradient: linear-gradient(100deg, var(--coral) 0%, var(--orange) 46%, var(--violet) 100%);
+  --brand-gradient: linear-gradient(100deg, var(--accent) 0%, var(--accent-soft) 52%, var(--accent) 100%);
   --grain-opacity: 0.05;
+
+  /* Motion on the theme ramp. Applying a theme rewrites the surface custom
+     properties on :root; transitioning them is what makes the change feel like
+     walking into a different room rather than a repaint. */
+  transition:
+    --void var(--motion-slow) var(--ease-out),
+    --surface-0 var(--motion-slow) var(--ease-out),
+    --surface-1 var(--motion-slow) var(--ease-out),
+    --surface-2 var(--motion-slow) var(--ease-out),
+    --surface-3 var(--motion-slow) var(--ease-out),
+    --accent var(--motion-slow) var(--ease-out);
 
   /* ---- Depth ---- */
   --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);

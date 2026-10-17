@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { api, ApiError } from "../api";
 import { CheckIcon, CloseIcon, GiftIcon } from "./Icons";
 import { GiftBurst, type GiftBurstSpec } from "./GiftBurst";
+import { GiftArt } from "./GiftArt";
 
 interface GiftOption {
   id: string;
@@ -69,7 +70,7 @@ export function GiftSheet({
       // Play the burst only after the server accepted the gift, so the
       // animation never claims something that did not happen.
       const label = (gifts ?? []).find((g) => g.id === kind)?.label ?? "gift";
-      setBurst({ id: Date.now(), emoji: EMOJI[kind] ?? "🎁", label, count: 1 });
+      setBurst({ id: Date.now(), giftId: kind, label, count: 1 });
       // Let the feed pick up the new gift count (the burst stays on screen).
       onSent?.();
     } catch (err) {
@@ -115,8 +116,8 @@ export function GiftSheet({
                 disabled={g.viewerSent || busy !== null}
                 aria-pressed={g.viewerSent}
               >
-                <span className="gift-emoji" aria-hidden="true">
-                  {EMOJI[g.id] ?? "🎁"}
+                <span className="gift-art" aria-hidden="true">
+                  <GiftArt id={g.id} size={44} />
                 </span>
                 <span className="gift-label">{g.label}</span>
                 <span className="meta">{g.viewerSent ? "Sent" : g.count > 0 ? `${g.count}` : g.hint}</span>
@@ -133,11 +134,3 @@ export function GiftSheet({
     </div>
   );
 }
-
-const EMOJI: Record<string, string> = {
-  sparkle: "✨",
-  high_five: "🙌",
-  cheer: "📣",
-  hug: "🤗",
-  fire: "🔥",
-};

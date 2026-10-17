@@ -178,7 +178,7 @@ export function MessagesScreen({ me, refreshKey }: Props) {
                 <span className="conversation-preview">
                   {c.lastMessage
                     ? `${c.lastMessage.senderName ?? "Someone"}: ${
-                        c.lastMessage.body ?? (c.lastMessage.mediaUrls.length > 0 ? "📷 Photo" : "")
+                        c.lastMessage.body ?? (c.lastMessage.mediaUrls.length > 0 ? "Photo" : "")
                       }`
                     : "No messages yet"}
                 </span>

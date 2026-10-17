@@ -201,7 +201,7 @@ export function ConversationScreen({ conversationId, me, onChanged }: Props) {
         )}
 
         {!loading && messages.length === 0 && pending.length === 0 && (
-          <p className="thread-empty">No messages yet. Say hello 👋</p>
+          <p className="thread-empty">No messages yet. Say hello.</p>
         )}
 
         {messages.map((m) => (

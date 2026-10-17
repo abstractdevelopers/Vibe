@@ -9,15 +9,28 @@ import { AudioQueue, ROOM_KINDS, Scoreboard, TicketPanel, WatchPanel, type Score
 import { useActivityTheme } from "./useActivityTheme";
 import { themeForRoom } from "../themes";
 import {
-  ArrowLeftIcon, BellIcon, CheckIcon, CheerIcon, CloseIcon, EditIcon, GiftIcon,
-  HeadphonesIcon, LinkIcon, MicIcon, MusicIcon, ShareIcon, ShieldIcon, TicketIcon,
-  TrashIcon, UploadIcon, UsersIcon,
+  ArrowLeftIcon, BellIcon, CheckIcon, CheerIcon, CloseIcon, EditIcon, FlameIcon, GiftIcon,
+  HandIcon, HeadphonesIcon, LinkIcon, MicIcon, MicOffIcon, MicOnIcon, MusicIcon,
+  ShareIcon, ShieldIcon, TicketIcon, TrashIcon, UploadIcon, UsersIcon,
 } from "./Icons";
+import { GiftArt } from "./GiftArt";
 
 /** How many speakers a peer-to-peer mesh can carry before it needs an SFU. */
 export const MESH_SPEAKER_LIMIT = 8;
 
-const REACTIONS = ["🔥", "👏", "❤️", "😂", "🎉", "💯"];
+/**
+ * The reaction set. Each reaction is a drawn mark with a stable id, so a room
+ * burst animates the same mark a person tapped, and the id is what crosses the
+ * wire (the server stores an opaque string).
+ */
+export const REACTIONS = [
+  { id: "fire", label: "Fire" },
+  { id: "clap", label: "Applause" },
+  { id: "heart", label: "Love" },
+  { id: "laugh", label: "Laugh" },
+  { id: "party", label: "Celebrate" },
+  { id: "hundred", label: "Hundred" },
+] as const;
 
 export interface Room {
   id: string;
@@ -102,7 +115,7 @@ export function RoomStudio({ roomId, viewerId, viewerName, onBack, onLeft }: Pro
   // Studio state
   const [micOn, setMicOn] = useState(false);
   const [micError, setMicError] = useState<string | null>(null);
-  const [bursts, setBursts] = useState<Array<{ id: number; emoji: string; left: number }>>([]);
+  const [bursts, setBursts] = useState<Array<{ id: number; art: string; left: number }>>([]);
   const [gifting, setGifting] = useState(false);
   const [paidGifting, setPaidGifting] = useState(false);
   const [editing, setEditing] = useState(false);
@@ -225,11 +238,11 @@ export function RoomStudio({ roomId, viewerId, viewerName, onBack, onLeft }: Pro
   const onRoomEvent = useCallback((event: RealtimeEvent) => {
     const p = event.payload as Record<string, unknown>;
     if (event.type === "room.reaction") {
-      addBurst(String(p.emoji ?? "🔥"));
+      addBurst(String(p.emoji ?? "fire"));
       return;
     }
     if (event.type === "room.gift") {
-      addBurst("🎁");
+      addBurst("gift");
       setMessage(`${p.fromName ?? p.from} sent a ${String(p.kind).replace("_", " ")}`);
       return;
     }
@@ -278,10 +291,10 @@ export function RoomStudio({ roomId, viewerId, viewerName, onBack, onLeft }: Pro
   const { send: signal, status: channelStatus } = useRoomChannel(roomId, viewerId, onRoomEvent);
   signalRef.current = signal;
 
-  function addBurst(emoji: string) {
-    const id = Date.now() + Math.random();
-    setBursts((b) => [...b.slice(-24), { id, emoji, left: 8 + Math.random() * 84 }]);
-    window.setTimeout(() => setBursts((b) => b.filter((x) => x.id !== id)), 2200);
+  function addBurst(id: string) {
+    const key = Date.now() + Math.random();
+    setBursts((b) => [...b.slice(-24), { id: key, art: id, left: 8 + Math.random() * 84 }]);
+    window.setTimeout(() => setBursts((b) => b.filter((x) => x.id !== key)), 2200);
   }
 
   // The host is on the stage, so the host's mic is on by default.
@@ -423,7 +436,7 @@ export function RoomStudio({ roomId, viewerId, viewerName, onBack, onLeft }: Pro
   const canBroadcast = room.layout === "broadcast" && (room.kind === "voice" || room.kind === "listen" || room.kind === "other");
 
   return (
-    <div className="studio">
+    <div className={`studio kind-${room.kind}`}>
       <div className="studio-top">
         <button className="icon-button" onClick={onBack} aria-label="Back"><ArrowLeftIcon width={18} height={18} /></button>
         <div className="grow" style={{ minWidth: 0 }}>
@@ -440,7 +453,7 @@ export function RoomStudio({ roomId, viewerId, viewerName, onBack, onLeft }: Pro
 
       {/* Energy meter: reactions and gifts in the last hour. */}
       <div className="energy" aria-label={`Room energy ${energy}%`}>
-        <span className="energy-flame" aria-hidden="true">🔥</span>
+        <FlameIcon className="energy-flame" width={16} height={16} />
         <span className="energy-track"><span className="energy-fill" style={{ width: `${energy}%` }} /></span>
         <span className="energy-value">{room.hype}</span>
       </div>
@@ -481,7 +494,7 @@ export function RoomStudio({ roomId, viewerId, viewerName, onBack, onLeft }: Pro
                       <button className="mini" onClick={() => void stageAction(m.id, "demote")} title="Send to audience">↓</button>
                     )}
                     <button className="mini" onClick={() => void stageAction(m.id, m.muted ? "unmute" : "mute")} title={m.muted ? "Unmute" : "Mute"}>
-                      {m.muted ? "🔊" : "🔇"}
+                      {m.muted ? <MicOffIcon width={13} height={13} /> : <MicOnIcon width={13} height={13} />}
                     </button>
                   </div>
                 )}
@@ -499,17 +512,19 @@ export function RoomStudio({ roomId, viewerId, viewerName, onBack, onLeft }: Pro
       {/* Floating energy bursts. */}
       <div className="burst-layer" aria-hidden="true">
         {bursts.map((b) => (
-          <span key={b.id} className="burst" style={{ left: `${b.left}%` }}>{b.emoji}</span>
+          <span key={b.id} className="burst" style={{ left: `${b.left}%` }}><GiftArt id={b.art} size={30} /></span>
         ))}
       </div>
 
       {/* Reaction bar. */}
       <div className="react-bar" role="group" aria-label="Reactions">
-        {REACTIONS.map((e) => (
-          <button key={e} className="react-emoji" onClick={() => void react(e)} aria-label={`React ${e}`}>{e}</button>
+        {REACTIONS.map((r) => (
+          <button key={r.id} className="react-emoji" onClick={() => void react(r.id)} aria-label={`React ${r.label}`}>
+            <GiftArt id={r.id} size={26} />
+          </button>
         ))}
-        <button className="react-emoji gift" onClick={() => setGifting(true)} aria-label="Send a gift"><GiftIcon width={18} height={18} /></button>
-        <button className="react-emoji gift" onClick={() => setPaidGifting(true)} aria-label="Send a paid gift"><CheerIcon width={18} height={18} /></button>
+        <button className="react-emoji gift" onClick={() => setGifting(true)} aria-label="Send a gift"><CheerIcon width={18} height={18} /></button>
+        <button className="react-emoji gift" onClick={() => setPaidGifting(true)} aria-label="Send a paid gift"><GiftIcon width={18} height={18} /></button>
       </div>
 
       {/* Studio controls. */}
@@ -521,7 +536,7 @@ export function RoomStudio({ roomId, viewerId, viewerName, onBack, onLeft }: Pro
         )}
         {!isOnStage && (
           <button className="btn" onClick={() => void raiseHand(true)} disabled={audience.find((a) => a.id === viewerId)?.handRaised}>
-            ✋ {audience.find((a) => a.id === viewerId)?.handRaised ? "Hand raised" : "Raise hand"}
+            <HandIcon width={15} height={15} /> {audience.find((a) => a.id === viewerId)?.handRaised ? "Hand raised" : "Raise hand"}
           </button>
         )}
         <button className="btn ghost" onClick={share}><ShareIcon width={15} height={15} /> Share</button>
@@ -534,7 +549,7 @@ export function RoomStudio({ roomId, viewerId, viewerName, onBack, onLeft }: Pro
       {/* Host: hands raised, waiting to be brought up. */}
       {isHost && audience.some((a) => a.handRaised) && (
         <div className="card hands">
-          <p className="eyebrow">✋ Hands raised</p>
+          <p className="eyebrow"><HandIcon width={13} height={13} /> Hands raised</p>
           {audience.filter((a) => a.handRaised).map((a) => (
             <div key={a.id} className="row spread">
               <span>@{a.handle}</span>
@@ -576,7 +591,7 @@ export function RoomStudio({ roomId, viewerId, viewerName, onBack, onLeft }: Pro
         <div className="audience-strip">
           {audience.map((a) => (
             <span key={a.id} className="audience-chip" title={`@${a.handle}`}>
-              {a.handRaised && <span aria-hidden="true">✋</span>}
+              {a.handRaised && <HandIcon width={11} height={11} />}
               {a.id === viewerId ? "You" : a.displayName}
             </span>
           ))}

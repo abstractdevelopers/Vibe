@@ -96,7 +96,7 @@
 }
 .bubble.mine {
   color: #fff;
-  background: linear-gradient(140deg, var(--violet), #5b48e0);
+  background: linear-gradient(140deg, var(--interactive), #5b48e0);
   border-bottom-right-radius: var(--radius-sm);
 }
 .bubble.sending {
@@ -106,7 +106,7 @@
   display: block;
   font-size: var(--text-meta);
   font-weight: 700;
-  color: var(--violet-soft);
+  color: var(--accent-soft);
   margin-bottom: 2px;
 }
 .bubble-body {

@@ -1,0 +1,299 @@
+/* ============================================================
+   Vibe — environments
+   ============================================================
+
+   The theme ramp is applied as inline custom properties on :root (see
+   themes.ts). Everything here builds on those tokens so an environment change
+   is visible across the whole interface, not just on a button. */
+
+/* The atmosphere reads the theme's glows. Bumped from the original opacity so a
+   chosen environment is actually perceptible behind the content. */
+.atmosphere::before {
+  opacity: 0.6;
+}
+.atmosphere::after {
+  opacity: 0.5;
+}
+
+/* A hairline of the accent at the top of the viewport: the room's lighting
+   rig, seen from the floor. */
+.atmosphere .atmosphere-rig {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: linear-gradient(90deg, transparent, var(--accent), transparent);
+  opacity: 0.55;
+}
+
+/* ---- Theme picker: environments as environments ------------------------- */
+
+.env-feature-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: var(--space-3);
+}
+
+.env-tile {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-2);
+  min-height: 92px;
+  padding: var(--space-3);
+  border-radius: var(--radius-card);
+  border: 1px solid var(--border);
+  overflow: hidden;
+  text-align: left;
+  cursor: pointer;
+  transition: transform var(--motion-fast) var(--ease-out), border-color var(--motion-fast) var(--ease-out),
+    box-shadow var(--motion-base) var(--ease-out);
+}
+.env-tile.featured {
+  min-height: 118px;
+  border-color: color-mix(in srgb, var(--env-accent, var(--accent)) 40%, var(--border));
+}
+.env-tile:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 14px 34px -16px color-mix(in srgb, var(--env-accent, var(--accent)) 70%, transparent);
+}
+.env-tile.sel {
+  border-color: var(--env-accent, var(--accent));
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--env-accent, var(--accent)) 45%, transparent),
+    0 14px 34px -16px color-mix(in srgb, var(--env-accent, var(--accent)) 80%, transparent);
+}
+.env-tile-preview {
+  display: flex;
+  align-items: flex-end;
+  gap: 5px;
+  height: 30px;
+  width: 100%;
+}
+.env-tile-surface {
+  flex: 1;
+  height: 100%;
+  border-radius: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.07);
+}
+.env-tile-surface:nth-child(1) { height: 70%; }
+.env-tile-surface:nth-child(2) { height: 100%; }
+.env-tile-accent {
+  width: 12px;
+  height: 100%;
+  border-radius: 6px;
+  box-shadow: 0 0 14px color-mix(in srgb, var(--env-accent, var(--accent)) 80%, transparent);
+}
+.env-tile-name {
+  font-weight: 700;
+  font-size: var(--text-supporting);
+  letter-spacing: -0.01em;
+}
+.env-tile-meta {
+  font-size: var(--text-meta);
+  text-transform: capitalize;
+}
+.env-tile-check {
+  position: absolute;
+  top: 8px;
+  right: 10px;
+  color: var(--env-accent, var(--accent));
+  font-weight: 800;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .env-tile { transition: none; }
+  .env-tile:hover { transform: none; }
+}
+
+/* ============================================================
+   Play — the game world
+   ============================================================
+
+   A destination, not a list: a featured table that fills the width, the tables
+   that are live right now, a category shelf, then the catalogue as a grid of
+   covers. Everything here is built from the environment tokens, so the arcade
+   wears the colours of the game in focus. */
+
+.play-feature {
+  position: relative;
+  display: grid;
+  grid-template-columns: auto 1fr;
+  align-items: center;
+  gap: var(--space-4);
+  width: 100%;
+  padding: var(--space-4);
+  margin-bottom: var(--space-4);
+  text-align: left;
+  border-radius: var(--radius-card);
+  border: 1px solid color-mix(in srgb, var(--accent) 35%, var(--border));
+  background:
+    radial-gradient(130% 120% at 90% -20%, color-mix(in srgb, var(--accent) 30%, transparent), transparent 62%),
+    linear-gradient(150deg, var(--surface-2), var(--surface-0));
+  cursor: pointer;
+  overflow: hidden;
+  transition: transform var(--motion-fast) var(--ease-out), box-shadow var(--motion-base) var(--ease-out),
+    border-color var(--motion-fast) var(--ease-out);
+}
+.play-feature:hover {
+  transform: translateY(-2px);
+  border-color: color-mix(in srgb, var(--accent) 60%, var(--border));
+  box-shadow: 0 20px 48px -20px color-mix(in srgb, var(--accent) 75%, transparent);
+}
+.play-feature-art {
+  display: grid;
+  place-items: center;
+  filter: drop-shadow(0 16px 30px rgba(0, 0, 0, 0.55));
+}
+.play-feature-art svg { animation: play-float 5s var(--ease-out, ease) infinite; }
+.play-feature-body { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.play-feature-name {
+  font-family: var(--font-display);
+  font-size: var(--text-title);
+  font-weight: 800;
+  letter-spacing: var(--tracking-display);
+  line-height: 1.1;
+}
+.play-feature-cta {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin-top: var(--space-2);
+  font-weight: 700;
+  color: var(--accent);
+}
+@keyframes play-float {
+  0%, 100% { transform: translateY(-4px); }
+  50% { transform: translateY(4px); }
+}
+
+.play-live-list { display: flex; flex-direction: column; gap: var(--space-2); }
+.play-live-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  width: 100%;
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-card);
+  border: 1px solid var(--border);
+  background: color-mix(in srgb, var(--surface-2) 65%, transparent);
+  cursor: pointer;
+  transition: border-color var(--motion-fast) var(--ease-out), transform var(--motion-fast) var(--ease-out);
+}
+.play-live-row:hover { border-color: color-mix(in srgb, var(--accent) 55%, var(--border)); transform: translateX(2px); }
+.play-live-row .grow strong { display: block; }
+
+.play-shelf {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+  gap: var(--space-2);
+}
+.play-cat {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding: var(--space-3);
+  text-align: left;
+  border-radius: var(--radius-card);
+  border: 1px solid var(--border);
+  background: color-mix(in srgb, var(--surface-2) 60%, transparent);
+  cursor: pointer;
+  transition: border-color var(--motion-fast) var(--ease-out), background var(--motion-fast) var(--ease-out);
+}
+.play-cat:hover { border-color: var(--border-strong); }
+.play-cat[aria-pressed="true"] {
+  border-color: color-mix(in srgb, var(--accent) 65%, transparent);
+  background: color-mix(in srgb, var(--accent) 12%, var(--surface-2));
+}
+.play-cat-name { font-weight: 700; letter-spacing: -0.01em; }
+
+/* Covers replace the emoji tile: artwork first, name under it. */
+.game-tile { gap: var(--space-2); align-items: center; text-align: center; }
+.game-tile-cover {
+  border-radius: 14px;
+  box-shadow: 0 10px 22px -12px rgba(0, 0, 0, 0.75);
+  transition: transform var(--motion-fast) var(--ease-out);
+}
+.game-tile:hover .game-tile-cover { transform: scale(1.06) rotate(-1deg); }
+.game-tile-name { font-weight: 700; }
+.game-tile-tags { display: flex; flex-wrap: wrap; gap: 4px; justify-content: center; }
+
+@media (prefers-reduced-motion: reduce) {
+  .play-feature-art svg { animation: none; }
+  .play-feature:hover,
+  .play-live-row:hover { transform: none; }
+  .game-tile:hover .game-tile-cover { transform: none; }
+}
+
+/* ============================================================
+   Board pieces and card marks
+   ============================================================
+
+   Drawn, not typed. A disc with a real edge highlight reads as a piece; the
+   card marks inherit the environment accent so a red suit is red and a Whot
+   shape is the room's colour. */
+
+.piece {
+  position: relative;
+  display: inline-grid;
+  place-items: center;
+  width: 78%;
+  aspect-ratio: 1;
+  border-radius: 50%;
+  box-shadow: inset 0 2px 3px rgba(255, 255, 255, 0.35), 0 2px 4px rgba(0, 0, 0, 0.5);
+}
+.piece.dark { background: radial-gradient(circle at 35% 30%, #4a4d5e, #14151d 72%); }
+.piece.light { background: radial-gradient(circle at 35% 30%, #ffffff, #c3c6d4 74%); }
+.piece.king { color: var(--accent-ink); }
+.piece.light.king { color: #2a2b38; }
+
+.playing-card-shape { display: grid; place-items: center; }
+.playing-card-shape svg { color: var(--accent); }
+.playing-card.std.red .playing-card-shape svg { color: #ff5d70; }
+.playing-card.std:not(.red) .playing-card-shape svg { color: var(--text); }
+.playing-card.whot .playing-card-shape svg { color: var(--accent); }
+
+/* ============================================================
+   Room atmosphere — a room wears its kind
+   ============================================================
+
+   Every kind shares one structure, but each reads differently: a voice room is
+   a lit stage, a listening party is a deep hush, a watch party is a darkened
+   room, a match room is a scoreboard. The difference is carried by the ambient
+   wash behind the studio, never by moving the controls. */
+
+.studio {
+  position: relative;
+  isolation: isolate;
+}
+.studio::before {
+  content: "";
+  position: absolute;
+  inset: -12px -12px auto;
+  height: 260px;
+  z-index: -1;
+  pointer-events: none;
+  background: var(--kind-wash, transparent);
+}
+.studio.kind-voice {
+  --kind-wash: radial-gradient(90% 100% at 50% 0%, color-mix(in srgb, var(--accent) 22%, transparent), transparent 70%);
+}
+.studio.kind-listen {
+  --kind-wash: radial-gradient(80% 100% at 50% 0%, color-mix(in srgb, #6b4cff 20%, transparent), transparent 72%);
+}
+.studio.kind-music {
+  --kind-wash: radial-gradient(80% 100% at 50% 0%, color-mix(in srgb, var(--accent) 16%, transparent), transparent 72%),
+    radial-gradient(60% 80% at 90% 0%, color-mix(in srgb, #ff7a3d 12%, transparent), transparent 70%);
+}
+.studio.kind-movie {
+  /* A watch party is a dark room: pull the surface down, keep the text legible. */
+  --kind-wash: linear-gradient(180deg, rgba(0, 0, 0, 0.55), transparent 60%);
+}
+.studio.kind-sports {
+  --kind-wash: repeating-linear-gradient(90deg, color-mix(in srgb, var(--accent) 10%, transparent) 0 14px, transparent 14px 28px);
+}
+
+.studio.kind-voice .stage-seat.speaking { border-color: color-mix(in srgb, var(--accent) 75%, transparent); }
+.studio.kind-listen .stage-seat { border-radius: var(--radius-pill); }
+.studio.kind-movie .room-banner { filter: brightness(0.82) contrast(1.05); }

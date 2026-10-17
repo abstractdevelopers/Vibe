@@ -11,14 +11,12 @@ import { ProfileScreen } from "./screens/Profile";
 import { PlanDetailScreen } from "./screens/PlanDetail";
 import { ExpenseDetailScreen } from "./screens/ExpenseDetail";
 import { EditProfileScreen } from "./screens/EditProfile";
-import { SettingsScreen } from "./screens/Settings";
 import { PlaceDetailScreen } from "./screens/PlaceDetail";
 import { MessagesScreen } from "./screens/Messages";
 import { ConversationScreen } from "./screens/Conversation";
 import { StorefrontScreen, ProductScreen, OrdersScreen, OrderScreen, SellerOrdersScreen } from "./screens/Commerce";
 import { EventsScreen } from "./screens/Events";
 import { LiveScreen } from "./screens/Live";
-import { RoomStudio } from "./components/RoomStudio";
 import { CreateSheet } from "./components/CreateSheet";
 import { CreateSomethingSheet } from "./components/CreateSomething";
 import {
@@ -32,6 +30,7 @@ import {
   MegaphoneIcon,
   MoneyIcon,
   PassIcon,
+  PlayIcon,
   PlusIcon,
   ReceiptIcon,
   SettingsIcon,
@@ -40,6 +39,7 @@ import {
   ShieldIcon,
   TicketIcon,
   RadioIcon,
+  TrophyIcon,
   UserIcon,
 } from "./components/Icons";
 
@@ -54,12 +54,18 @@ const AssistScreen = lazy(() => import("./screens/Assist").then((m) => ({ defaul
 const AdvertisingScreen = lazy(() => import("./screens/Advertising").then((m) => ({ default: m.AdvertisingScreen })));
 const GamesScreen = lazy(() => import("./screens/Games").then((m) => ({ default: m.GamesScreen })));
 const GameTableScreen = lazy(() => import("./screens/GameTable").then((m) => ({ default: m.GameTableScreen })));
+// Settings carries the whole environment catalogue; Room Studio carries the
+// per-kind panels and the game art. Both are split out so the launch bundle
+// stays lean.
+const SettingsScreen = lazy(() => import("./screens/Settings").then((m) => ({ default: m.SettingsScreen })));
+const RoomStudio = lazy(() => import("./components/RoomStudio").then((m) => ({ default: m.RoomStudio })));
 import { NavContext, useNav, type Route } from "./nav";
 import { useRealtime } from "./realtime";
+import { restoreTheme } from "./theme-runtime";
 import { Avatar } from "./components/Avatar";
 import type { Me } from "./types";
 
-export type Tab = "home" | "circles" | "explore" | "you";
+export type Tab = "home" | "circles" | "play" | "explore" | "you";
 
 /**
  * The app routes in memory, so a shared link cannot reach a screen on its own.
@@ -162,6 +168,8 @@ export function App() {
   useEffect(() => {
     const saved = localStorage.getItem("vibe.theme");
     if (saved) document.documentElement.dataset.theme = saved;
+    // Restore the chosen environment, so the app opens as the viewer left it.
+    restoreTheme();
   }, []);
 
   const bump = () => setRefreshKey((k) => k + 1);
@@ -189,7 +197,9 @@ export function App() {
 
   return (
     <NavContext.Provider value={{ route, push, back }}>
-      <div className="atmosphere" aria-hidden="true" />
+      <div className="atmosphere" aria-hidden="true">
+        <span className="atmosphere-rig" />
+      </div>
       <div className="grain" aria-hidden="true" />
 
       {checking && (
@@ -233,6 +243,7 @@ export function App() {
                 me={me}
                 onMeChanged={loadMe}
                 onOpenProfile={() => push({ name: "profile", userId: me.id })}
+                onOpenYou={() => { goToTabs(); setTab("you"); }}
                 onStartSomething={() => setStartOpen(true)}
               />
             </div>
@@ -257,6 +268,11 @@ export function App() {
                   />
                 )}
                 {tab === "circles" && <CirclesScreen me={me} refreshKey={refreshKey} onChanged={bump} />}
+                {tab === "play" && (
+                  <Suspense fallback={<div className="skeleton" aria-busy="true" />}>
+                    <GamesScreen onBack={goToTabs} />
+                  </Suspense>
+                )}
                 {tab === "explore" && <ExploreScreen me={me} />}
                 {tab === "you" && <YouScreen me={me} onMeChanged={loadMe} />}
               </>
@@ -280,7 +296,11 @@ export function App() {
             {route.name === "edit-profile" && (
               <EditProfileScreen me={me} onBack={back} onSaved={loadMe} />
             )}
-            {route.name === "settings" && <SettingsScreen me={me} onBack={back} onMeChanged={loadMe} />}
+            {route.name === "settings" && (
+              <Suspense fallback={<div className="skeleton" aria-busy="true" />}>
+                <SettingsScreen me={me} onBack={back} onMeChanged={loadMe} />
+              </Suspense>
+            )}
             {route.name === "place" && <PlaceDetailScreen placeId={route.placeId} onBack={back} />}
             {route.name === "messages" && <MessagesScreen me={me} refreshKey={refreshKey} />}
             {route.name === "conversation" && (
@@ -305,13 +325,15 @@ export function App() {
               </Suspense>
             )}
             {route.name === "room" && me && (
-              <RoomStudio
-                roomId={route.roomId}
-                viewerId={me.id}
-                viewerName={me.displayName}
-                onBack={back}
-                onLeft={() => { setRoute({ name: "live" }); bump(); }}
-              />
+              <Suspense fallback={<div className="skeleton" aria-busy="true" />}>
+                <RoomStudio
+                  roomId={route.roomId}
+                  viewerId={me.id}
+                  viewerName={me.displayName}
+                  onBack={back}
+                  onLeft={() => { setRoute({ name: "live" }); bump(); }}
+                />
+              </Suspense>
             )}
             {route.name === "pass" && (
               <Suspense fallback={<div className="skeleton" aria-busy="true" />}>
@@ -353,8 +375,16 @@ export function App() {
                 <PlusIcon width={22} height={22} />
               </span>
             </button>
+            <NavButton
+              id="play"
+              label="Play"
+              Icon={PlayIcon}
+              tab={tab}
+              setTab={setTab}
+              route={route}
+              onNavigate={goToTabs}
+            />
             <NavButton id="explore" label="Explore" Icon={CompassIcon} tab={tab} setTab={setTab} route={route} onNavigate={goToTabs} />
-            <NavButton id="you" label="You" Icon={UserIcon} tab={tab} setTab={setTab} route={route} onNavigate={goToTabs} />
           </nav>
         </>
       )}
@@ -431,11 +461,13 @@ function AccountMenu({
   me,
   onMeChanged,
   onOpenProfile,
+  onOpenYou,
   onStartSomething,
 }: {
   me: Me;
   onMeChanged: () => void | Promise<void>;
   onOpenProfile: () => void;
+  onOpenYou: () => void;
   onStartSomething: () => void;
 }) {
   const nav = useNav();
@@ -493,6 +525,16 @@ function AccountMenu({
             }}
           >
             <UserIcon width={17} height={17} /> View profile
+          </button>
+          <button
+            className="menu-item"
+            role="menuitem"
+            onClick={() => {
+              setOpen(false);
+              onOpenYou();
+            }}
+          >
+            <SettingsIcon width={17} height={17} /> Your space
           </button>
           <button
             className="menu-item"

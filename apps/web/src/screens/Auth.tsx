@@ -154,17 +154,21 @@ export function AuthScreen({ onAuthenticated }: Props) {
           <span className="brand-name gradient-text">Vibe</span>
         </div>
 
-        <p className="eyebrow reveal" style={{ marginBottom: "var(--space-3)" }}>
-          Plans · People · Places
+        <p className="eyebrow auth-eyebrow reveal">
+          <span>People</span><span className="auth-eyebrow-dot" aria-hidden="true">·</span>
+          <span>Play</span><span className="auth-eyebrow-dot" aria-hidden="true">·</span>
+          <span>Experiences</span>
         </p>
         <h1 className="display reveal">
-          Make plans.
+          Your people.
           <br />
-          Do things <span className="gradient-text">together.</span>
+          Your world.
+          <br />
+          Your <span className="gradient-text">Vibe.</span>
         </h1>
-        <p className="muted reveal" style={{ fontSize: 16, maxWidth: "38ch" }}>
-          Vibe turns conversations into plans, activities and real-world
-          experiences with your people.
+        <p className="muted reveal" style={{ fontSize: 16, maxWidth: "42ch" }}>
+          Meet people, find your people, play together, and turn everyday moments
+          into experiences worth sharing.
         </p>
 
         <div className="stack reveal" style={{ marginTop: "var(--space-8)" }}>
