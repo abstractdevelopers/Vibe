@@ -299,7 +299,7 @@ test for any state transition, retry, or duplicate-event path you touch.
 ## Web client gotchas
 - The environment/theme runtime lives in `theme-runtime.ts`; `themes.ts` is the
   catalogue only and imports the runtime, so a screen that only needs to apply a
-  theme does not pull in all ~136 themes. `App.tsx` restores the saved pick at
+  theme does not pull in all ~140 themes. `App.tsx` restores the saved pick at
   boot (`restoreTheme`) and sets `document.documentElement.dataset.theme` /
   `dataset.vibe`. `applyTheme(theme | null)` sets `--accent`, the surface ramp
   and `--brand-gradient`; `null` means "follow the room/game" (see
@@ -721,7 +721,7 @@ Gotchas the harnesses encode, in case you write new checks:
 - **Party games are picks or guesses from a fixed set, not free text.** A server
   can only settle a game it can judge, and settlement is what staking depends on.
 - **Themes are authored, not random.** `apps/web/src/themes.ts` holds 34 base
-  palettes × 4 styles = 136 themes; each computes its accent ink by luminance so
+  palettes × 4 styles, plus 4 named environments = 140 themes; each computes its accent ink by luminance so
   text stays legible. The atmosphere glows read `--theme-glow-a/--theme-glow-b`,
   which `applyTheme` sets alongside `--accent`. "Follow activity" (Settings) tints
   the app to the current game via `useActivityTheme`; a manual pick always wins.
