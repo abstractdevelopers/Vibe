@@ -73,14 +73,19 @@ server handled 12,800 without an error.
 
 **The real ceilings, in order:**
 
-1. **Single process.** All sockets for a room must be in the same process for
-   room events to reach everyone, because the hub is in-memory. Running two API
-   containers does not double room capacity; it splits it. Crossing this needs a
-   shared bus (Redis pub/sub or Postgres `LISTEN/NOTIFY`) before a second
-   container, and the same move takes rate limiting off the database.
+1. **~~Single process.~~ Addressed.** The hub now takes a bus. With
+   `REALTIME_BUS=postgres`, every publish is also written to `LISTEN/NOTIFY` and
+   every instance relays what it receives, so a room's members can be spread
+   across many containers. The in-memory indexes also make fan-out proportional
+   to a room's audience rather than to the total socket count. What remains is
+   operational: set `REALTIME_MAX_SOCKETS` per instance, run several containers
+   behind the load balancer, and read `/v1/health/realtime` for autoscaling.
 2. **Fan-out is linear in room size.** Fine for hundreds; a room of tens of
    thousands needs a fan-out worker and probably a different transport (SFU) for
-   voice, not the current mesh WebRTC signalling.
+   voice, not the current mesh WebRTC signalling. Broadcast rooms raise the
+   listener ceiling — only the host uploads — but the host's own uplink is then
+   the limit, and that is a property of the host's connection, not of this
+   process.
 3. **`/v1/feed` is the hot query.** 580 rps at p95 315 ms on 4 vCPU with the DB
    on the same box is enough for launch but the first thing to optimise (or
    cache) as traffic grows.
@@ -88,6 +93,12 @@ server handled 12,800 without an error.
    socket count and `net.ipv4.tcp_tw_reuse=1` so short-lived HTTP connections do
    not exhaust ports. The server process must set `ulimit -n` at start; the
    default is too low for tens of thousands of sockets.
+5. **The connection pool, not the CPU, is the next limit.** `PGPOOL_MAX`
+   defaults to 10 per instance; at a hundred thousand concurrent users each
+   instance needs its pool raised toward Postgres's own `max_connections`, and
+   past that a pooler (PgBouncer) between the API and the database. The session
+   cache already removes the most-repeated query — the per-request session join —
+   so the pool is spent on real work.
 
 ## Honest limits of this report
 

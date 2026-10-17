@@ -84,7 +84,10 @@ Copy `.env.example` and set these. The API refuses to start with
 |---|---|---|
 | `REDIS_URL` | unset | Configured but not currently used by any code path. Leave unset. |
 | `SESSION_TTL_SECONDS` | `604800` | 7 days. |
-| `PGPOOL_MAX` | `10` | Pool size. On one box, keep it small. |
+| `PGPOOL_MAX` | `10` | Pool size. Raise per instance as concurrency grows; past Postgres's `max_connections`, put PgBouncer in front. |
+| `REALTIME_BUS` | `memory` | Set to `postgres` the moment there is more than one API container. With `memory`, room events only reach sockets on the same instance. |
+| `REALTIME_MAX_SOCKETS` | `0` | `0` means unlimited. Set a per-instance ceiling (e.g. `20000`) so an instance sheds new sockets instead of running out of memory; `/v1/health/realtime` reports the live count for autoscaling. |
+| `WALLET_ENABLED` | per deploy | Wallet is deliberately on in production for the confirmed Bachs compliance; leave it set as configured. |
 
 ### Soft launch without commerce
 
