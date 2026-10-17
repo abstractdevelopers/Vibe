@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { api, ApiError, idempotencyKey, mediaSrc } from "../api";
 import { useRoomChannel, type RealtimeEvent } from "../realtime";
+import { audioProfileFor, loadIceServers, type AudioProfile } from "../rtc";
 import { uploadImageFile } from "../media";
 import { Avatar } from "./Avatar";
 import { GiftSheet } from "./GiftSheet";
@@ -125,10 +126,21 @@ export function RoomStudio({ roomId, viewerId, viewerName, onBack, onLeft }: Pro
 
   const localStream = useRef<MediaStream | null>(null);
   const peerConns = useRef<Map<string, RTCPeerConnection>>(new Map());
+  // ICE servers (STUN + TURN) are fetched once, before the first peer is made.
+  const iceServersRef = useRef<{ urls: string | string[]; username?: string; credential?: string }[]>([
+    { urls: "stun:stun.l.google.com:19302" },
+  ]);
+  const iceLoadedRef = useRef(false);
+
   const audioEls = useRef<Map<string, HTMLAudioElement>>(new Map());
   const analysers = useRef<Map<string, { ctx: AudioContext; raf: number }>>(new Map());
   const localAnalyser = useRef<{ ctx: AudioContext; raf: number } | null>(null);
   const [micLevel, setMicLevel] = useState(0);
+
+  // The room kind decides the audio profile; it is only known after the first
+  // load, so the profile is read through a ref at stream/peer creation time.
+  const profileRef = useRef<AudioProfile>(audioProfileFor(null));
+  profileRef.current = audioProfileFor(room?.kind);
 
   const isHost = room?.host.id === viewerId;
   const isOnStage = stage.some((m) => m.id === viewerId);
@@ -158,6 +170,16 @@ export function RoomStudio({ roomId, viewerId, viewerName, onBack, onLeft }: Pro
   }, [roomId]);
 
   useEffect(() => { void load(); }, [load]);
+
+  // Fetch ICE servers (STUN + TURN) once, before any peer connection is built.
+  // Without a TURN relay, calls between two people behind carrier NAT never
+  // connect at all, which is the common case on mobile.
+  useEffect(() => {
+    if (iceLoadedRef.current) return;
+    iceLoadedRef.current = true;
+    void loadIceServers().then((servers) => { iceServersRef.current = servers; });
+  }, []);
+
   // A live room keeps itself fresh even without an event.
   useEffect(() => {
     const t = window.setInterval(() => { void load(); }, 8000);
@@ -205,17 +227,17 @@ export function RoomStudio({ roomId, viewerId, viewerName, onBack, onLeft }: Pro
   const ensurePeer = useCallback((peerId: string, initiator: boolean): RTCPeerConnection => {
     const existing = peerConns.current.get(peerId);
     if (existing) return existing;
-    const pc = new RTCPeerConnection({ iceServers: [{ urls: "stun:stun.l.google.com:19302" }] });
+    const pc = new RTCPeerConnection({ iceServers: iceServersRef.current });
     peerConns.current.set(peerId, pc);
     localStream.current?.getTracks().forEach((t) => pc.addTrack(t, localStream.current!));
-    // Tune the audio sender for speech. Opus at ~32 kbps is clear for voice and
-    // keeps a broadcast host's uplink affordable for a large listener count,
-    // which is the real limit on how many people one broadcast can carry.
+    // Tune the audio sender for the room. Speech stays at ~32 kbps to keep a
+    // broadcast host's uplink affordable; a music room gets a wideband ceiling
+    // so a track does not sound like a phone call.
     const audioSender = pc.getSenders().find((s) => s.track?.kind === "audio");
     if (audioSender) {
       const params = audioSender.getParameters();
       if (!params.encodings || params.encodings.length === 0) params.encodings = [{}];
-      params.encodings[0]!.maxBitrate = 32_000;
+      params.encodings[0]!.maxBitrate = profileRef.current.maxBitrate;
       void audioSender.setParameters(params).catch(() => { /* negotiated defaults are fine */ });
     }
     pc.ontrack = (e) => attachAudio(peerId, e.streams[0]!);
@@ -302,17 +324,12 @@ export function RoomStudio({ roomId, viewerId, viewerName, onBack, onLeft }: Pro
   // The host is on the stage, so the host's mic is on by default.
   const ensureLocalStream = useCallback(async () => {
     if (localStream.current) return localStream.current;
-    // Speech-tuned capture. Echo cancellation matters most in a broadcast, where
-    // every listener's speaker can otherwise feed straight back into the host's
-    // mic; auto gain keeps a quiet host audible without clipping.
+    // Capture is tuned per room kind. Echo cancellation matters most in a
+    // broadcast, where every listener's speaker can otherwise feed straight
+    // back into the host's mic. A music room drops the speech filters, which
+    // would otherwise mangle a track.
     const stream = await navigator.mediaDevices.getUserMedia({
-      audio: {
-        echoCancellation: true,
-        noiseSuppression: true,
-        autoGainControl: true,
-        channelCount: 1,
-        sampleRate: 48000,
-      },
+      audio: profileRef.current.constraints,
       video: false,
     });
     localStream.current = stream;

@@ -33,6 +33,9 @@ export const testConfig: Config = {
   PGPOOL_MAX: 10,
   REALTIME_BUS: "memory",
   REALTIME_MAX_SOCKETS: 0,
+  TURN_URLS: undefined,
+  TURN_SECRET: undefined,
+  TURN_TTL_SECONDS: 3600,
   isProduction: false,
 };
 

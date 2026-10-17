@@ -53,6 +53,14 @@ const schema = z.object({
   // Refuse new realtime sockets past this many, so one instance degrades by
   // shedding load instead of running out of memory. 0 means no limit.
   REALTIME_MAX_SOCKETS: z.coerce.number().int().min(0).default(0),
+  // TURN relay for WebRTC. STUN alone cannot connect two peers behind carrier
+  // NAT, so without a relay many mobile calls never connect. The client asks
+  // `/v1/rtc/ice` for servers, and the API mints short-lived TURN credentials
+  // from the shared secret rather than shipping a long-lived one to the browser.
+  // Unset means STUN-only (fine for development, insufficient in production).
+  TURN_URLS: z.string().optional(),
+  TURN_SECRET: z.string().optional(),
+  TURN_TTL_SECONDS: z.coerce.number().int().min(60).max(86_400).default(3600),
 });
 
 export type Config = z.infer<typeof schema> & { isProduction: boolean };
