@@ -649,3 +649,26 @@ Gotchas the harnesses encode, in case you write new checks:
   stays pending and no journal is written.
 - **Coolify deploys are manual.** There is no GitHub webhook, so a push does
   not deploy. Trigger one with POST /api/v1/deploy?uuid=<app-uuid>.
+- **Games are server-authoritative and stake through the ledger.** A game
+  session stores its full engine state; every move is validated against that
+  state, persisted with a sequence, and only then broadcast, so a client cannot
+  invent a win or replay a move. `game_catalog` lists every title with an
+  `availability` of `playable` or `planned`; only `whot` has an engine and the
+  create route refuses a game that has none, so the "coming soon" badge is
+  enforced, not decorative. Stakes move real wallet Yens into a per-session
+  escrow account and pay the winner with a 5% rake to revenue, as ordinary
+  journals, so a game can never create or destroy Yens.
+- **A game's host is seated and staked at creation.** The host does not go
+  through `/join` — they are already in the room — so the create route stakes
+  them and writes their `game_players` row inside the same transaction. Missing
+  this leaves a host with no stake who can still win the pot.
+- **`eventView` must forward `host_kind`/`host_disclosure` to `publicUser`.**
+  `publicUser` defaults an absent `host_kind` to `"person"`, so any query that
+  feeds it must `SELECT u.host_kind, u.host_disclosure` too. An event run by the
+  official Vibe account otherwise looks like it was organized by a person,
+  defeating the host label.
+- **Published events are public.** `GET /v1/events` and `GET /v1/events/:id`
+  use `authenticate` (optional), not `requireUser`, so a published event is
+  readable with no session; drafts and cancelled events stay visible only to
+  their organizer or an operator. Explore already served published events
+  without auth; keep the two surfaces consistent.
