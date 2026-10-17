@@ -68,6 +68,7 @@ const NOTIFICATION_FAMILY: Record<string, string> = {
   "comment.reply": "comment_reply",
   "comment.mention": "mention",
   "wallet.received": "wallet",
+  "game.joined": "game",
 };
 
 /**

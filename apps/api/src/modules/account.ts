@@ -30,6 +30,7 @@ export const NOTIFICATION_TYPES = [
   "message",
   "gift",
   "wallet",
+  "game",
   "system",
 ] as const;
 

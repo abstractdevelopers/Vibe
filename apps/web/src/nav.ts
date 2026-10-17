@@ -33,7 +33,9 @@ export type Route =
   | { name: "assist" }
   | { name: "merchant"; merchantId: string }
   | { name: "live" }
-  | { name: "room"; roomId: string };
+  | { name: "room"; roomId: string }
+  | { name: "games" }
+  | { name: "game"; sessionId: string };
 
 export interface Navigation {
   route: Route;

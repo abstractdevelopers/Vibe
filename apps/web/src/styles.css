@@ -2381,3 +2381,54 @@ select {
 @media (prefers-reduced-motion: reduce) {
   .stage-seat.speaking, .burst, .energy-fill, .live-dot { animation: none !important; transition: none !important; }
 }
+
+/* ---- Games ---- */
+.game-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(104px, 1fr));
+  gap: var(--space-2);
+}
+.game-tile {
+  display: flex; flex-direction: column; align-items: flex-start; gap: 2px;
+  padding: var(--space-3);
+  border-radius: var(--radius-lg, 14px);
+  background: color-mix(in srgb, var(--surface-2) 70%, transparent);
+  border: 1px solid var(--hairline);
+  text-align: left; cursor: pointer;
+  transition: transform 0.12s ease, border-color 0.12s ease;
+}
+.game-tile:hover { transform: translateY(-2px); border-color: var(--accent, #6ee7ff); }
+.game-tile-icon { font-size: 26px; line-height: 1; }
+.game-tile-name { font-weight: 600; font-size: var(--text-body, 15px); }
+.chip-live { background: color-mix(in srgb, #ff4d6d 30%, transparent); border-color: #ff4d6d; }
+
+.game-market {
+  display: flex; flex-direction: column; align-items: center; gap: var(--space-2);
+  padding: var(--space-4);
+}
+.hand-grid { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+.card-button {
+  background: none; border: none; padding: 0; cursor: pointer;
+  transition: transform 0.12s ease;
+}
+.card-button:hover:not(.disabled) { transform: translateY(-4px); }
+.card-button.disabled { opacity: 0.35; cursor: not-allowed; }
+
+.playing-card {
+  position: relative;
+  display: inline-flex; flex-direction: column; align-items: center; justify-content: center;
+  width: 52px; height: 72px;
+  border-radius: 8px;
+  background: #fbfbf7; color: #16181d;
+  border: 1px solid rgba(0,0,0,0.18);
+  box-shadow: 0 2px 6px rgba(0,0,0,0.25);
+  font-weight: 700;
+}
+.playing-card-shape { font-size: 22px; line-height: 1; }
+.playing-card-number { font-size: 13px; }
+.playing-card.circle { color: #1f7a3d; }
+.playing-card.triangle { color: #b8860b; }
+.playing-card.cross { color: #1e6fd9; }
+.playing-card.square { color: #8a2be2; }
+.playing-card.star { color: #c0392b; }
+.playing-card.whot { background: #16181d; color: #ffd23f; border-color: #ffd23f; }

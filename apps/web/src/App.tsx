@@ -52,6 +52,8 @@ const PassScreen = lazy(() => import("./screens/Pass").then((m) => ({ default: m
 const AdminScreen = lazy(() => import("./screens/Admin").then((m) => ({ default: m.AdminScreen })));
 const AssistScreen = lazy(() => import("./screens/Assist").then((m) => ({ default: m.AssistScreen })));
 const AdvertisingScreen = lazy(() => import("./screens/Advertising").then((m) => ({ default: m.AdvertisingScreen })));
+const GamesScreen = lazy(() => import("./screens/Games").then((m) => ({ default: m.GamesScreen })));
+const GameTableScreen = lazy(() => import("./screens/GameTable").then((m) => ({ default: m.GameTableScreen })));
 import { NavContext, useNav, type Route } from "./nav";
 import { useRealtime } from "./realtime";
 import { Avatar } from "./components/Avatar";
@@ -292,6 +294,16 @@ export function App() {
             {route.name === "events" && <EventsScreen onBack={back} />}
             {route.name === "event" && <EventsScreen onBack={back} focusEventId={route.eventId} />}
             {route.name === "live" && <LiveScreen onBack={back} />}
+            {route.name === "games" && (
+              <Suspense fallback={<div className="skeleton" aria-busy="true" />}>
+                <GamesScreen onBack={back} />
+              </Suspense>
+            )}
+            {route.name === "game" && me && (
+              <Suspense fallback={<div className="skeleton" aria-busy="true" />}>
+                <GameTableScreen sessionId={route.sessionId} viewerId={me.id} onBack={back} />
+              </Suspense>
+            )}
             {route.name === "room" && me && (
               <RoomStudio
                 roomId={route.roomId}

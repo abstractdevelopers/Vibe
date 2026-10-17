@@ -28,7 +28,8 @@ export type LedgerAccountKind =
   | "provider_fee"
   | "creator_payouts"
   | "gift_refunds"
-  | "user_wallet";
+  | "user_wallet"
+  | "game_pot";
 
 export type JournalKind =
   | "gift_purchase"
@@ -42,7 +43,10 @@ export type JournalKind =
   | "adjustment"
   | "wallet_topup"
   | "wallet_transfer"
-  | "wallet_spend";
+  | "wallet_spend"
+  | "game_stake"
+  | "game_payout"
+  | "game_refund";
 
 interface Entry {
   accountId: string;
@@ -524,4 +528,74 @@ export async function walletBalance(pool: pg.Pool, userId: string, currency: str
     [account.id],
   );
   return { currency, balanceMinor: Math.max(0, Number(totals?.credits ?? 0) - Number(totals?.debits ?? 0)) };
+}
+
+
+/**
+ * Games: staked Yens in a pot.
+ *
+ * A stake moves a player's wallet Yens into the session's escrow account; the
+ * pot is therefore real, backed Yens, not a number the server made up. A payout
+ * moves the pot to the winner and credits the platform's rake to revenue, so
+ * the total is conserved: whatever left the wallets lands in a wallet or in
+ * revenue, never nowhere. A cancelled game refunds stakes exactly.
+ */
+
+/** One player stakes: wallet down, pot up. */
+export async function postGameStake(
+  tx: pg.PoolClient,
+  input: { reference: string; userId: string; amountMinor: number; currency: string },
+): Promise<string> {
+  const wallet = await accountId(tx, "user_wallet", input.currency, input.userId);
+  const pot = await accountId(tx, "game_pot", input.currency, null);
+  return writeJournal(tx, {
+    kind: "game_stake",
+    currency: input.currency,
+    reference: input.reference,
+    memo: "Game stake into the pot",
+    entries: [
+      { accountId: wallet, direction: "debit", amountMinor: input.amountMinor },
+      { accountId: pot, direction: "credit", amountMinor: input.amountMinor },
+    ],
+  });
+}
+
+/** The pot pays the winner, and Vibe keeps its rake. */
+export async function postGamePayout(
+  tx: pg.PoolClient,
+  input: { reference: string; winnerId: string; potMinor: number; rakeMinor: number; currency: string },
+): Promise<string> {
+  const pot = await accountId(tx, "game_pot", input.currency, null);
+  const revenue = await accountId(tx, "platform_revenue", input.currency, null);
+  const winner = await accountId(tx, "user_wallet", input.currency, input.winnerId);
+  const entries: Entry[] = [{ accountId: pot, direction: "debit", amountMinor: input.potMinor }];
+  if (input.rakeMinor > 0) entries.push({ accountId: revenue, direction: "credit", amountMinor: input.rakeMinor });
+  const prizeMinor = input.potMinor - input.rakeMinor;
+  if (prizeMinor > 0) entries.push({ accountId: winner, direction: "credit", amountMinor: prizeMinor });
+  return writeJournal(tx, {
+    kind: "game_payout",
+    currency: input.currency,
+    reference: input.reference,
+    memo: "Game pot paid to the winner",
+    entries,
+  });
+}
+
+/** A cancelled game returns every stake: pot down, wallet up. */
+export async function postGameRefund(
+  tx: pg.PoolClient,
+  input: { reference: string; userId: string; amountMinor: number; currency: string },
+): Promise<string> {
+  const wallet = await accountId(tx, "user_wallet", input.currency, input.userId);
+  const pot = await accountId(tx, "game_pot", input.currency, null);
+  return writeJournal(tx, {
+    kind: "game_refund",
+    currency: input.currency,
+    reference: input.reference,
+    memo: "Game stake refunded",
+    entries: [
+      { accountId: pot, direction: "debit", amountMinor: input.amountMinor },
+      { accountId: wallet, direction: "credit", amountMinor: input.amountMinor },
+    ],
+  });
 }

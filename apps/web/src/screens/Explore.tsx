@@ -10,6 +10,7 @@ import {
   MoneyIcon,
   SearchIcon,
   StoreIcon,
+  TrophyIcon,
 } from "../components/Icons";
 import { useNav } from "../nav";
 
@@ -158,6 +159,15 @@ export function ExploreScreen({ me }: { me: Me }) {
           <strong>Live now</strong>
         </span>
         <span className="meta">Voice rooms, listening parties, watch parties and match rooms.</span>
+        <ChevronRightIcon width={18} height={18} />
+      </button>
+
+      <button className="card live-cta" onClick={() => nav.push({ name: "games" })}>
+        <span className="row" style={{ gap: "var(--space-2)" }}>
+          <TrophyIcon width={18} height={18} />
+          <strong>Games</strong>
+        </span>
+        <span className="meta">Play Whot and more with friends or strangers. Stake Vibe Yens on a game.</span>
         <ChevronRightIcon width={18} height={18} />
       </button>
 
