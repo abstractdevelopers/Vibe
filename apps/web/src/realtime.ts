@@ -49,10 +49,16 @@ export function useRealtime(onEvent: (event: RealtimeEvent) => void): void {
         }
       };
 
-      socket.onclose = () => {
+      socket.onclose = (event) => {
         if (closed) return;
+        // The server says why it closed. 4401 means the session is no longer
+        // valid — reconnect would only be refused again, so stop. 4429 means
+        // the instance is at its socket ceiling — back off longer and retry,
+        // since a later connection may land on a less loaded instance.
+        if (event.code === 4401) { closed = true; return; }
+        const cap = event.code === 4429;
         // Backoff with jitter, capped, so a flaky network does not storm.
-        const delay = Math.min(1000 * 2 ** retry, 30000) + Math.random() * 500;
+        const delay = Math.min(1000 * 2 ** retry, cap ? 60000 : 30000) + Math.random() * 500;
         retry += 1;
         timer = window.setTimeout(connect, delay);
       };
@@ -125,10 +131,12 @@ export function useRoomChannel(
         }
       };
 
-      socket.onclose = () => {
+      socket.onclose = (event) => {
         setStatus("closed");
         if (closed) return;
-        const delay = Math.min(1000 * 2 ** retry, 30000) + Math.random() * 500;
+        // A revoked session will never be accepted; stop rather than loop.
+        if (event.code === 4401) { closed = true; return; }
+        const delay = Math.min(1000 * 2 ** retry, event.code === 4429 ? 60000 : 30000) + Math.random() * 500;
         retry += 1;
         timer = window.setTimeout(connect, delay);
       };

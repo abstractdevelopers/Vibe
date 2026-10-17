@@ -85,21 +85,31 @@ export async function drainOutbox(
   mailer: Mailer,
   limit = 20,
 ): Promise<number> {
+  // Claim the batch atomically. With more than one instance the old plain
+  // SELECT let two workers read the same unsent rows and email the same person
+  // twice. `FOR UPDATE SKIP LOCKED` means a row belongs to exactly one worker,
+  // and bumping `attempts` here counts the attempt before it is made.
   const { rows } = await pool.query<{ id: string; to_email: string; subject: string; body: string }>(
-    `SELECT id, to_email, subject, body FROM email_outbox
-      WHERE sent_at IS NULL AND attempts < 5
-      ORDER BY created_at ASC LIMIT $1`,
+    `UPDATE email_outbox SET attempts = attempts + 1
+      WHERE id IN (
+        SELECT id FROM email_outbox
+         WHERE sent_at IS NULL AND attempts < 5
+         ORDER BY created_at ASC
+         LIMIT $1
+         FOR UPDATE SKIP LOCKED
+      )
+      RETURNING id, to_email, subject, body`,
     [limit],
   );
   let sent = 0;
   for (const row of rows) {
     try {
       await mailer.send({ to: row.to_email, subject: row.subject, body: row.body });
-      await pool.query(`UPDATE email_outbox SET sent_at = now(), attempts = attempts + 1 WHERE id = $1`, [row.id]);
+      await pool.query(`UPDATE email_outbox SET sent_at = now() WHERE id = $1`, [row.id]);
       sent++;
     } catch (err) {
       await pool.query(
-        `UPDATE email_outbox SET attempts = attempts + 1, last_error = $2 WHERE id = $1`,
+        `UPDATE email_outbox SET last_error = $2 WHERE id = $1`,
         [row.id, err instanceof Error ? err.message : String(err)],
       );
     }

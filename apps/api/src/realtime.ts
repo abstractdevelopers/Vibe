@@ -107,6 +107,15 @@ export class PostgresBus implements RealtimeBus {
 
 export class RealtimeHub {
   private subscribers = new Set<Subscriber>();
+  // Indexes. A room event must reach only the room, and a fan-out that scans
+  // every connected socket would cost O(total sockets) per event — at a hundred
+  // thousand sockets that is a full pass of the process's memory for every
+  // reaction. These maps make delivery proportional to the audience instead.
+  private byRoom = new Map<string, Set<Subscriber>>();
+  private byCircle = new Map<string, Set<Subscriber>>();
+  private byUser = new Map<string, Set<Subscriber>>();
+  /** Socket → subscriber, so join/leave are O(1) rather than a scan. */
+  private bySocket = new Map<WebSocket, Subscriber>();
   private sequence = 0;
 
   constructor(private bus?: RealtimeBus, private maxSockets = 0) {
@@ -130,21 +139,39 @@ export class RealtimeHub {
   subscribe(socket: WebSocket, userId: string, circleIds: string[]): () => void {
     const subscriber: Subscriber = { socket, userId, circleIds: new Set(circleIds), roomIds: new Set() };
     this.subscribers.add(subscriber);
-    return () => this.subscribers.delete(subscriber);
+    this.bySocket.set(socket, subscriber);
+    addTo(this.byUser, userId, subscriber);
+    for (const circleId of circleIds) addTo(this.byCircle, circleId, subscriber);
+    return () => this.remove(subscriber);
+  }
+
+  /** Drop a subscriber from every index. */
+  private remove(subscriber: Subscriber): void {
+    if (!this.subscribers.delete(subscriber)) return;
+    this.bySocket.delete(subscriber.socket);
+    removeFrom(this.byUser, subscriber.userId, subscriber);
+    for (const circleId of subscriber.circleIds) removeFrom(this.byCircle, circleId, subscriber);
+    for (const roomId of subscriber.roomIds) removeFrom(this.byRoom, roomId, subscriber);
+    subscriber.roomIds.clear();
   }
 
   /** Track which room a socket is in. Presence is per connection. */
   joinRoom(socket: WebSocket, roomId: string): void {
-    for (const s of this.subscribers) if (s.socket === socket) s.roomIds.add(roomId);
+    const s = this.bySocket.get(socket);
+    if (s && !s.roomIds.has(roomId)) {
+      s.roomIds.add(roomId);
+      addTo(this.byRoom, roomId, s);
+    }
   }
 
   leaveRoom(socket: WebSocket, roomId: string): void {
-    for (const s of this.subscribers) if (s.socket === socket) s.roomIds.delete(roomId);
+    const s = this.bySocket.get(socket);
+    if (s && s.roomIds.delete(roomId)) removeFrom(this.byRoom, roomId, s);
   }
 
   /** Everyone currently present in a room. */
   roomMembers(roomId: string): Subscriber[] {
-    return [...this.subscribers].filter((s) => s.roomIds.has(roomId));
+    return [...(this.byRoom.get(roomId) ?? [])];
   }
 
   /**
@@ -178,21 +205,23 @@ export class RealtimeHub {
   }
 
   private deliverToRoom(roomId: string, event: RealtimeEvent, except?: WebSocket): void {
-    for (const subscriber of this.subscribers) {
-      if (subscriber.roomIds.has(roomId) && subscriber.socket !== except) this.send(subscriber, event);
+    for (const subscriber of this.byRoom.get(roomId) ?? []) {
+      if (subscriber.socket !== except) this.send(subscriber, event);
     }
   }
 
   private deliverToCircle(circleId: string, event: RealtimeEvent): void {
-    for (const subscriber of this.subscribers) {
-      if (subscriber.circleIds.has(circleId)) this.send(subscriber, event);
-    }
+    for (const subscriber of this.byCircle.get(circleId) ?? []) this.send(subscriber, event);
   }
 
   private deliverToUsers(userIds: string[], event: RealtimeEvent): void {
-    const wanted = new Set(userIds);
-    for (const subscriber of this.subscribers) {
-      if (wanted.has(subscriber.userId)) this.send(subscriber, event);
+    const sent = new Set<Subscriber>();
+    for (const userId of userIds) {
+      for (const subscriber of this.byUser.get(userId) ?? []) {
+        // A socket can hold several identities only in tests; guard the duplicate
+        // so a user named twice in one publish does not get the event twice.
+        if (!sent.has(subscriber)) { sent.add(subscriber); this.send(subscriber, event); }
+      }
     }
   }
 
@@ -201,4 +230,17 @@ export class RealtimeHub {
       subscriber.socket.send(JSON.stringify(event));
     }
   }
+}
+
+function addTo(index: Map<string, Set<Subscriber>>, key: string, subscriber: Subscriber): void {
+  let set = index.get(key);
+  if (!set) { set = new Set(); index.set(key, set); }
+  set.add(subscriber);
+}
+
+function removeFrom(index: Map<string, Set<Subscriber>>, key: string, subscriber: Subscriber): void {
+  const set = index.get(key);
+  if (!set) return;
+  set.delete(subscriber);
+  if (set.size === 0) index.delete(key);
 }

@@ -75,4 +75,58 @@ describe("realtime hub", () => {
     expect(hub.atCapacity()).toBe(true);
     expect(hub.socketCount()).toBe(2);
   });
+
+  it("tracks room presence per socket and forgets it on leave", () => {
+    const hub = new RealtimeHub();
+    const a = fakeSocket();
+    const b = fakeSocket();
+    hub.subscribe(a, "user-a", []);
+    hub.subscribe(b, "user-b", []);
+    hub.joinRoom(a, "room-1");
+    hub.joinRoom(b, "room-1");
+    expect(hub.roomMembers("room-1").length).toBe(2);
+    hub.leaveRoom(a, "room-1");
+    expect(hub.roomMembers("room-1").length).toBe(1);
+    // A second join is idempotent — no duplicate delivery.
+    hub.joinRoom(b, "room-1");
+    expect(hub.roomMembers("room-1").length).toBe(1);
+  });
+
+  it("delivers circle events only to members of that circle", () => {
+    const hub = new RealtimeHub();
+    const a = fakeSocket();
+    const b = fakeSocket();
+    hub.subscribe(a, "user-a", ["circle-1"]);
+    hub.subscribe(b, "user-b", ["circle-2"]);
+    hub.publishToCircle("circle-1", { type: "circle.post", entityId: "circle-1", payload: {} });
+    expect(a.sent.length).toBe(1);
+    expect(b.sent.length).toBe(0);
+  });
+
+  it("delivers a user event to each named user exactly once", () => {
+    const hub = new RealtimeHub();
+    const a = fakeSocket();
+    const b = fakeSocket();
+    hub.subscribe(a, "user-a", []);
+    hub.subscribe(b, "user-b", []);
+    // The same user named twice must not double-deliver.
+    hub.publishToUsers(["user-a", "user-a", "user-b"], { type: "plan.updated", entityId: "p", payload: {} });
+    expect(a.sent.length).toBe(1);
+    expect(b.sent.length).toBe(1);
+  });
+
+  it("drops a socket from every index when it unsubscribes", () => {
+    const hub = new RealtimeHub();
+    const a = fakeSocket();
+    const unsubscribe = hub.subscribe(a, "user-a", ["circle-1"]);
+    hub.joinRoom(a, "room-1");
+    unsubscribe();
+    expect(hub.socketCount()).toBe(0);
+    expect(hub.roomMembers("room-1").length).toBe(0);
+    // Nothing reaches the socket after unsubscribe, through any scope.
+    hub.publishToRoom("room-1", { type: "room.reaction", entityId: "room-1", payload: {} });
+    hub.publishToCircle("circle-1", { type: "circle.post", entityId: "circle-1", payload: {} });
+    hub.publishToUsers(["user-a"], { type: "plan.updated", entityId: "p", payload: {} });
+    expect(a.sent.length).toBe(0);
+  });
 });
