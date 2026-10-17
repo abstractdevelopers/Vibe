@@ -425,6 +425,29 @@ npm --workspace @vibe/api run test
 - **Coolify API:** the app domain is set through `domains` (a string); `fqdn`
   is read-only and rejects writes. `POST /api/v1/deploy?uuid=<app>` triggers a
   deploy and returns a `deployment_uuid` to poll.
+- **There is no API token and no webhook, so pushing to `main` does not
+  deploy.** A push to `abstractdevelopers/Vibe@main` changes nothing on the
+  server until someone calls the deploy endpoint. If the task says "deploy",
+  the push is not the deploy. To trigger one without a token, mint a short-lived
+  one through Coolify's own console and revoke it afterwards:
+
+  ```
+  # on the server; the app is 4odwboyulnfdthdlv9hzrguf
+  PT=$(openssl rand -hex 32); HASH=$(printf %s "$PT" | sha256sum | cut -d' ' -f1)
+  docker exec coolify-db psql -U coolify -d coolify -c \
+    "INSERT INTO personal_access_tokens (tokenable_type,tokenable_id,team_id,name,token,abilities,created_at,updated_at) \
+     VALUES ('App\\Models\\User',0,0,'tmp-deploy','$HASH','[\"*\"]',now(),now());"
+  curl -X POST -H "Authorization: Bearer $PT" \
+    "http://127.0.0.1:8000/api/v1/deploy?uuid=4odwboyulnfdthdlv9hzrguf"
+  # then, when the deploy finishes:
+  docker exec coolify-db psql -U coolify -d coolify -c \
+    "DELETE FROM personal_access_tokens WHERE name='tmp-deploy';"
+  ```
+
+  `php artisan` cannot do this: `createToken` needs a `team_id`, and a
+  token with a null team breaks the ability checks. Poll the returned
+  `deployment_uuid` — a deploy queued *before* your push builds the old commit,
+  so check the commit it reports before believing it shipped.
 - **Test the image locally before pushing.** Build it, boot it against a
   throwaway Postgres, and check `/health` plus `/` — that is what caught both
   Dockerfile bugs.
