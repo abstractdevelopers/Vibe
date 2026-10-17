@@ -621,3 +621,31 @@ Gotchas the harnesses encode, in case you write new checks:
   The media volume is mounted at `/app/media` with `MEDIA_DIR=/app/media`, so
   uploads survive redeploys.
 
+
+
+## Launch state (verified against the live deployment)
+
+- **Wallet is ON in production.** `WALLET_ENABLED=true` is set on the Coolify
+  app. The operator confirmed they are under Bachs compliance, so the V1
+  "no stored value" default is overridden deliberately here.
+- **Migrations are current.** `0019_live_experience.sql` and `0020_wallet.sql`
+  were applied by the app boot migration runner on redeploy; check with
+  `SELECT name FROM schema_migrations ORDER BY name`.
+- **Payout provider errors are typed.** `payments/payouts.ts` throws a
+  `ProviderError` carrying the provider HTTP status. The money routes map a
+  4xx (e.g. Bachs BANK_ACCOUNT_NOT_VERIFIED) to a 400 with the provider
+  message and a 5xx to `provider_unavailable`; before this a refused bank
+  account surfaced as a generic 500. Regression: `tests/payout-errors.test.ts`.
+- **Money settlement is proven through the ledger.** `tests/money-flow.test.ts`
+  drives each paid path (gift, live ticket, wallet top-up, wallet send, order)
+  end to end and asserts on `ledger_journals` / `ledger_entries`. A paid gift
+  and a ticket each book 70/30; a top-up credits only after a verified webhook;
+  an order transitions with no journal (orders are not on the ledger yet).
+- **The webhook response includes the wallet settlement result.** It was
+  computed but omitted from the JSON reply.
+- **A real checkout probe.** `scripts/live_checkout_probe.py` registers two
+  users, buys a paid gift against the live deployment, and prints the Bachs
+  hosted checkout URL. Nothing is charged until a human pays; the purchase
+  stays pending and no journal is written.
+- **Coolify deploys are manual.** There is no GitHub webhook, so a push does
+  not deploy. Trigger one with POST /api/v1/deploy?uuid=<app-uuid>.
