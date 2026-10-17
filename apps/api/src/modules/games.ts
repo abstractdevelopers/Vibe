@@ -8,21 +8,20 @@ import { requireCircleMember } from "./access.js";
 import { trackSafe } from "./analytics.js";
 import { notifyUsers } from "./notifications.js";
 import { walletBalance, postGameStake, postGamePayout, postGameRefund } from "../money/ledger.js";
-import {
-  applyWhotMove,
-  createWhotState,
-  whotView,
-  type WhotState,
-  type WhotMove,
-} from "../games/whot.js";
+import { getEngine, type EngineContext } from "../games/engine.js";
+import { registerAllEngines } from "../games/registry.js";
 
 /**
  * Games: live multiplayer inside Vibe.
  *
  * The server is the referee. A session stores its full engine state in
- * `game_sessions.state`; a move is validated against that state, persisted with
- * a monotonically increasing sequence, and only then broadcast. A client can
- * therefore never invent a win, and a replayed move (same sequence) is refused.
+ * `game_sessions.state`; a move is validated by that game's engine, persisted
+ * with a monotonically increasing sequence, and only then broadcast. A client
+ * can therefore never invent a win, and a replayed move (same sequence) is
+ * refused.
+ *
+ * The route layer is deliberately game-agnostic: it talks only to the engine
+ * contract (`src/games/engine.ts`), so dozens of games share one safe path.
  *
  * Staking is optional and off by default per game. When on, each stake moves
  * real wallet Yens into the session's escrow account, and the pot is paid to the
@@ -41,29 +40,23 @@ const createSessionSchema = z.object({
   stakeMinor: z.number().int().nonnegative().max(100_000_000).default(0),
 });
 
-const moveSchema = z.object({
-  move: z.discriminatedUnion("type", [
-    z.object({
-      type: z.literal("play"),
-      card: z.object({
-        shape: z.enum(["circle", "triangle", "cross", "square", "star", "whot"]),
-        number: z.number().int().min(1).max(20),
-      }),
-      callShape: z.enum(["circle", "triangle", "cross", "square", "star"]).optional(),
-    }),
-    z.object({ type: z.literal("draw") }),
-  ]),
-});
+// A move is opaque to the route: the engine validates it. We only bound its
+// size so a client cannot post an unbounded blob.
+const moveSchema = z.object({ move: z.unknown() });
 
 interface SessionRow {
   id: string; game_id: string; host_id: string; circle_id: string | null;
   scope: string; status: string; stake_minor: string; rake_bps: number;
-  currency: string; pot_minor: string; winner_id: string | null; state: WhotState | null;
+  currency: string; pot_minor: string; winner_id: string | null; state: unknown;
   journal_id: string | null;
 }
 
 async function loadSession(pool: AppContext["pool"], id: string): Promise<SessionRow | null> {
   return queryOne<SessionRow>(pool, "SELECT * FROM game_sessions WHERE id = $1", [id]);
+}
+
+function engineContext(session: SessionRow, players: string[]): EngineContext {
+  return { gameId: session.game_id, players, seed: 0, stakeMinor: Number(session.stake_minor) };
 }
 
 /** The public shape of a session, with the viewer's own slice of the state. */
@@ -83,6 +76,9 @@ async function sessionView(ctx: AppContext, session: SessionRow, viewerId: strin
     "SELECT name, category, engine, min_players, max_players, stake_enabled, availability FROM game_catalog WHERE id = $1",
     [session.game_id],
   );
+  const engine = getEngine(game?.engine);
+  const seated = players.filter((p) => p.status !== "left").map((p) => p.user_id);
+  const isPlayer = players.some((p) => p.user_id === viewerId);
   return {
     id: session.id,
     gameId: session.game_id,
@@ -107,9 +103,9 @@ async function sessionView(ctx: AppContext, session: SessionRow, viewerId: strin
       status: p.status,
       stakedMinor: Number(p.staked_minor),
     })),
-    // Only a player sees the engine state, and only their own hand.
-    state: session.state && players.some((p) => p.user_id === viewerId)
-      ? whotView(session.state, viewerId)
+    // Only a player sees the engine state, and the engine decides how much.
+    state: session.state && engine && isPlayer
+      ? engine.view(session.state, viewerId, engineContext(session, seated))
       : null,
   };
 }
@@ -137,7 +133,8 @@ async function settleGame(
         currency: session.currency,
       });
     }
-    await tx.query("UPDATE game_sessions SET journal_id = NULL WHERE id = $1", [session.id]);
+    // The pot is now empty; clear it so nothing can be refunded twice.
+    await tx.query("UPDATE game_sessions SET journal_id = NULL, pot_minor = 0 WHERE id = $1", [session.id]);
     return;
   }
   if (!outcome.winnerId) return;
@@ -154,6 +151,10 @@ async function settleGame(
 
 export function gameRoutes(ctx: AppContext) {
   return async function register(app: FastifyInstance): Promise<void> {
+    // Register every engine once, so the catalogue and the routes can resolve
+    // any game's engine by its catalogue `engine` id.
+    registerAllEngines();
+
     // ---- Catalogue ----
     app.get("/v1/games", async (req) => {
       await requireUser(ctx, req);
@@ -318,10 +319,11 @@ export function gameRoutes(ctx: AppContext) {
       if (players.length < (game?.min_players ?? 2)) {
         throw ApiError.badRequest(`This game needs at least ${game?.min_players ?? 2} players`);
       }
-      if (game?.engine !== "whot") throw ApiError.badRequest("That game has no engine yet");
+      const engine = getEngine(game?.engine);
+      if (!engine) throw ApiError.badRequest("That game has no engine yet");
       const order = players.map((p) => p.user_id);
       const seed = Math.floor(Date.now() % 2147483647) + order.length;
-      const state = createWhotState(order, seed);
+      const state = engine.create({ gameId: session.game_id, players: order, seed, stakeMinor: Number(session.stake_minor) });
       await ctx.pool.query(
         "UPDATE game_sessions SET status = 'active', state = $2, updated_at = now() WHERE id = $1",
         [id, JSON.stringify(state)],
@@ -348,9 +350,22 @@ export function gameRoutes(ctx: AppContext) {
           [id, user.id],
         );
         if (!isPlayer) throw ApiError.forbidden("You are not in this game");
-        let state = session.state!;
+        const game = await queryOne<{ engine: string | null }>(
+          tx as unknown as AppContext["pool"],
+          "SELECT engine FROM game_catalog WHERE id = $1",
+          [session.game_id],
+        );
+        const engine = getEngine(game?.engine);
+        if (!engine) throw ApiError.badRequest("That game has no engine yet");
+        const seats = await queryMany<{ user_id: string }>(
+          tx as unknown as AppContext["pool"],
+          "SELECT user_id FROM game_players WHERE session_id = $1 AND status != 'left' ORDER BY seat",
+          [id],
+        );
+        const ctxForMove = engineContext(session, seats.map((s) => s.user_id));
+        let outcome;
         try {
-          state = applyWhotMove(state, user.id, input.move as WhotMove);
+          outcome = engine.apply(session.state, user.id, input.move, ctxForMove);
         } catch (err) {
           throw ApiError.badRequest(err instanceof Error ? err.message : "Illegal move");
         }
@@ -364,16 +379,18 @@ export function gameRoutes(ctx: AppContext) {
           "INSERT INTO game_moves (session_id, seq, user_id, move) VALUES ($1,$2,$3,$4)",
           [id, seq, user.id, JSON.stringify(input.move)],
         );
-        if (state.finished) {
-          await settleGame(tx, session, { winnerId: state.winnerId, refund: false });
+        if (outcome.finished) {
+          // A draw has no winner, so the stakes go back rather than sitting in
+          // escrow forever.
+          await settleGame(tx, session, { winnerId: outcome.winnerId, refund: !outcome.winnerId });
           await tx.query(
             "UPDATE game_sessions SET status = 'finished', state = $2, winner_id = $3, ended_at = now(), updated_at = now() WHERE id = $1",
-            [id, JSON.stringify(state), state.winnerId],
+            [id, JSON.stringify(outcome.state), outcome.winnerId],
           );
         } else {
-          await tx.query("UPDATE game_sessions SET state = $2, updated_at = now() WHERE id = $1", [id, JSON.stringify(state)]);
+          await tx.query("UPDATE game_sessions SET state = $2, updated_at = now() WHERE id = $1", [id, JSON.stringify(outcome.state)]);
         }
-        return { state, finished: state.finished, winnerId: state.winnerId };
+        return { finished: outcome.finished, winnerId: outcome.winnerId, draw: outcome.draw ?? false };
       });
       ctx.hub.publishToRoom(id, { type: "game.updated", entityId: id, payload: { finished: result.finished } });
       trackSafe(ctx.pool, { name: "game_move", userId: user.id, properties: { entityType: "game_session", entityId: id } });

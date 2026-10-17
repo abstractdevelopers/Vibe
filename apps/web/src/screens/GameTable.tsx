@@ -2,65 +2,44 @@ import { useCallback, useEffect, useState } from "react";
 import { api, ApiError } from "../api";
 import { ScreenHeader } from "../components/ScreenHeader";
 import { SpinnerIcon } from "../components/Icons";
+import { useActivityTheme } from "../components/useActivityTheme";
+import { themeForGame } from "../themes";
 
 /**
  * A game table.
  *
- * The board is whatever the server last told us: the top of the market, the
- * viewer's own hand, and a card count for everyone else. A move is a request —
- * the server validates it and returns the new state, so two players can never
- * disagree about whose turn it is.
+ * One screen plays every game. The server decides the rules and sends back a
+ * per-viewer state; this component only knows how to draw the families of state
+ * the engines produce (a grid, a hand of cards, a board of discs, a set of
+ * options). It never decides who won — it renders what the server said.
  */
 
-interface Card { shape: string; number: number }
 interface Player {
   id: string; displayName: string; handle: string; avatarUrl: string | null;
   seat: number; status: string; stakedMinor: number;
 }
-interface GameState {
-  top: Card | null;
-  marketCount: number;
-  calledShape: string | null;
-  turnUserId: string | null;
-  yourTurn: boolean;
-  hand: Card[];
-  counts: { userId: string; count: number }[];
-  winnerId: string | null;
-  finished: boolean;
-  lastEvent: string | null;
-}
 interface Session {
   id: string; gameId: string; gameName: string; status: string;
   stakeMinor: number; potMinor: number; currency: string; hostId: string;
-  minPlayers: number; maxPlayers: number; players: Player[]; state: GameState | null;
+  minPlayers: number; maxPlayers: number; players: Player[]; state: any;
+  winnerId: string | null;
 }
 
-const SHAPE_GLYPH: Record<string, string> = {
-  circle: "⬤", triangle: "▲", cross: "✚", square: "◼", star: "★", whot: "★",
-};
-const SHAPE_NAME: Record<string, string> = {
-  circle: "Circle", triangle: "Triangle", cross: "Cross", square: "Square", star: "Star",
-};
+const SHAPE_GLYPH: Record<string, string> = { circle: "⬤", triangle: "▲", cross: "✚", square: "◼", star: "★", whot: "★" };
+const SHAPE_NAME: Record<string, string> = { circle: "Circle", triangle: "Triangle", cross: "Cross", square: "Square", star: "Star" };
+const SUIT_GLYPH: Record<string, string> = { S: "♠", H: "♥", D: "♦", C: "♣" };
+const RANK_LABEL: Record<number, string> = { 1: "A", 11: "J", 12: "Q", 13: "K" };
 
 function money(minor: number, currency: string): string {
   return `${(minor / 100).toLocaleString(undefined, { maximumFractionDigits: 0 })} ${currency}`;
 }
-
-function CardFace({ card }: { card: Card }) {
-  const whot = card.shape === "whot";
-  return (
-    <span className={`playing-card ${whot ? "whot" : card.shape}`} aria-label={whot ? "Whot 20" : `${SHAPE_NAME[card.shape]} ${card.number}`}>
-      <span className="playing-card-shape" aria-hidden>{SHAPE_GLYPH[card.shape] ?? "?"}</span>
-      <span className="playing-card-number">{card.number}</span>
-    </span>
-  );
-}
+const rankText = (r: number) => RANK_LABEL[r] ?? String(r);
 
 export function GameTableScreen({ sessionId, viewerId, onBack }: { sessionId: string; viewerId: string; onBack: () => void }) {
   const [session, setSession] = useState<Session | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  const [callShape, setCallShape] = useState<string | null>(null);
+  useActivityTheme(session ? themeForGame(session.gameId) : null);
 
   const load = useCallback(async () => {
     try {
@@ -102,17 +81,7 @@ export function GameTableScreen({ sessionId, viewerId, onBack }: { sessionId: st
 
   const me = session.players.find((p) => p.id === viewerId);
   const isHost = session.hostId === viewerId;
-  const state = session.state;
   const canStart = isHost && session.status === "lobby" && session.players.length >= session.minPlayers;
-  const top = state?.top ?? null;
-
-  function playable(card: Card): boolean {
-    if (!state) return false;
-    if (card.shape === "whot") return true;
-    if (state.calledShape) return card.shape === state.calledShape;
-    if (!top) return true;
-    return card.shape === top.shape || card.number === top.number;
-  }
 
   return (
     <>
@@ -123,8 +92,8 @@ export function GameTableScreen({ sessionId, viewerId, onBack }: { sessionId: st
           session.status === "lobby"
             ? `Waiting for players · ${session.players.length}/${session.maxPlayers}`
             : session.status === "finished"
-              ? `Game over${state?.winnerId ? ` · ${session.players.find((p) => p.id === state.winnerId)?.displayName ?? "winner"} won` : ""}`
-              : `Pot ${money(session.potMinor, session.currency)}`
+              ? `Game over${session.winnerId ? ` · ${session.players.find((p) => p.id === session.winnerId)?.displayName ?? "winner"} won` : " · draw"}`
+              : session.potMinor > 0 ? `Pot ${money(session.potMinor, session.currency)}` : "In play"
         }
       />
       {error && <div className="notice danger" role="alert">{error}</div>}
@@ -132,18 +101,14 @@ export function GameTableScreen({ sessionId, viewerId, onBack }: { sessionId: st
       <section className="stack">
         <h2 className="section-title">Players</h2>
         {session.players.map((p) => {
-          const count = state?.counts.find((c) => c.userId === p.id)?.count;
-          const turn = state?.turnUserId === p.id && session.status === "active";
+          const turn = session.state?.turnUserId === p.id && session.status === "active";
           return (
             <div key={p.id} className="card row spread">
               <div className="row" style={{ gap: "var(--space-2)" }}>
                 <span className={`chip ${turn ? "chip-live" : ""}`}>{turn ? "Turn" : `#${p.seat + 1}`}</span>
                 <strong>{p.displayName}{p.id === viewerId ? " (you)" : ""}</strong>
               </div>
-              <div className="row" style={{ gap: "var(--space-2)" }}>
-                {p.stakedMinor > 0 && <span className="chip">{money(p.stakedMinor, session.currency)}</span>}
-                {count !== undefined && <span className="meta">{count} cards</span>}
-              </div>
+              {p.stakedMinor > 0 && <span className="chip">{money(p.stakedMinor, session.currency)}</span>}
             </div>
           );
         })}
@@ -165,64 +130,467 @@ export function GameTableScreen({ sessionId, viewerId, onBack }: { sessionId: st
         </section>
       )}
 
-      {session.status === "active" && state && (
-        <section className="stack">
-          <div className="game-market card">
-            <span className="meta">Market {state.marketCount} · {state.calledShape ? `Call: ${SHAPE_NAME[state.calledShape]}` : "Top of the pile"}</span>
-            {top && <CardFace card={top} />}
-          </div>
-
-          {state.yourTurn && !state.finished ? (
-            <>
-              <h2 className="section-title">Your hand</h2>
-              <div className="hand-grid">
-                {state.hand.map((card, i) => {
-                  const ok = playable(card);
-                  return (
-                    <button
-                      key={i}
-                      className={`card-button ${ok ? "" : "disabled"}`}
-                      disabled={busy || !ok || (card.shape === "whot" && !callShape)}
-                      onClick={() => void act("/move", { move: card.shape === "whot" ? { type: "play", card, callShape } : { type: "play", card } })}
-                    >
-                      <CardFace card={card} />
-                    </button>
-                  );
-                })}
-              </div>
-              <div className="row" style={{ gap: "var(--space-2)", flexWrap: "wrap" }}>
-                <span className="meta">Call shape for Whot:</span>
-                {(["circle", "triangle", "cross", "square", "star"] as const).map((s) => (
-                  <button key={s} className="pill" aria-pressed={callShape === s} onClick={() => setCallShape(s)}>
-                    {SHAPE_GLYPH[s]} {SHAPE_NAME[s]}
-                  </button>
-                ))}
-              </div>
-              <button className="btn block" disabled={busy} onClick={() => void act("/move", { move: { type: "draw" } })}>
-                Draw a card
-              </button>
-            </>
-          ) : (
-            <div className="notice">
-              {state.finished
-                ? "This game has finished."
-                : `Waiting for ${session.players.find((p) => p.id === state.turnUserId)?.displayName ?? "the other player"}…`}
-            </div>
-          )}
-        </section>
+      {session.status === "active" && session.state && (
+        <GameBoard session={session} state={session.state} busy={busy} act={act} />
       )}
 
-      {session.status === "finished" && state?.hand && (
-        <section className="stack">
-          <h2 className="section-title">Your hand</h2>
-          <div className="hand-grid">
-            {state.hand.map((card, i) => <CardFace key={i} card={card} />)}
-          </div>
-        </section>
+      {session.status === "finished" && session.state && (
+        <GameBoard session={session} state={session.state} busy act={act} readOnly />
       )}
 
       <button className="btn" onClick={onBack}>Back</button>
       {busy && <div className="row" style={{ justifyContent: "center" }}><SpinnerIcon width={18} height={18} /></div>}
     </>
+  );
+}
+
+/** Dispatch to the right renderer for the shape the engine returned. */
+function GameBoard({ session, state, busy, act, readOnly }: {
+  session: Session; state: any; busy: boolean; readOnly?: boolean;
+  act: (path: string, body?: unknown) => Promise<void>;
+}) {
+  const id = session.gameId;
+  if (id === "whot") return <WhotBoard state={state} busy={busy} act={act} readOnly={readOnly} />;
+  if (state.hand !== undefined || state.yourHand !== undefined) {
+    return <CardBoard session={session} state={state} busy={busy} act={act} readOnly={readOnly} />;
+  }
+  if (state.board !== undefined) return <GridBoard session={session} state={state} busy={busy} act={act} readOnly={readOnly} />;
+  if (state.positions !== undefined) return <SnakesBoard session={session} state={state} busy={busy} act={act} readOnly={readOnly} />;
+  if (state.h !== undefined) return <DotsBoard state={state} busy={busy} act={act} readOnly={readOnly} />;
+  if (state.colors !== undefined) return <SimonBoard state={state} busy={busy} act={act} readOnly={readOnly} />;
+  if (state.options !== undefined && state.options.length > 0) return <OptionBoard state={state} busy={busy} act={act} readOnly={readOnly} />;
+  return <GenericBoard session={session} state={state} busy={busy} act={act} readOnly={readOnly} />;
+}
+
+// ---- Whot -----------------------------------------------------------------
+
+function WhotBoard({ state, busy, act, readOnly }: any) {
+  const [callShape, setCallShape] = useState<string | null>(null);
+  const playable = (card: any) => {
+    if (card.shape === "whot") return true;
+    if (state.calledShape) return card.shape === state.calledShape;
+    const top = state.top;
+    return !top || card.shape === top.shape || card.number === top.number;
+  };
+  return (
+    <section className="stack">
+      <div className="game-market card">
+        <span className="meta">Market {state.marketCount} · {state.calledShape ? `Call: ${SHAPE_NAME[state.calledShape]}` : "Top of the pile"}</span>
+        {state.top && <PlayingCard card={state.top} />}
+      </div>
+      {state.yourTurn && !readOnly ? (
+        <>
+          <h2 className="section-title">Your hand</h2>
+          <div className="hand-grid">
+            {state.hand.map((card: any, i: number) => {
+              const ok = playable(card);
+              return (
+                <button key={i} className={`card-button ${ok ? "" : "disabled"}`}
+                  disabled={busy || !ok || (card.shape === "whot" && !callShape)}
+                  onClick={() => void act("/move", { move: card.shape === "whot" ? { type: "play", card, callShape } : { type: "play", card } })}>
+                  <PlayingCard card={card} />
+                </button>
+              );
+            })}
+          </div>
+          <div className="row" style={{ gap: "var(--space-2)", flexWrap: "wrap" }}>
+            <span className="meta">Call shape for Whot:</span>
+            {(["circle", "triangle", "cross", "square", "star"] as const).map((s) => (
+              <button key={s} className="pill" aria-pressed={callShape === s} onClick={() => setCallShape(s)}>
+                {SHAPE_GLYPH[s]} {SHAPE_NAME[s]}
+              </button>
+            ))}
+          </div>
+          <button className="btn block" disabled={busy} onClick={() => void act("/move", { move: { type: "draw" } })}>Draw a card</button>
+        </>
+      ) : (
+        <div className="notice">{readOnly ? "This game has finished." : "Waiting for the other player…"}</div>
+      )}
+    </section>
+  );
+}
+
+function PlayingCard({ card }: { card: any }) {
+  const whot = card.shape === "whot";
+  return (
+    <span className={`playing-card ${whot ? "whot" : card.shape}`}
+      aria-label={whot ? "Whot 20" : `${SHAPE_NAME[card.shape]} ${card.number}`}>
+      <span className="playing-card-shape" aria-hidden>{SHAPE_GLYPH[card.shape] ?? "?"}</span>
+      <span className="playing-card-number">{card.number}</span>
+    </span>
+  );
+}
+
+// ---- Card games (standard deck) -------------------------------------------
+
+function StdCard({ card }: { card: { rank: number; suit: string } }) {
+  const red = card.suit === "H" || card.suit === "D";
+  return (
+    <span className={`playing-card std ${red ? "red" : ""}`} aria-label={`${rankText(card.rank)}${SUIT_GLYPH[card.suit] ?? ""}`}>
+      <span className="playing-card-shape" aria-hidden>{SUIT_GLYPH[card.suit] ?? "?"}</span>
+      <span className="playing-card-number">{rankText(card.rank)}</span>
+    </span>
+  );
+}
+
+function CardBoard({ session, state, busy, act, readOnly }: any) {
+  const id = session.gameId;
+  const hand: any[] = state.hand ?? state.yourHand ?? [];
+
+  if (id === "blackjack") {
+    return (
+      <section className="stack">
+        <h2 className="section-title">Dealer {state.dealerTotal !== null ? `· ${state.dealerTotal}` : ""}</h2>
+        <div className="hand-grid">{state.dealer.map((c: any, i: number) => <StdCard key={i} card={c} />)}</div>
+        <h2 className="section-title">You {state.yourTotal !== undefined ? `· ${state.yourTotal}` : ""}</h2>
+        <div className="hand-grid">{hand.map((c: any, i: number) => <StdCard key={i} card={c} />)}</div>
+        {state.yourTurn && !readOnly ? (
+          <div className="row" style={{ gap: "var(--space-2)" }}>
+            <button className="btn primary grow" disabled={busy} onClick={() => void act("/move", { move: { action: "hit" } })}>Hit</button>
+            <button className="btn grow" disabled={busy} onClick={() => void act("/move", { move: { action: "stand" } })}>Stand</button>
+          </div>
+        ) : !readOnly && <div className="notice">Waiting…</div>}
+      </section>
+    );
+  }
+
+  if (id === "war") {
+    return (
+      <section className="stack">
+        {state.last && (
+          <div className="game-market card row" style={{ justifyContent: "center", gap: "var(--space-3)" }}>
+            <StdCard card={state.last.a} /><StdCard card={state.last.b} />
+          </div>
+        )}
+        <div className="meta">Your cards: {state.yourCount}</div>
+        {state.yourTurn && !readOnly && (
+          <button className="btn primary block" disabled={busy} onClick={() => void act("/move", { move: { action: "flip" } })}>Flip a card</button>
+        )}
+      </section>
+    );
+  }
+
+  if (id === "crazyeights") {
+    return (
+      <section className="stack">
+        <div className="game-market card">
+          <span className="meta">Top card · suit {SUIT_GLYPH[state.activeSuit] ?? state.activeSuit} · deck {state.deckCount}</span>
+          {state.discardTop && <StdCard card={state.discardTop} />}
+        </div>
+        <h2 className="section-title">Your hand</h2>
+        <div className="hand-grid">
+          {hand.map((c: any, i: number) => (
+            <button key={i} className="card-button" disabled={busy || !state.yourTurn || readOnly}
+              onClick={() => void act("/move", { move: { card: c } })}>
+              <StdCard card={c} />
+            </button>
+          ))}
+        </div>
+        {state.yourTurn && !readOnly && (
+          <button className="btn block" disabled={busy} onClick={() => void act("/move", { move: {} })}>Draw</button>
+        )}
+      </section>
+    );
+  }
+
+  if (id === "gofish") {
+    const ranks = [...new Set(hand.map((c: any) => c.rank))];
+    return (
+      <section className="stack">
+        <h2 className="section-title">Your hand</h2>
+        <div className="hand-grid">{hand.map((c: any, i: number) => <StdCard key={i} card={c} />)}</div>
+        {state.yourTurn && !readOnly
+          ? <GoFishControls ranks={ranks} players={session.players} busy={busy} act={act} />
+          : !readOnly && <div className="notice">Waiting…</div>}
+      </section>
+    );
+  }
+
+  if (id === "poker") {
+    return (
+      <section className="stack">
+        <h2 className="section-title">Your hand · {state.yourHandName}</h2>
+        <div className="hand-grid">{hand.map((c: any, i: number) => <StdCard key={i} card={c} />)}</div>
+        {state.yourTurn && !readOnly && (
+          <button className="btn primary block" disabled={busy} onClick={() => void act("/move", { move: { discard: [] } })}>Stand pat</button>
+        )}
+        {state.showdown && (
+          <div className="stack">
+            <h2 className="section-title">Showdown</h2>
+            {state.showdown.map((s: any) => (
+              <div key={s.userId} className="card row spread">
+                <span>{session.players.find((p: Player) => p.id === s.userId)?.displayName ?? s.userId}</span>
+                <span className="meta">{s.name}</span>
+              </div>
+            ))}
+          </div>
+        )}
+      </section>
+    );
+  }
+
+  if (id === "baccarat") {
+    return (
+      <section className="stack">
+        <div className="game-market card">
+          <span className="meta">Player {state.playerValue ?? "–"} · Banker {state.bankerValue ?? "–"}</span>
+          <div className="hand-grid">{[...state.player, ...state.banker].map((c: any, i: number) => <StdCard key={i} card={c} />)}</div>
+        </div>
+        {state.yourTurn && !readOnly ? (
+          <div className="row" style={{ gap: "var(--space-2)", flexWrap: "wrap" }}>
+            {(["player", "banker", "tie"] as const).map((b) => (
+              <button key={b} className="pill" disabled={busy} onClick={() => void act("/move", { move: { bet: b } })}>{b}</button>
+            ))}
+          </div>
+        ) : !readOnly && <div className="notice">Waiting…</div>}
+      </section>
+    );
+  }
+
+  return <GenericBoard session={session} state={state} busy={busy} act={act} readOnly={readOnly} />;
+}
+
+function GoFishControls({ ranks, players, busy, act }: any) {
+  const [rank, setRank] = useState<number | null>(ranks[0] ?? null);
+  const [target, setTarget] = useState<string | null>(null);
+  return (
+    <div className="stack">
+      <span className="meta">Ask a player for a rank</span>
+      <div className="pill-row">{ranks.map((r: number) => (
+        <button key={r} className="pill" aria-pressed={rank === r} onClick={() => setRank(r)}>{rankText(r)}</button>
+      ))}</div>
+      <div className="pill-row">{(players as Player[]).map((p) => (
+        <button key={p.id} className="pill" aria-pressed={target === p.id} onClick={() => setTarget(p.id)}>{p.displayName}</button>
+      ))}</div>
+      <button className="btn primary block" disabled={busy || rank === null || target === null}
+        onClick={() => void act("/move", { move: { targetId: target, rank } })}>Ask</button>
+    </div>
+  );
+}
+
+// ---- Grid games -----------------------------------------------------------
+
+function GridBoard({ session, state, busy, act, readOnly }: any) {
+  const id = session.gameId;
+  const you = state.yourSeat ?? 0;
+
+  if (id === "checkers" || id === "reversi") {
+    const [sel, setSel] = useState<[number, number] | null>(null);
+    const cell = (r: number, c: number) => {
+      const v = state.board[r][c];
+      if (id === "reversi") return v === null ? "" : v === 0 ? "⚫" : "⚪";
+      if (v === 0) return "";
+      const man = v === 1 || v === 3 ? "⚫" : "⚪";
+      const king = v === 2 || v === 4 ? "♛" : "";
+      return man + king;
+    };
+    return (
+      <section className="stack">
+        <div className="checker-grid">
+          {state.board.map((row: any[], r: number) => row.map((_: any, c: number) => {
+            const dark = (r + c) % 2 === 1;
+            const selected = sel && sel[0] === r && sel[1] === c;
+            return (
+              <button key={`${r}-${c}`} className={`checker-cell ${dark ? "dark" : "light"} ${selected ? "sel" : ""}`}
+                disabled={busy || readOnly || !state.yourTurn}
+                onClick={() => {
+                  if (id === "reversi") { void act("/move", { move: { row: r, col: c } }); return; }
+                  if (sel) { void act("/move", { move: { from: sel, to: [r, c] } }); setSel(null); }
+                  else if (cell(r, c)) setSel([r, c]);
+                }}>
+                {cell(r, c)}
+              </button>
+            );
+          }))}
+        </div>
+        {id === "reversi" && <div className="meta">You {state.scores?.[you] ?? 0} · Them {state.scores?.[you === 0 ? 1 : 0] ?? 0}</div>}
+        {!state.yourTurn && !readOnly && <div className="notice">Waiting…</div>}
+      </section>
+    );
+  }
+
+  if (id === "battleship") {
+    return (
+      <section className="stack">
+        <h2 className="section-title">Your fleet</h2>
+        <div className="battle-grid">
+          {Array.from({ length: 100 }).map((_, i) => {
+            const r = Math.floor(i / 10); const c = i % 10;
+            const ship = state.yourFleet.find((s: any) => s.r === r && s.c === c);
+            const shot = state.opponentShots.includes(`${r},${c}`);
+            return <span key={i} className={`battle-cell ${ship ? (ship.hit ? "hit" : "ship") : ""} ${shot ? "incoming" : ""}`} />;
+          })}
+        </div>
+        <h2 className="section-title">Your shots</h2>
+        <div className="battle-grid">
+          {Array.from({ length: 100 }).map((_, i) => {
+            const r = Math.floor(i / 10); const c = i % 10;
+            const hit = state.opponentHitCells.find((s: any) => s.r === r && s.c === c);
+            return (
+              <button key={i} className={`battle-cell ${hit ? (hit.hit ? "hit" : "miss") : ""}`}
+                disabled={busy || readOnly || !state.yourTurn}
+                onClick={() => void act("/move", { move: { r, c } })} />
+            );
+          })}
+        </div>
+      </section>
+    );
+  }
+
+  // tictactoe / connect4 / gomoku — all "row/col", gravity handled server-side.
+  const gravity = id === "connect4";
+  return (
+    <section className="stack">
+      <div className={`line-grid cols-${state.cols ?? 3} rows-${state.rows ?? 3} ${gravity ? "gravity" : ""}`}>
+        {state.board.map((row: any[], r: number) => row.map((v: any, c: number) => (
+          <button key={`${r}-${c}`} className="line-cell"
+            disabled={busy || readOnly || !state.yourTurn || (gravity ? state.board[0][c] !== null : v !== null)}
+            onClick={() => void act("/move", { move: gravity ? { col: c } : { row: r, col: c } })}>
+            {v === null ? "" : v === you ? "●" : "○"}
+          </button>
+        )))}
+      </div>
+      {!state.yourTurn && !readOnly && <div className="notice">Waiting…</div>}
+    </section>
+  );
+}
+
+// ---- Snakes ---------------------------------------------------------------
+
+function SnakesBoard({ session, state, busy, act, readOnly }: any) {
+  return (
+    <section className="stack">
+      {state.lastRoll && <div className="meta">Last roll: {state.lastRoll}</div>}
+      <div className="stack">
+        {Object.entries(state.positions as Record<string, number>).map(([pid, pos]) => (
+          <div key={pid} className="card row spread">
+            <span>{session.players.find((p: Player) => p.id === pid)?.displayName ?? pid.slice(0, 8)}</span>
+            <span className="meta">square {pos}</span>
+          </div>
+        ))}
+      </div>
+      {state.yourTurn && !readOnly && (
+        <button className="btn primary block" disabled={busy} onClick={() => void act("/move", { move: { action: "roll" } })}>Roll the dice</button>
+      )}
+    </section>
+  );
+}
+
+// ---- Dots and Boxes -------------------------------------------------------
+
+function DotsBoard({ state, busy, act, readOnly }: any) {
+  const n = state.h.length;
+  return (
+    <section className="stack">
+      <div className="dots-grid" style={{ gridTemplateColumns: `repeat(${2 * n - 1}, 18px)` }}>
+        {Array.from({ length: 2 * n - 1 }).map((_, r) => Array.from({ length: 2 * n - 1 }).map((__, c) => {
+          const evenR = r % 2 === 0; const evenC = c % 2 === 0;
+          if (evenR && evenC) return <span key={`${r}-${c}`} className="dot" />;
+          if (evenR && !evenC) {
+            const ci = (c - 1) / 2; const owner = state.h[r / 2]?.[ci];
+            return <button key={`${r}-${c}`} className={`edge ${owner ? "taken" : ""}`} disabled={busy || readOnly || !state.yourTurn || owner !== 0}
+              onClick={() => void act("/move", { move: { kind: "h", r: r / 2, c: ci } })} />;
+          }
+          if (!evenR && evenC) {
+            const ri = (r - 1) / 2; const owner = state.v[ri]?.[c / 2];
+            return <button key={`${r}-${c}`} className={`edge ${owner ? "taken" : ""}`} disabled={busy || readOnly || !state.yourTurn || owner !== 0}
+              onClick={() => void act("/move", { move: { kind: "v", r: ri, c: c / 2 } })} />;
+          }
+          const boxOwner = state.boxOwner[(r - 1) / 2]?.[(c - 1) / 2];
+          return <span key={`${r}-${c}`} className={`box ${boxOwner >= 0 ? "owned" : ""}`}>{boxOwner >= 0 ? (boxOwner === 0 ? "●" : "○") : ""}</span>;
+        }))}
+      </div>
+      <div className="meta">You {state.scores?.[0]} · Them {state.scores?.[1]}</div>
+    </section>
+  );
+}
+
+// ---- Option / quiz games --------------------------------------------------
+
+function OptionBoard({ state, busy, act, readOnly }: any) {
+  return (
+    <section className="stack">
+      {(state.prompt || state.question) && <h2 className="section-title">{state.prompt ?? state.question}</h2>}
+      <div className="stack">
+        {state.options.map((opt: string, i: number) => (
+          <button key={i} className="btn block" disabled={busy || readOnly || !state.yourTurn}
+            onClick={() => void act("/move", { move: { choice: i, side: i } })}>{opt}</button>
+        ))}
+      </div>
+      {state.masked && <div className="game-market card"><span className="playing-card-number" style={{ fontSize: 24 }}>{state.masked}</span></div>}
+      {!state.yourTurn && !readOnly && <div className="notice">Waiting…</div>}
+    </section>
+  );
+}
+
+// ---- Simon ----------------------------------------------------------------
+
+function SimonBoard({ state, busy, act, readOnly }: any) {
+  const [seq, setSeq] = useState<string[]>([]);
+  const colors = state.colors as string[];
+  const palette: Record<string, string> = { red: "#ef4444", green: "#22c55e", blue: "#3b82f6", yellow: "#eab308" };
+  return (
+    <section className="stack">
+      <div className="meta">Watch: {state.sequence.join(" → ")}</div>
+      <div className="row" style={{ gap: "var(--space-2)" }}>
+        {colors.map((c) => (
+          <button key={c} className="btn grow" style={{ background: palette[c], color: "#fff" }}
+            disabled={busy || readOnly || !state.yourTurn}
+            onClick={() => setSeq((s) => [...s, c])}>{c}</button>
+        ))}
+      </div>
+      <div className="meta">Your guess: {seq.join(" → ") || "—"}</div>
+      <button className="btn primary block" disabled={busy || readOnly || !state.yourTurn || seq.length === 0}
+        onClick={() => { void act("/move", { move: { sequence: seq } }); setSeq([]); }}>Submit</button>
+    </section>
+  );
+}
+
+// ---- Fallback for score-style games --------------------------------------
+
+function GenericBoard({ session, state, busy, act, readOnly }: any) {
+  const id = session.gameId;
+  const actFor: Record<string, unknown> = {
+    dice: { action: "roll" },
+    slots: { action: "spin" },
+    plinko: { action: "drop" },
+    penalty: { corner: 0 },
+    crash: { cashout: 1.5 },
+    reaction: { value: state.target ?? 50 },
+    rps: { choice: "rock" },
+    truthdare: { pick: "truth" },
+    roulette: { bet: { kind: "red" } },
+    charades: { choice: 0 },
+    "20q": { choice: 0 },
+    wyr: { side: 0 },
+    neverhave: { side: 0 },
+    hangman: { letter: "A" },
+    wordchain: { word: "apple" },
+    wordscramble: { guess: "" },
+    memory: { index: 0 },
+  };
+  const move = actFor[id];
+  return (
+    <section className="stack">
+      {state.scores && (
+        <div className="stack">
+          {session.players.map((p: Player) => (
+            <div key={p.id} className="card row spread">
+              <span>{p.displayName}</span><span className="meta">{state.scores[p.id] ?? 0}</span>
+            </div>
+          ))}
+        </div>
+      )}
+      {state.last && <div className="meta">{state.last}</div>}
+      {state.masked && <div className="meta">{state.masked}</div>}
+      {state.scrambled && <div className="meta">{state.scrambled}</div>}
+      {state.revealedCrash && <div className="meta">Crash point: {state.revealedCrash}x</div>}
+      {state.yourTurn && !readOnly && move !== undefined && (
+        <button className="btn primary block" disabled={busy} onClick={() => void act("/move", { move })}>
+          {id === "dice" ? "Roll" : id === "slots" ? "Spin" : id === "plinko" ? "Drop" : "Play"}
+        </button>
+      )}
+      {!state.yourTurn && !readOnly && <div className="notice">Waiting…</div>}
+    </section>
   );
 }

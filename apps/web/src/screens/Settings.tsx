@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { api, ApiError, setToken } from "../api";
 import type { Me } from "../types";
 import { useNav } from "../nav";
+import { ThemePicker } from "../components/ThemePicker";
 import {
   ArrowLeftIcon,
   BellIcon,
@@ -225,6 +226,10 @@ export function SettingsScreen({ me, onBack, onMeChanged }: Props) {
         <button className="btn block" onClick={toggleTheme}>
           <MoonIcon width={18} height={18} /> Toggle light / dark
         </button>
+        <div style={{ marginTop: "var(--space-4)" }}>
+          <span className="meta">Activity themes</span>
+          <ThemePicker />
+        </div>
       </div>
 
       <div className="card" style={{ marginBottom: "var(--space-3)" }}>

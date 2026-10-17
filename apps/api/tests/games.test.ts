@@ -74,8 +74,12 @@ describe("games catalogue", () => {
     expect(res.statusCode).toBe(200);
     const body = res.json();
     expect(body.games.length).toBeGreaterThan(30);
-    const whot = body.games.find((g: any) => g.id === "whot");
-    expect(whot.availability).toBe("playable");
+    const playable = body.games.filter((g: any) => g.availability === "playable");
+    // The whole point of this work: more than thirty games that actually play.
+    expect(playable.length).toBeGreaterThanOrEqual(30);
+    expect(playable.map((g: any) => g.id)).toContain("whot");
+    expect(playable.map((g: any) => g.id)).toContain("tictactoe");
+    expect(playable.map((g: any) => g.id)).toContain("blackjack");
     expect(body.games.find((g: any) => g.id === "chess").availability).toBe("planned");
     expect(body.rakeBps).toBe(500);
   });
@@ -166,6 +170,33 @@ describe("a staked Whot game moves real Yens", () => {
     const escrow = await wallet.pool.query("SELECT COALESCE(SUM(CASE WHEN direction='credit' THEN amount_minor ELSE -amount_minor END),0) AS n FROM ledger_entries e JOIN ledger_accounts a ON a.id = e.account_id WHERE a.kind = 'game_pot'");
     expect(Number(escrow.rows[0].n)).toBe(0);
     expect(loserId).toBeTruthy();
+  });
+});
+
+describe("a non-Whot game plays through the same routes", () => {
+  it("plays a game of tic-tac-toe to a winner over the API", async () => {
+    const dave = await registerUser(wallet.app, "gdave");
+    const erin = await registerUser(wallet.app, "gerin");
+    const create = await wallet.app.inject({ method: "POST", url: "/v1/games/sessions", headers: auth(dave.token), payload: { gameId: "tictactoe" } });
+    const sessionId = create.json().session.id;
+    await wallet.app.inject({ method: "POST", url: `/v1/games/sessions/${sessionId}/join`, headers: auth(erin.token) });
+    await wallet.app.inject({ method: "POST", url: `/v1/games/sessions/${sessionId}/start`, headers: auth(dave.token) });
+
+    let guard = 0;
+    let finished = false;
+    while (!finished && guard < 20) {
+      guard += 1;
+      const view = await wallet.app.inject({ method: "GET", url: `/v1/games/sessions/${sessionId}`, headers: auth(dave.token) });
+      const s = view.json().session.state;
+      if (s.finished) { finished = true; break; }
+      const mover = s.turnUserId === dave.id ? dave : erin;
+      let move: { row: number; col: number } | null = null;
+      for (let r = 0; r < 3 && !move; r += 1) for (let c = 0; c < 3 && !move; c += 1) if (s.board[r][c] === null) move = { row: r, col: c };
+      const res = await wallet.app.inject({ method: "POST", url: `/v1/games/sessions/${sessionId}/move`, headers: auth(mover.token), payload: { move } });
+      expect(res.statusCode).toBe(200);
+      if (res.json().session.state.finished) finished = true;
+    }
+    expect(finished).toBe(true);
   });
 });
 
