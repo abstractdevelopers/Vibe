@@ -8,6 +8,7 @@ import { requireIdempotencyKey, runIdempotent } from "../idempotency.js";
 import { trackSafe } from "./analytics.js";
 import { GIFT_CATALOGUE, splitGift } from "../money/catalogue.js";
 import { creatorBalance, postPayout, postPayoutReversal, MIN_PAYOUT_MINOR } from "../money/ledger.js";
+import { ProviderError } from "../payments/payouts.js";
 
 /**
  * Money routes: paid gifts, creator balance, bank accounts and payouts.
@@ -218,13 +219,22 @@ export function moneyRoutes(ctx: AppContext) {
       const user = await requireUser(ctx, req);
       requirePayoutsEnabled(ctx);
       const input = parse(destinationSchema, req.body);
-      const destination = await ctx.payouts.createDestination({
-        accountName: input.accountName,
-        accountNumber: input.accountNumber,
-        bankCode: input.bankCode,
-        currency: input.currency,
-        label: input.label,
-      });
+      let destination;
+      try {
+        destination = await ctx.payouts.createDestination({
+          accountName: input.accountName,
+          accountNumber: input.accountNumber,
+          bankCode: input.bankCode,
+          currency: input.currency,
+          label: input.label,
+        });
+      } catch (err) {
+        // A rejected bank account is the user's to fix, not a server fault.
+        if (err instanceof ProviderError && err.status >= 400 && err.status < 500) {
+          throw new ApiError("bad_request", err.message);
+        }
+        throw new ApiError("provider_unavailable", "The bank could not be reached. Please try again.");
+      }
       const id = newId();
       const isFirst = (await queryOne<{ n: string }>(
         ctx.pool,
@@ -329,7 +339,10 @@ export function moneyRoutes(ctx: AppContext) {
               `UPDATE payouts SET status = 'failed', failure_reason = $2, updated_at = now() WHERE id = $1`,
               [payoutId, err instanceof Error ? err.message.slice(0, 300) : "Provider error"],
             );
-            throw err;
+            if (err instanceof ProviderError && err.status >= 400 && err.status < 500) {
+              throw new ApiError("bad_request", err.message);
+            }
+            throw new ApiError("provider_unavailable", "The bank could not be reached. Please try again.");
           }
           await ctx.pool.query(
             `UPDATE payouts SET provider_ref = $2, status = $3, updated_at = now() WHERE id = $1`,

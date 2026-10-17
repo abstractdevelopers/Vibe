@@ -257,10 +257,41 @@ check("alice's balance is zero until the webhook confirms", lambda: (
     lambda r: (_ for _ in ()).throw(AssertionError(f"balance={r[1].get('availableMinor')}")) if r[1].get("availableMinor", 0) != 0 else None
 )(call("GET", "/v1/money/balance", token=alice["token"], expect=200)))
 
-check("payouts are disabled with a clear message, not a crash", lambda: (
-    lambda r: (_ for _ in ()).throw(AssertionError(f"code={r[0]} body={r[1]}")) if r[0] != 503 else None
+check("a payout destination is refused cleanly, never a 500", lambda: (
+    # Payouts disabled -> 503. Enabled -> a bad test account is the provider's
+    # 400. Either is a clean, explained refusal; a 500 is the bug this guards.
+    lambda r: (_ for _ in ()).throw(AssertionError(f"code={r[0]} body={r[1]}")) if r[0] not in (400, 422, 503) else None
 )(call("POST", "/v1/money/destinations", token=alice["token"],
-       body={"bankCode": "058", "accountNumber": "0123456789", "accountName": "Alice"}, expect=503)))
+       body={"bankCode": "058", "accountNumber": "0123456789", "accountName": "Alice"})))
+
+
+section("Vibe Yens wallet (gated)")
+wallet_status = call("GET", "/v1/wallet", token=alice["token"])
+if wallet_status[0] == 404:
+    SKIP.append("wallet enabled")
+    print("  SKIP  wallet is not enabled on this deployment (WALLET_ENABLED=false)")
+else:
+    check("wallet is enabled and returns a zero balance", lambda: (
+        lambda r: (_ for _ in ()).throw(AssertionError(f"code={r[0]} body={r[1]}")) if r[0] != 200 or r[1].get("balanceMinor", -1) != 0 else None
+    )(call("GET", "/v1/wallet", token=alice["token"], expect=200)))
+
+    check("wallet activity loads", lambda: call("GET", "/v1/wallet/activity", token=alice["token"], expect=200))
+
+    check("a top-up starts pending and never credits immediately", lambda: (
+        lambda r: (_ for _ in ()).throw(AssertionError(f"body={r[1]}")) if r[0] != 202 or r[1].get("status") != "pending" else None
+    )(call("POST", "/v1/wallet/topups", token=alice["token"],
+           headers={"idempotency-key": f"topup-{TAG}"},
+           body={"amountMinor": 500000})))
+
+    check("sending more than the balance is refused", lambda: call(
+        "POST", "/v1/wallet/send", token=alice["token"],
+        headers={"idempotency-key": f"send-empty-{TAG}"},
+        body={"recipientId": bob["id"], "amountMinor": 10000}, expect=400))
+
+    check("sending to yourself is refused", lambda: call(
+        "POST", "/v1/wallet/send", token=alice["token"],
+        headers={"idempotency-key": f"send-self-{TAG}"},
+        body={"recipientId": alice["id"], "amountMinor": 10000}, expect=400))
 
 
 section("Commerce: business, verification, products, orders")

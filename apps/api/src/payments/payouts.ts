@@ -13,6 +13,22 @@
 
 import { formatMinorUnits, parseToMinorUnits } from "@vibe/shared";
 
+/**
+ * A provider refused a call. `status` is the provider's HTTP status, so a bad
+ * bank account (400/422) can be reported as a client error and an outage
+ * (5xx) as `provider_unavailable`, instead of surfacing as a generic 500.
+ */
+export class ProviderError extends Error {
+  constructor(
+    message: string,
+    readonly status: number,
+    readonly code: string | null = null,
+  ) {
+    super(message);
+    this.name = "ProviderError";
+  }
+}
+
 export interface PayoutDestination {
   providerDestinationId: string;
   /** Provider-side review state. A destination is unusable until approved. */
@@ -101,7 +117,16 @@ class BachsPayoutProvider implements PayoutProvider {
     });
     if (!res.ok) {
       const detail = await res.text().catch(() => "");
-      throw new Error(`Bachs payout call ${path} failed (${res.status}): ${detail.slice(0, 300)}`);
+      let code: string | null = null;
+      let message = `The payout provider refused this request (${res.status}).`;
+      try {
+        const parsed = JSON.parse(detail) as { error_code?: string; detail?: string };
+        code = parsed.error_code ?? null;
+        if (parsed.detail) message = parsed.detail;
+      } catch {
+        // Non-JSON body; keep the generic message.
+      }
+      throw new ProviderError(message, res.status, code);
     }
     return res.json();
   }
