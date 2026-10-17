@@ -9,6 +9,8 @@
  * `tier` drives the presentation only: 1 is a single element, 2 fills the card,
  * 3 takes the screen. It carries no money.
  */
+import { PLATFORM_FEE_BPS } from "@vibe/shared";
+
 export interface CatalogueGift {
   id: string;
   label: string;
@@ -21,10 +23,10 @@ export interface CatalogueGift {
   sortOrder: number;
 }
 
-/** Vibe's share of a gift, in basis points (15%). */
-export const GIFT_FEE_BPS = 1500;
+/** Vibe's share of a gift, in basis points (15%). Mirrored by the DB rows. */
+export const GIFT_FEE_BPS = PLATFORM_FEE_BPS.gift;
 /** The platform's cut of a marketplace order, in basis points (15%). */
-export const ORDER_FEE_BPS = 1500;
+export const ORDER_FEE_BPS = PLATFORM_FEE_BPS.order;
 
 export const GIFT_CATALOGUE: CatalogueGift[] = [
   { id: "rose", label: "Rose", hint: "A small thank you", emoji: "🌹", tier: 1, priceMinor: 20_000, currency: "NGN", feeBps: GIFT_FEE_BPS, sortOrder: 10 },

@@ -6,7 +6,7 @@ import { newId } from "../ids.js";
 import { parse, requireAdmin, requireUser, type AppContext } from "../http.js";
 import { requireIdempotencyKey, runIdempotent } from "../idempotency.js";
 import { trackSafe } from "./analytics.js";
-import { GIFT_CATALOGUE, splitGift } from "../money/catalogue.js";
+import { GIFT_CATALOGUE, GIFT_FEE_BPS, splitGift } from "../money/catalogue.js";
 import { creatorBalance, postPayout, postPayoutReversal, MIN_PAYOUT_MINOR } from "../money/ledger.js";
 import { ProviderError } from "../payments/payouts.js";
 
@@ -87,8 +87,10 @@ export function moneyRoutes(ctx: AppContext) {
         currency: "NGN",
         feeBps: GIFT_CATALOGUE[0]!.feeBps,
         // Stated plainly: what a buyer pays, what Vibe keeps, what the creator gets.
+        // Derived from the same constant the split uses, so the sentence cannot
+        // describe a rate the server does not charge.
         policy:
-          "A paid gift costs the price shown. Vibe keeps 15% and the creator earns 85%, payable to their bank account after a 7-day hold.",
+          `A paid gift costs the price shown. Vibe keeps ${GIFT_FEE_BPS / 100}% and the creator earns ${100 - GIFT_FEE_BPS / 100}%, payable to their bank account after a 7-day hold.`,
       };
     });
 

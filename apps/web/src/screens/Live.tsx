@@ -7,6 +7,7 @@ import {
   MicIcon, TicketIcon, UploadIcon, CloseIcon,
 } from "../components/Icons";
 import { uploadImageFile } from "../media";
+import { PLATFORM_FEE_BPS } from "@vibe/shared";
 
 /**
  * Live Now + activity rooms (addendum §1–§4, §8).
@@ -386,7 +387,7 @@ function GoLiveSheet({ onClose, onCreated }: { onClose: () => void; onCreated: (
         <label className="row spread" htmlFor="livePaid" style={{ cursor: "pointer" }}>
           <span>
             <span style={{ display: "block", fontWeight: 600 }}>Charge for entry</span>
-            <span className="meta">Free to everyone when off. Vibe keeps 30% of a ticket.</span>
+            <span className="meta">Free to everyone when off. Vibe keeps {PLATFORM_FEE_BPS.ticket / 100}% of a ticket.</span>
           </span>
           <span className="row switch-wrap" style={{ gap: "var(--space-2)" }}>
             <span className={`switch${paid ? " on" : ""}`} aria-hidden="true"><span className="switch-knob" /></span>

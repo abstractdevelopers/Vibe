@@ -2,6 +2,7 @@ import { useState } from "react";
 import { api, ApiError } from "../api";
 import { LinkIcon, MicIcon, MusicIcon, FilmIcon, GoalIcon, RadioIcon, TicketIcon, ClockIcon } from "./Icons";
 import type { Room } from "./RoomStudio";
+import { PLATFORM_FEE_BPS } from "@vibe/shared";
 
 /**
  * Per-kind room chrome.
@@ -215,7 +216,7 @@ export function TicketPanel({ room, onBuy }: { room: Room; onBuy: () => void }) 
     <div className="card ticket-card">
       <div className="row spread">
         <span className="row" style={{ gap: 6 }}><TicketIcon width={16} height={16} /> <strong>₦{(room.ticketPriceMinor / 100).toLocaleString()}</strong> entry</span>
-        <span className="meta">Vibe keeps 15%</span>
+        <span className="meta">Vibe keeps {PLATFORM_FEE_BPS.ticket / 100}%</span>
       </div>
       <button className="btn primary block" style={{ marginTop: "var(--space-3)" }} onClick={onBuy}>
         Get a ticket · ₦{(room.ticketPriceMinor / 100).toLocaleString()}

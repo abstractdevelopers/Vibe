@@ -7,6 +7,7 @@ import { GameArt, GameCover, WORLD_ORDER, worldFor } from "../components/GameArt
 import { SpinnerIcon, UsersIcon, PlayIcon, RadioIcon, TrophyIcon } from "../components/Icons";
 import { themeForGame } from "../themes";
 import { applyTheme, followActivity, pickedTheme } from "../theme-runtime";
+import { GAME_RAKE_BPS } from "@vibe/shared";
 
 /**
  * Play — the game world.
@@ -338,7 +339,7 @@ function CreateGameSheet({
                 </div>
                 {stake > 0 && (
                   <p className="meta">
-                    Each player stakes {money(stake, "NGN")}. Vibe takes 5% of the pot; the winner takes the rest.
+                    Each player stakes {money(stake, "NGN")}. Vibe takes {GAME_RAKE_BPS / 100}% of the pot; the winner takes the rest.
                   </p>
                 )}
               </div>

@@ -10,6 +10,7 @@ import { notifyUsers } from "./notifications.js";
 import { walletBalance, postGameStake, postGamePayout, postGameRefund } from "../money/ledger.js";
 import { getEngine, type EngineContext } from "../games/engine.js";
 import { registerAllEngines } from "../games/registry.js";
+import { GAME_RAKE_BPS as SHARED_GAME_RAKE_BPS } from "@vibe/shared";
 
 /**
  * Games: live multiplayer inside Vibe.
@@ -30,8 +31,8 @@ import { registerAllEngines } from "../games/registry.js";
  * before it starts refunds every stake exactly.
  */
 
-/** Vibe's cut of a staked pot, in basis points (5%). */
-export const GAME_RAKE_BPS = 500;
+/** Vibe's cut of a staked pot, in basis points (5%). One shared source. */
+export const GAME_RAKE_BPS = SHARED_GAME_RAKE_BPS;
 
 const createSessionSchema = z.object({
   gameId: z.string().min(1).max(40),

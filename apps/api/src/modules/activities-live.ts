@@ -8,6 +8,7 @@ import { requireCircleMember } from "./access.js";
 import { trackSafe } from "./analytics.js";
 import { requireIdempotencyKey, runIdempotent } from "../idempotency.js";
 import { splitGift } from "../money/catalogue.js";
+import { PLATFORM_FEE_BPS } from "@vibe/shared";
 
 /**
  * Immersive activities: Live Now, sports rooms, movie clubs, listening parties
@@ -133,8 +134,8 @@ function serializeRoom(room: RoomRow, now = new Date()) {
   };
 }
 
-/** The audience fee the platform keeps on a ticket, in basis points (15%). */
-const TICKET_FEE_BPS = 1500;
+/** The audience fee the platform keeps on a ticket. One shared source. */
+const TICKET_FEE_BPS = PLATFORM_FEE_BPS.ticket;
 
 const createRoomSchema = z.object({
   // voice = open audio stage; listen = music-forward listening room.

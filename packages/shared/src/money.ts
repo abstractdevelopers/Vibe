@@ -8,6 +8,29 @@
 
 export type MinorUnits = number;
 
+/**
+ * The platform's cut on each thing Vibe monetises, in basis points.
+ *
+ * One table, imported by both the server (which splits the money) and the
+ * client (which tells the user the split), so a rate can never be changed in one
+ * place and left stale in the other. This has already gone wrong twice: the paid
+ * gift sheet said 70/30 after the gift fee moved to 15%, and the ticket toggle
+ * still said 30% after the ticket fee did.
+ *
+ * 1500 = 15%. The creator or host keeps the rest.
+ */
+export const PLATFORM_FEE_BPS = {
+  /** Paid gifts. Mirrored by `gift_catalogue.fee_bps` for per-row audit. */
+  gift: 1500,
+  /** Ticketed rooms and events. */
+  ticket: 1500,
+  /** Marketplace orders. */
+  order: 1500,
+} as const;
+
+/** The platform's cut on a staked game pot. 500 = 5%. */
+export const GAME_RAKE_BPS = 500;
+
 export interface Money {
   amount: MinorUnits;
   currency: string; // ISO 4217, upper-case
