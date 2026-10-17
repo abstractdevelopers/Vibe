@@ -2493,3 +2493,37 @@ select {
 .theme-swatch:hover { transform: translateY(-2px); }
 .theme-swatch.sel { border-color: var(--text); box-shadow: 0 0 0 3px color-mix(in srgb, var(--text) 20%, transparent); }
 .theme-swatch-name { line-height: 1.15; }
+
+/* ---- Per-kind room panels ---- */
+.kind-tagline { margin: calc(-1 * var(--space-2)) 0 var(--space-2); }
+.kind-panel {
+  background: color-mix(in srgb, var(--surface-2) 82%, transparent);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-card);
+  padding: var(--space-4);
+  margin: var(--space-3) 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+.scoreboard .score-line {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-3);
+  font-family: var(--font-display);
+  letter-spacing: var(--tracking-tight);
+}
+.scoreboard .score-team { flex: 1; text-align: center; font-size: var(--text-supporting); font-weight: 600; }
+.scoreboard .score-num { font-size: clamp(30px, 9vw, 42px); font-weight: 700; line-height: 1; }
+.scoreboard .score-sep { font-size: var(--text-section); color: var(--text-muted); }
+.scoreboard .score-input { max-width: 76px; text-align: center; }
+.queue-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--space-2); }
+.queue-item { display: flex; align-items: center; gap: var(--space-3); }
+.queue-index {
+  width: 22px; height: 22px; flex: 0 0 auto;
+  display: grid; place-items: center;
+  border-radius: var(--radius-pill);
+  background: color-mix(in srgb, var(--accent) 22%, transparent);
+  color: var(--text); font-size: var(--text-meta); font-weight: 700;
+}

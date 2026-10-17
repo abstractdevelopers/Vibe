@@ -5,6 +5,9 @@ import { uploadImageFile } from "../media";
 import { Avatar } from "./Avatar";
 import { GiftSheet } from "./GiftSheet";
 import { PaidGiftSheet } from "./PaidGiftSheet";
+import { AudioQueue, ROOM_KINDS, Scoreboard, TicketPanel, WatchPanel, type Score } from "./RoomKindPanels";
+import { useActivityTheme } from "./useActivityTheme";
+import { themeForRoom } from "../themes";
 import {
   ArrowLeftIcon, BellIcon, CheckIcon, CheerIcon, CloseIcon, EditIcon, GiftIcon,
   HeadphonesIcon, LinkIcon, MicIcon, MusicIcon, ShareIcon, ShieldIcon, TicketIcon,
@@ -37,7 +40,9 @@ export interface Room {
   externalUrl: string | null;
   playbackMode: "coordinated" | "synchronized";
   spoilerPolicy: "open" | "spoiler_safe";
+  layout: "stage" | "broadcast";
   audioTrack: { title: string; artist?: string; artworkUrl?: string } | null;
+  audioQueue: Array<{ id: string; title: string; artist?: string; artworkUrl?: string }>;
   audioStartedAt: string | null;
   ticketPriceMinor: number;
   isTicketed: boolean;
@@ -103,6 +108,7 @@ export function RoomStudio({ roomId, viewerId, viewerName, onBack, onLeft }: Pro
   const [editing, setEditing] = useState(false);
   const [peers, setPeers] = useState<Record<string, MediaStream>>({});
   const [speaking, setSpeaking] = useState<Set<string>>(new Set());
+  const [score, setScore] = useState<Score | null>(null);
 
   const localStream = useRef<MediaStream | null>(null);
   const peerConns = useRef<Map<string, RTCPeerConnection>>(new Map());
@@ -126,6 +132,11 @@ export function RoomStudio({ roomId, viewerId, viewerName, onBack, onLeft }: Pro
       setTicket(t.ticket);
       setStage(m.stage);
       setAudience(m.audience);
+      // A match room has a score; other kinds return null.
+      if (r.room.kind === "sports") {
+        const s = await api<{ score: Score | null }>(`/v1/activities/rooms/${roomId}/score`).catch(() => ({ score: null }));
+        setScore(s.score);
+      }
     } catch (e) {
       setError(e instanceof ApiError ? e.message : "Could not load this room");
     }
@@ -220,6 +231,14 @@ export function RoomStudio({ roomId, viewerId, viewerName, onBack, onLeft }: Pro
       if (p.room) setRoom(p.room as Room);
       return;
     }
+    if (event.type === "room.score") {
+      setScore(p.score as Score | null);
+      return;
+    }
+    if (event.type === "room.queue") {
+      setRoom((prev) => (prev ? { ...prev, audioQueue: (p.queue as Room["audioQueue"]) ?? [] } : prev));
+      return;
+    }
     if (event.type === "room.deleted" || event.type === "room.ended") {
       setError("This room has ended.");
       return;
@@ -274,8 +293,15 @@ export function RoomStudio({ roomId, viewerId, viewerName, onBack, onLeft }: Pro
       const stream = await ensureLocalStream();
       stream.getAudioTracks().forEach((t) => { t.enabled = true; });
       setMicOn(true);
-      // Connect to everyone else already on the stage; the smaller id offers.
-      for (const m of stage) {
+      // Who this speaker connects to depends on the room's format. In an open
+      // mic every speaker meshes with every other speaker. In broadcast only the
+      // host publishes, so a host offers to every listener and a listener who is
+      // brought up offers only to the host — that is what lets a broadcast carry
+      // far more listeners than a full mesh before it needs an SFU.
+      const targets = room?.layout === "broadcast"
+        ? stageOthers.filter((m) => (isHost ? true : m.role === "host"))
+        : stageOthers;
+      for (const m of targets) {
         if (m.id === viewerId) continue;
         if (viewerId < m.id) ensurePeer(m.id, true);
       }
@@ -356,6 +382,7 @@ export function RoomStudio({ roomId, viewerId, viewerName, onBack, onLeft }: Pro
   }
 
   const stageOthers = useMemo(() => stage.filter((m) => m.id !== viewerId), [stage, viewerId]);
+  useActivityTheme(room ? themeForRoom(room.kind) : null);
 
   if (!room) {
     return (
@@ -370,6 +397,8 @@ export function RoomStudio({ roomId, viewerId, viewerName, onBack, onLeft }: Pro
   }
 
   const energy = Math.min(100, Math.round((room.hype / 60) * 100));
+  const kindMeta = ROOM_KINDS[room.kind];
+  const canBroadcast = room.layout === "broadcast" && (room.kind === "voice" || room.kind === "listen" || room.kind === "other");
 
   return (
     <div className="studio">
@@ -378,12 +407,14 @@ export function RoomStudio({ roomId, viewerId, viewerName, onBack, onLeft }: Pro
         <div className="grow" style={{ minWidth: 0 }}>
           <div className="studio-title truncate">{room.title}</div>
           <div className="meta">
-            {room.host.displayName} · {room.memberCount} here
+            <kindMeta.Icon width={12} height={12} /> {kindMeta.label} · {room.host.displayName} · {room.memberCount} here
             {channelStatus !== "open" && <span className="live-dot connecting" title="Reconnecting" />}
           </div>
         </div>
         {room.state === "live" && <span className="live-badge"><span className="live-dot" /> LIVE</span>}
       </div>
+
+      <p className="kind-tagline meta">{kindMeta.tagline}</p>
 
       {/* Energy meter: reactions and gifts in the last hour. */}
       <div className="energy" aria-label={`Room energy ${energy}%`}>
@@ -394,12 +425,24 @@ export function RoomStudio({ roomId, viewerId, viewerName, onBack, onLeft }: Pro
 
       {room.bannerUrl && <img className="room-banner" src={room.bannerUrl} alt="" loading="lazy" />}
 
+      {/* The one panel this kind exists for. */}
+      {room.kind === "sports" && (
+        <Scoreboard roomId={room.id} score={score} isHost={isHost} onChanged={load} />
+      )}
+      {(room.kind === "listen" || room.kind === "music") && (
+        <AudioQueue roomId={room.id} queue={room.audioQueue ?? []} isHost={isHost} onChanged={load} />
+      )}
+      {room.kind === "movie" && <WatchPanel room={room} />}
+
       {/* The stage. */}
       {canSpeak && (
         <section className="stage" aria-label="Stage">
           <div className="stage-head">
             <span className="eyebrow"><MicIcon width={13} height={13} /> Stage · {stage.length}</span>
-            {stage.length > MESH_SPEAKER_LIMIT && (
+            {room.layout === "broadcast" && (
+              <span className="meta">Broadcast — the host speaks, everyone listens</span>
+            )}
+            {room.layout === "stage" && stage.length > MESH_SPEAKER_LIMIT && (
               <span className="meta">P2P mesh — best with {MESH_SPEAKER_LIMIT} or fewer speakers</span>
             )}
           </div>
@@ -424,6 +467,10 @@ export function RoomStudio({ roomId, viewerId, viewerName, onBack, onLeft }: Pro
             ))}
             {stage.length === 0 && <p className="meta">The stage is open. Join it to speak.</p>}
           </div>
+          {/* Broadcast mode: a listener can still ask to speak and be brought up. */}
+          {canBroadcast && !isOnStage && (
+            <p className="meta">You are in the audience. Raise a hand and the host can bring you up.</p>
+          )}
         </section>
       )}
 
@@ -495,15 +542,7 @@ export function RoomStudio({ roomId, viewerId, viewerName, onBack, onLeft }: Pro
       )}
 
       {room.isTicketed && ticket?.status !== "granted" && (
-        <div className="card ticket-card">
-          <div className="row spread">
-            <span className="row" style={{ gap: 6 }}><TicketIcon width={16} height={16} /> <strong>₦{(room.ticketPriceMinor / 100).toLocaleString()}</strong> entry</span>
-            <span className="meta">Vibe keeps 30%</span>
-          </div>
-          <button className="btn primary block" style={{ marginTop: "var(--space-3)" }} onClick={() => void buyTicket()}>
-            Get a ticket · ₦{(room.ticketPriceMinor / 100).toLocaleString()}
-          </button>
-        </div>
+        <TicketPanel room={room} onBuy={() => void buyTicket()} />
       )}
 
       {message && <p className="meta row" style={{ gap: 4 }}><CheckIcon width={13} height={13} /> {message}</p>}
@@ -562,6 +601,7 @@ function RoomEditSheet({ room, onClose, onSaved }: { room: Room; onClose: () => 
   const [rules, setRules] = useState(room.rules ?? "");
   const [city, setCity] = useState(room.city ?? "");
   const [visibility, setVisibility] = useState(room.visibility);
+  const [layout, setLayout] = useState(room.layout ?? "stage");
   const [bannerUrl, setBannerUrl] = useState(room.bannerUrl ?? "");
   const [uploading, setUploading] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -580,7 +620,7 @@ function RoomEditSheet({ room, onClose, onSaved }: { room: Room; onClose: () => 
     try {
       await api(`/v1/activities/rooms/${room.id}`, {
         method: "PATCH",
-        body: { title, topic: topic || null, rules: rules || null, city: city || null, visibility, bannerUrl: bannerUrl || null },
+        body: { title, topic: topic || null, rules: rules || null, city: city || null, visibility, layout, bannerUrl: bannerUrl || null },
       });
       onSaved();
     } catch (e) { setError(e instanceof ApiError ? e.message : "Could not save"); }
@@ -608,6 +648,15 @@ function RoomEditSheet({ room, onClose, onSaved }: { room: Room; onClose: () => 
           <option value="public">Public</option>
           <option value="private">Private (members only)</option>
         </select>
+        {(room.kind === "voice" || room.kind === "listen" || room.kind === "other") && (
+          <>
+            <label htmlFor="rlayout">Format</label>
+            <select id="rlayout" className="input" value={layout} onChange={(e) => setLayout(e.target.value as "stage" | "broadcast")}>
+              <option value="stage">Open mic — everyone on stage can talk</option>
+              <option value="broadcast">Broadcast — you speak, everyone listens</option>
+            </select>
+          </>
+        )}
         <label>Banner</label>
         {bannerUrl && <img className="room-banner" src={bannerUrl} alt="" />}
         <label className="dropzone">

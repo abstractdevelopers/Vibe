@@ -48,10 +48,12 @@ interface RoomRow {
   spoiler_policy: string;
   rules: string | null;
   slow_mode_seconds: number;
+  layout: string;
   is_sponsored: boolean;
   sponsor_label: string | null;
   recurrence: string | null;
   audio_track: unknown;
+  audio_queue?: unknown;
   audio_started_at: Date | null;
   cohost_id: string | null;
   ticket_price_minor: string;
@@ -111,11 +113,15 @@ function serializeRoom(room: RoomRow, now = new Date()) {
     spoilerPolicy: room.spoiler_policy,
     rules: room.rules,
     slowModeSeconds: room.slow_mode_seconds,
+    // stage = open mic (everyone on stage meshes); broadcast = host publishes,
+    // listeners subscribe to the host only. Honest about which one this is.
+    layout: room.layout ?? "stage",
     isSponsored: room.is_sponsored,
     sponsorLabel: room.sponsor_label,
     recurrence: room.recurrence,
     bannerUrl: room.banner_url,
     audioTrack: room.audio_track ?? null,
+    audioQueue: Array.isArray(room.audio_queue) ? room.audio_queue : [],
     audioStartedAt: room.audio_started_at,
     cohostId: room.cohost_id,
     // A room is paid when its ticket price is above zero. The client shows the
@@ -147,6 +153,9 @@ const createRoomSchema = z.object({
   playbackMode: z.enum(["coordinated", "synchronized"]).default("coordinated"),
   spoilerPolicy: z.enum(["open", "spoiler_safe"]).default("open"),
   rules: z.string().max(2000).optional(),
+  // 'stage' = open mic, everyone on stage is meshed. 'broadcast' = one-to-many,
+  // listeners subscribe to the host. Only voice/listen rooms carry audio.
+  layout: z.enum(["stage", "broadcast"]).default("stage"),
   // A creator can go live on any day, including every day.
   recurrence: z.enum(["daily", "weekly", "fortnightly", "monthly"]).optional(),
   // Zero is free entry. Anything above zero is a paid ticket.
@@ -246,8 +255,8 @@ export function activityRoutes(ctx: AppContext) {
           `INSERT INTO activity_rooms
              (id, kind, title, topic, starts_at, ends_at, city, area, visibility, host_id,
               circle_id, data_source, data_source_url, external_url, playback_mode,
-              spoiler_policy, rules, recurrence, ticket_price_minor, banner_url, audio_track)
-           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21)`,
+              spoiler_policy, rules, recurrence, ticket_price_minor, banner_url, audio_track, layout)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22)`,
           [
             id, input.kind, input.title, input.topic ?? null, startsAt, endsAt,
             input.city ?? null, input.area ?? null, input.visibility, user.id,
@@ -256,6 +265,7 @@ export function activityRoutes(ctx: AppContext) {
             input.rules ?? null, input.recurrence ?? null,
             input.ticketPriceMinor, input.bannerUrl ?? null,
             input.audioTrack ? JSON.stringify(input.audioTrack) : null,
+            input.layout,
           ],
         );
         await client.query(
@@ -688,6 +698,7 @@ export function activityRoutes(ctx: AppContext) {
           area: z.string().max(80).nullable().optional(),
           bannerUrl: z.string().max(500).nullable().optional(),
           visibility: z.enum(["public", "private"]).optional(),
+          layout: z.enum(["stage", "broadcast"]).optional(),
           ticketPriceMinor: z.coerce.number().int().min(0).max(100_000_000).optional(),
           audioTrack: z
             .object({ title: z.string().min(1).max(200), artist: z.string().max(200).optional(), artworkUrl: z.string().max(500).optional() })
@@ -711,6 +722,7 @@ export function activityRoutes(ctx: AppContext) {
       if (input.area !== undefined) put("area", input.area);
       if (input.bannerUrl !== undefined) put("banner_url", input.bannerUrl);
       if (input.visibility !== undefined) put("visibility", input.visibility);
+      if (input.layout !== undefined) put("layout", input.layout);
       if (input.ticketPriceMinor !== undefined) put("ticket_price_minor", input.ticketPriceMinor);
       if (input.audioTrack !== undefined) put("audio_track", input.audioTrack ? JSON.stringify(input.audioTrack) : null);
       if (input.startsAt !== undefined) put("starts_at", input.startsAt);
@@ -898,7 +910,136 @@ export function activityRoutes(ctx: AppContext) {
       await assertCanSee(ctx, id, user.id);
       return { hype: await computeHype(ctx, id) };
     });
+
+    // ---- Sports scoreboard (match rooms) ----
+    //
+    // A score without a source is a rumour, so the source is required and the
+    // route refuses the write without one. Only the host or a moderator sets it.
+    app.get("/v1/activities/rooms/:id/score", async (req) => {
+      const user = await requireUser(ctx, req);
+      const { id } = req.params as { id: string };
+      await assertCanSee(ctx, id, user.id);
+      return { score: await loadScore(ctx, id) };
+    });
+
+    app.put("/v1/activities/rooms/:id/score", async (req) => {
+      const user = await requireUser(ctx, req);
+      const { id } = req.params as { id: string };
+      const room = await assertCanSee(ctx, id, user.id);
+      if (room.kind !== "sports") throw ApiError.badRequest("Only a match room has a scoreboard");
+      await assertHost(ctx, id, user.id);
+      const input = parse(
+        z.object({
+          homeLabel: z.string().min(1).max(60),
+          awayLabel: z.string().min(1).max(60),
+          homeScore: z.coerce.number().int().min(0).max(1000),
+          awayScore: z.coerce.number().int().min(0).max(1000),
+          minute: z.string().max(20).optional(),
+          sourceName: z.string().min(1).max(120),
+          sourceUrl: z.string().url().max(500).optional(),
+        }),
+        req.body,
+      );
+      await ctx.pool.query(
+        `INSERT INTO room_scores (room_id, home_label, away_label, home_score, away_score, minute, source_name, source_url, updated_by, updated_at)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9, now())
+         ON CONFLICT (room_id) DO UPDATE SET
+           home_label = EXCLUDED.home_label, away_label = EXCLUDED.away_label,
+           home_score = EXCLUDED.home_score, away_score = EXCLUDED.away_score,
+           minute = EXCLUDED.minute, source_name = EXCLUDED.source_name,
+           source_url = EXCLUDED.source_url, updated_by = EXCLUDED.updated_by, updated_at = now()`,
+        [id, input.homeLabel, input.awayLabel, input.homeScore, input.awayScore,
+         input.minute ?? null, input.sourceName, input.sourceUrl ?? null, user.id],
+      );
+      const score = await loadScore(ctx, id);
+      ctx.hub.publishToRoom(id, { type: "room.score", entityId: id, payload: { score } });
+      return { score };
+    });
+
+    // ---- Audio queue (listen / music rooms) ----
+    app.post("/v1/activities/rooms/:id/queue", async (req, reply) => {
+      const user = await requireUser(ctx, req);
+      const { id } = req.params as { id: string };
+      const room = await assertCanSee(ctx, id, user.id);
+      if (!["listen", "music"].includes(room.kind)) throw ApiError.badRequest("This room has no queue");
+      await assertHost(ctx, id, user.id);
+      const input = parse(
+        z.object({
+          title: z.string().min(1).max(200),
+          artist: z.string().max(200).optional(),
+          artworkUrl: z.string().url().max(500).optional(),
+        }),
+        req.body,
+      );
+      await ctx.pool.query(
+        `UPDATE activity_rooms
+            SET audio_queue = audio_queue || $2::jsonb, edited_at = now()
+          WHERE id = $1`,
+        [id, JSON.stringify([{ id: newId(), ...input }])],
+      );
+      const queue = await loadQueue(ctx, id);
+      ctx.hub.publishToRoom(id, { type: "room.queue", entityId: id, payload: { queue } });
+      reply.code(201);
+      return { queue };
+    });
+
+    // Play the next track: the front of the queue becomes the now-playing track.
+    app.post("/v1/activities/rooms/:id/queue/next", async (req) => {
+      const user = await requireUser(ctx, req);
+      const { id } = req.params as { id: string };
+      const room = await assertCanSee(ctx, id, user.id);
+      if (!["listen", "music"].includes(room.kind)) throw ApiError.badRequest("This room has no queue");
+      await assertHost(ctx, id, user.id);
+      const queue = await loadQueue(ctx, id);
+      const next = queue[0];
+      const rest = queue.slice(1);
+      await ctx.pool.query(
+        `UPDATE activity_rooms SET audio_queue = $2::jsonb, audio_track = $3::jsonb, audio_started_at = now(), edited_at = now() WHERE id = $1`,
+        [id, JSON.stringify(rest), next ? JSON.stringify({ title: next.title, artist: next.artist, artworkUrl: next.artworkUrl }) : null],
+      );
+      const updated = await loadQueue(ctx, id);
+      const roomView = await loadRoom(ctx, id, user.id);
+      ctx.hub.publishToRoom(id, { type: "room.updated", entityId: id, payload: { room: roomView } });
+      ctx.hub.publishToRoom(id, { type: "room.queue", entityId: id, payload: { queue: updated } });
+      return { queue: updated, room: roomView };
+    });
   };
+}
+
+/** The current match score for a sports room, with its citation. */
+export async function loadScore(ctx: AppContext, roomId: string) {
+  const row = await queryOne<{
+    home_label: string; away_label: string; home_score: number; away_score: number;
+    minute: string | null; source_name: string; source_url: string | null; updated_at: Date;
+  }>(
+    ctx.pool,
+    `SELECT home_label, away_label, home_score, away_score, minute, source_name, source_url, updated_at
+       FROM room_scores WHERE room_id = $1`,
+    [roomId],
+  );
+  if (!row) return null;
+  return {
+    homeLabel: row.home_label,
+    awayLabel: row.away_label,
+    homeScore: row.home_score,
+    awayScore: row.away_score,
+    minute: row.minute,
+    // Always shipped with the score, never optional: a score the viewer cannot
+    // trace is a score they should not trust.
+    sourceName: row.source_name,
+    sourceUrl: row.source_url,
+    updatedAt: row.updated_at,
+  };
+}
+
+/** The upcoming tracks for a listen/music room. */
+export async function loadQueue(ctx: AppContext, roomId: string) {
+  const row = await queryOne<{ audio_queue: Array<{ id: string; title: string; artist?: string; artworkUrl?: string }> }>(
+    ctx.pool,
+    `SELECT audio_queue FROM activity_rooms WHERE id = $1`,
+    [roomId],
+  );
+  return Array.isArray(row?.audio_queue) ? row!.audio_queue : [];
 }
 
 /**

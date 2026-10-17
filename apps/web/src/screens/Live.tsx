@@ -222,10 +222,13 @@ function GoLiveSheet({ onClose, onCreated }: { onClose: () => void; onCreated: (
   const [trackArtist, setTrackArtist] = useState("");
   const [bannerUrl, setBannerUrl] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
+  const isAudio = kind === "voice" || kind === "listen";
+  const [layout, setLayout] = useState<"stage" | "broadcast">("stage");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const isAudio = kind === "voice" || kind === "listen";
+  // Only voice/listen/other rooms carry a stage, so only they choose a format.
+  const canBroadcast = kind === "voice" || kind === "listen" || kind === "other";
 
   async function pickBanner(file: File) {
     setError(null);
@@ -252,6 +255,7 @@ function GoLiveSheet({ onClose, onCreated }: { onClose: () => void; onCreated: (
           startsAt: new Date(when).toISOString(),
           durationMinutes,
           visibility: "public",
+          ...(canBroadcast ? { layout } : {}),
           ...(cadence ? { recurrence: cadence } : {}),
           ticketPriceMinor: paid ? Math.round(price * 100) : 0,
           currency: "NGN",
@@ -330,6 +334,25 @@ function GoLiveSheet({ onClose, onCreated }: { onClose: () => void; onCreated: (
           <option value="fortnightly">Every two weeks</option>
           <option value="monthly">Every month</option>
         </select>
+
+        {canBroadcast && (
+          <>
+            <label htmlFor="liveLayout">Format</label>
+            <div className="pill-row" role="tablist" aria-label="Room format">
+              <button type="button" className="pill" role="tab" aria-pressed={layout === "stage"} onClick={() => setLayout("stage")}>
+                <UsersIcon width={15} height={15} style={{ marginRight: 6 }} /> Open mic
+              </button>
+              <button type="button" className="pill" role="tab" aria-pressed={layout === "broadcast"} onClick={() => setLayout("broadcast")}>
+                <MicIcon width={15} height={15} style={{ marginRight: 6 }} /> Broadcast
+              </button>
+            </div>
+            <p className="meta" style={{ marginTop: "-4px" }}>
+              {layout === "stage"
+                ? "Everyone on stage can talk to each other."
+                : "You speak, everyone listens — built for a large audience."}
+            </p>
+          </>
+        )}
 
         {isAudio && (
           <>
