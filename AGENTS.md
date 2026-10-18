@@ -873,6 +873,27 @@ Gotchas the harnesses encode, in case you write new checks:
   and a gambling product, and Part D says a user should not have to risk money
   to be heard. `postBattlePayout` has no rake parameter, so it cannot be passed
   one by mistake. A stake decides what you win, never who wins.
+- **The main bundle is at ~93% of its budget, so new UI goes in a lazy chunk.**
+  The budget is 120 kB gzipped for the main chunk (see `scripts/check-bundle.mjs`).
+  Anything sizeable — a screen, a renderer, a heavy component — must be behind
+  `lazy(() => import(...))`, or it will fail `check-bundle` in CI.
+- **There is no 3D library, by design.** `apps/web/src/three-lite.ts` is a
+  ~2 kB software renderer (rotation, perspective divide, painter's sort, flat
+  shading). It exists because a real 3D engine is several times the entire
+  bundle budget. It renders the 3D avatars and nothing else. If the app ever
+  needs real 3D scenes, replace it with a library in its own lazy chunk rather
+  than growing this file.
+- **Avatars are drawn, not stored.** `apps/web/src/avatar.ts` turns a seed (the
+  user id) into traits, and both `Avatar2D` and `Avatar3D` render from those
+  traits, so a person's 2D and 3D faces are the same character. A photo always
+  wins; the drawing is only the fallback. Never seed an avatar from a display
+  name — it changes, and the face would change with it.
+- **A stake decides what you win, never who is seen.** Battles order the backer
+  list by join time, not by amount. Ranking by money would let a bigger stake
+  buy standing, which is the dark pattern the spec rules out.
+- **`npm test` at the root runs both workspaces.** It used to run only the API
+  suite, so web tests could be added and never run. If you add a workspace with
+  tests, wire it into the root `test` script or it will not run in CI.
 - **Voice needs TURN, not just STUN, and music needs its own audio profile.**
   `coturn` runs on the host (ports 3478 tcp/udp and 49152–65535 udp). The API
   mints short-lived credentials from `TURN_SECRET` at `/v1/rtc/ice` using
