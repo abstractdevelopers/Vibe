@@ -894,6 +894,14 @@ Gotchas the harnesses encode, in case you write new checks:
 - **`npm test` at the root runs both workspaces.** It used to run only the API
   suite, so web tests could be added and never run. If you add a workspace with
   tests, wire it into the root `test` script or it will not run in CI.
+- **Before defining a CSS class, grep for it — a redefinition silently wins.**
+  `.chip-live` already marked whose turn it is in `GameTable` with a red fill;
+  a new `.chip-live` for a live-table count stripped that fill app-wide. Two
+  more: `--surface` and `--muted` are not tokens in this repo (the real ones are
+  `--surface-0..3` and `--text-muted`), and an undefined token fails to nothing,
+  so the element renders invisible. Grep for the class and every `var(--token)`
+  you use before shipping, or the element will be there in the DOM and not on
+  the screen — the same failure the sheet fix describes.
 - **Voice needs TURN, not just STUN, and music needs its own audio profile.**
   `coturn` runs on the host (ports 3478 tcp/udp and 49152â€“65535 udp). The API
   mints short-lived credentials from `TURN_SECRET` at `/v1/rtc/ice` using
