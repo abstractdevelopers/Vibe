@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { api, ApiError } from "../api";
 import { ScreenHeader } from "../components/ScreenHeader";
-import { SpinnerIcon } from "../components/Icons";
+import { SpinnerIcon, ArrowLeftIcon } from "../components/Icons";
 import { ShapeMark, SuitMark, Piece, WHOT_SHAPES, SHAPE_NAME } from "../components/CardFaces";
 import { useActivityTheme } from "../components/useActivityTheme";
 import { themeForGame } from "../themes";
@@ -68,6 +68,23 @@ export function GameTableScreen({ sessionId, viewerId, onBack }: { sessionId: st
     }
   }
 
+  /**
+   * Leaving is not a move. The server answers with { left }, not a session, so
+   * the table must navigate away rather than try to render a reply that has no
+   * state — which used to leave the screen stuck on "Loading the table".
+   */
+  async function leave() {
+    setBusy(true);
+    setError(null);
+    try {
+      await api(`/v1/games/sessions/${sessionId}/leave`, { body: {} });
+      onBack();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Could not leave the table");
+      setBusy(false);
+    }
+  }
+
   if (!session) {
     return (
       <>
@@ -81,12 +98,39 @@ export function GameTableScreen({ sessionId, viewerId, onBack }: { sessionId: st
   const me = session.players.find((p) => p.id === viewerId);
   const isHost = session.hostId === viewerId;
   const canStart = isHost && session.status === "lobby" && session.players.length >= session.minPlayers;
+  const inPlay = session.status === "active";
+  const canLeave = Boolean(me) && session.status !== "finished";
+  // Captured here because the confirm text is read inside a closure, where the
+  // narrowing of `session` above no longer holds.
+  const staked = session.stakeMinor > 0;
+  const othersWaiting = session.players.length > 1;
+
+  function confirmLeave() {
+    if (inPlay && staked) {
+      if (!window.confirm("Leave mid-game? Your stake is forfeited to the other players.")) return;
+    } else if (inPlay) {
+      if (!window.confirm("Leave this game? It continues without you.")) return;
+    } else if (isHost && othersWaiting) {
+      if (!window.confirm("Leave and close this table? Everyone waiting will be refunded.")) return;
+    }
+    void leave();
+  }
 
   return (
     <>
       <ScreenHeader
         eyebrow="Play"
         title={session.gameName}
+        action={
+          <div className="row" style={{ gap: "var(--space-2)" }}>
+            {canLeave && (
+              <button className="btn" disabled={busy} onClick={confirmLeave}>Leave</button>
+            )}
+            <button className="icon-button" aria-label="Back to games" onClick={onBack}>
+              <ArrowLeftIcon width={20} height={20} />
+            </button>
+          </div>
+        }
         subtitle={
           session.status === "lobby"
             ? `Waiting for players · ${session.players.length}/${session.maxPlayers}`
@@ -125,7 +169,6 @@ export function GameTableScreen({ sessionId, viewerId, onBack }: { sessionId: st
               {canStart ? "Start game" : `Need ${session.minPlayers} players`}
             </button>
           )}
-          {me && <button className="btn" disabled={busy} onClick={() => void act("/leave")}>Leave</button>}
         </section>
       )}
 
@@ -137,7 +180,6 @@ export function GameTableScreen({ sessionId, viewerId, onBack }: { sessionId: st
         <GameBoard session={session} state={session.state} busy act={act} readOnly />
       )}
 
-      <button className="btn" onClick={onBack}>Back</button>
       {busy && <div className="row" style={{ justifyContent: "center" }}><SpinnerIcon width={18} height={18} /></div>}
     </>
   );

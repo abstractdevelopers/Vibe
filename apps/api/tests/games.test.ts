@@ -201,7 +201,7 @@ describe("a non-Whot game plays through the same routes", () => {
 });
 
 describe("leaving a lobby refunds the stake", () => {
-  it("returns the exact stake to the wallet", async () => {
+  it("returns the exact stake and deletes a table the host abandons alone", async () => {
     await fund(carol, 100_000, "carol");
     // The host is seated and staked at creation.
     const create = await wallet.app.inject({ method: "POST", url: "/v1/games/sessions", headers: auth(carol.token), payload: { gameId: "whot", stakeMinor: 30_000 } });
@@ -212,7 +212,46 @@ describe("leaving a lobby refunds the stake", () => {
     expect(leave.statusCode).toBe(200);
     expect(leave.json().refunded).toBe(true);
     expect(await balance(carol)).toBe(afterStake + 30_000);
-    const pot = await wallet.pool.query("SELECT pot_minor FROM game_sessions WHERE id = $1", [sessionId]);
-    expect(Number(pot.rows[0].pot_minor)).toBe(0);
+    // A lobby the host walks away from is litter: nobody can start it. It must
+    // not linger in the open-games list.
+    const gone = await wallet.pool.query("SELECT 1 FROM game_sessions WHERE id = $1", [sessionId]);
+    expect(gone.rowCount).toBe(0);
+  });
+
+  it("refunds everyone waiting when the host closes the table", async () => {
+    await fund(carol, 100_000, "carol2");
+    await fund(alice, 100_000, "alice2");
+    const create = await wallet.app.inject({ method: "POST", url: "/v1/games/sessions", headers: auth(carol.token), payload: { gameId: "whot", stakeMinor: 30_000 } });
+    const sessionId = create.json().session.id;
+    const join = await wallet.app.inject({ method: "POST", url: `/v1/games/sessions/${sessionId}/join`, headers: auth(alice.token) });
+    expect([200, 201]).toContain(join.statusCode);
+    const aliceBefore = await balance(alice);
+    const carolBefore = await balance(carol);
+
+    const leave = await wallet.app.inject({ method: "POST", url: `/v1/games/sessions/${sessionId}/leave`, headers: auth(carol.token) });
+    expect(leave.statusCode).toBe(200);
+
+    // Both stakes come back, and no session is left behind holding the pot.
+    expect(await balance(alice)).toBe(aliceBefore + 30_000);
+    expect(await balance(carol)).toBe(carolBefore + 30_000);
+    const gone = await wallet.pool.query("SELECT 1 FROM game_sessions WHERE id = $1", [sessionId]);
+    expect(gone.rowCount).toBe(0);
+  });
+
+  it("keeps a table open when a guest leaves and refunds only them", async () => {
+    await fund(carol, 100_000, "carol3");
+    await fund(alice, 100_000, "alice3");
+    const create = await wallet.app.inject({ method: "POST", url: "/v1/games/sessions", headers: auth(carol.token), payload: { gameId: "whot", stakeMinor: 30_000 } });
+    const sessionId = create.json().session.id;
+    await wallet.app.inject({ method: "POST", url: `/v1/games/sessions/${sessionId}/join`, headers: auth(alice.token) });
+    const aliceBefore = await balance(alice);
+
+    const leave = await wallet.app.inject({ method: "POST", url: `/v1/games/sessions/${sessionId}/leave`, headers: auth(alice.token) });
+    expect(leave.statusCode).toBe(200);
+    expect(leave.json().refunded).toBe(true);
+    expect(await balance(alice)).toBe(aliceBefore + 30_000);
+    // The host is still there, so the table survives.
+    const alive = await wallet.pool.query("SELECT 1 FROM game_sessions WHERE id = $1", [sessionId]);
+    expect(alive.rowCount).toBe(1);
   });
 });

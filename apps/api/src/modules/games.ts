@@ -424,6 +424,7 @@ export function gameRoutes(ctx: AppContext) {
         return { left: true, forfeited: Number(session.stake_minor) > 0 };
       }
       if (session.status === "lobby") {
+        const hostLeaving = session.host_id === user.id;
         await withTransaction(ctx.pool, async (tx) => {
           const player = await queryOne<{ staked_minor: string }>(
             tx as unknown as AppContext["pool"],
@@ -441,6 +442,29 @@ export function gameRoutes(ctx: AppContext) {
             await tx.query("UPDATE game_sessions SET pot_minor = GREATEST(pot_minor - $2, 0), updated_at = now() WHERE id = $1", [id, stake]);
           }
           await tx.query("DELETE FROM game_players WHERE session_id = $1 AND user_id = $2", [id, user.id]);
+          // A lobby the host has walked away from is not a table, it is litter:
+          // nobody else can start it. Delete it, and refund every remaining
+          // stake through the same path, so no Yen is stranded in a dead room.
+          if (hostLeaving) {
+            const others = await queryMany<{ user_id: string; staked_minor: string }>(
+              tx as unknown as AppContext["pool"],
+              "SELECT user_id, staked_minor FROM game_players WHERE session_id = $1",
+              [id],
+            );
+            for (const other of others) {
+              const otherStake = Number(other.staked_minor);
+              if (otherStake > 0) {
+                await postGameRefund(tx, {
+                  reference: `GAMEREFUND-${id}-${other.user_id}`,
+                  userId: other.user_id,
+                  amountMinor: otherStake,
+                  currency: session.currency,
+                });
+              }
+            }
+            await tx.query("DELETE FROM game_players WHERE session_id = $1", [id]);
+            await tx.query("DELETE FROM game_sessions WHERE id = $1", [id]);
+          }
         });
         return { left: true, refunded: Number(session.stake_minor) > 0 };
       }
