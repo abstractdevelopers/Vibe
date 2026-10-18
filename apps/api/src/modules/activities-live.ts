@@ -275,6 +275,8 @@ export function activityRoutes(ctx: AppContext) {
         );
       });
       trackSafe(ctx.pool, { name: "activity_created", userId: user.id, properties: { kind: input.kind, entityType: "room", entityId: id } });
+      // A new public room should appear in everyone's Live list without a reload.
+      ctx.hub.publishBroadcast({ type: "rooms.changed", entityId: id, payload: { roomId: id, change: "created" } });
       reply.code(201);
       return { room: await loadRoom(ctx, id, user.id) };
     });
@@ -749,10 +751,12 @@ export function activityRoutes(ctx: AppContext) {
       if (Number(paid?.n ?? 0) > 0) {
         await ctx.pool.query(`UPDATE activity_rooms SET state_override = 'ended', edited_at = now() WHERE id = $1`, [id]);
         ctx.hub.publishToRoom(id, { type: "room.ended", entityId: id, payload: {} });
+        ctx.hub.publishBroadcast({ type: "rooms.changed", entityId: id, payload: { roomId: id, change: "ended" } });
         return { id, deleted: false, ended: true };
       }
       await ctx.pool.query(`DELETE FROM activity_rooms WHERE id = $1`, [id]);
       ctx.hub.publishToRoom(id, { type: "room.deleted", entityId: id, payload: {} });
+      ctx.hub.publishBroadcast({ type: "rooms.changed", entityId: id, payload: { roomId: id, change: "deleted" } });
       reply.code(200);
       return { id, deleted: true, ended: false };
     });

@@ -36,11 +36,13 @@ interface Subscriber {
 }
 
 /** A cross-instance bus. `postgres` is the built-in implementation. */
+export type RealtimeScope = "room" | "circle" | "users" | "broadcast";
+
 export interface RealtimeBus {
   /** Send an already-serialized event to every other instance. */
-  publish(scope: "room" | "circle" | "users", key: string, event: RealtimeEvent): void;
+  publish(scope: RealtimeScope, key: string, event: RealtimeEvent): void;
   /** Receive events from other instances. */
-  onMessage(handler: (scope: "room" | "circle" | "users", key: string, event: RealtimeEvent) => void): void;
+  onMessage(handler: (scope: RealtimeScope, key: string, event: RealtimeEvent) => void): void;
   close(): Promise<void>;
 }
 
@@ -53,7 +55,7 @@ export interface RealtimeBus {
  * event, since realtime only ever says "something changed".
  */
 export class PostgresBus implements RealtimeBus {
-  private handler: ((scope: "room" | "circle" | "users", key: string, event: RealtimeEvent) => void) | null = null;
+  private handler: ((scope: RealtimeScope, key: string, event: RealtimeEvent) => void) | null = null;
   private closed = false;
   /** Identifies this instance so it can ignore its own NOTIFY echo. */
   private readonly origin = `inst_${Math.random().toString(36).slice(2)}${Date.now().toString(36)}`;
@@ -65,7 +67,7 @@ export class PostgresBus implements RealtimeBus {
     client.on("notification", (n) => {
       if (!n.payload || !this.handler) return;
       try {
-        const parsed = JSON.parse(n.payload) as { scope: "room" | "circle" | "users"; key: string; event: RealtimeEvent; origin?: string };
+        const parsed = JSON.parse(n.payload) as { scope: RealtimeScope; key: string; event: RealtimeEvent; origin?: string };
         // Postgres delivers a NOTIFY to the connection that sent it too. Those
         // events were already delivered to local sockets by the publisher, so
         // relaying them again would double every message.
@@ -80,7 +82,7 @@ export class PostgresBus implements RealtimeBus {
     });
   }
 
-  publish(scope: "room" | "circle" | "users", key: string, event: RealtimeEvent): void {
+  publish(scope: RealtimeScope, key: string, event: RealtimeEvent): void {
     if (this.closed) return;
     let payload = JSON.stringify({ scope, key, event, origin: this.origin });
     if (payload.length > PostgresBus.MAX_PAYLOAD) {
@@ -91,7 +93,7 @@ export class PostgresBus implements RealtimeBus {
     void this.client.query(`SELECT pg_notify($1, $2)`, [PostgresBus.CHANNEL, payload]).catch(() => undefined);
   }
 
-  onMessage(handler: (scope: "room" | "circle" | "users", key: string, event: RealtimeEvent) => void): void {
+  onMessage(handler: (scope: RealtimeScope, key: string, event: RealtimeEvent) => void): void {
     this.handler = handler;
   }
 
@@ -123,6 +125,7 @@ export class RealtimeHub {
     bus?.onMessage((scope, key, event) => {
       if (scope === "room") this.deliverToRoom(key, event);
       else if (scope === "circle") this.deliverToCircle(key, event);
+      else if (scope === "broadcast") this.deliverToAll(event);
       else this.deliverToUsers(key.split(","), event);
     });
   }
@@ -192,6 +195,18 @@ export class RealtimeHub {
     this.bus?.publish("circle", circleId, full);
   }
 
+  /**
+   * Publish to every connected socket. Reserved for lifecycle changes to
+   * *public* things — a room or a battle appearing, ending or being removed —
+   * where the event carries only an id and a state, never content. Anything
+   * scoped to a person or a circle must use the narrower methods above.
+   */
+  publishBroadcast(event: Omit<RealtimeEvent, "id" | "sequence" | "timestamp">): void {
+    const full = this.stamp(event);
+    this.deliverToAll(full);
+    this.bus?.publish("broadcast", "all", full);
+  }
+
   /** Publish to a specific set of users (e.g. plan participants). */
   publishToUsers(userIds: string[], event: Omit<RealtimeEvent, "id" | "sequence" | "timestamp">): void {
     const full = this.stamp(event);
@@ -212,6 +227,10 @@ export class RealtimeHub {
 
   private deliverToCircle(circleId: string, event: RealtimeEvent): void {
     for (const subscriber of this.byCircle.get(circleId) ?? []) this.send(subscriber, event);
+  }
+
+  private deliverToAll(event: RealtimeEvent): void {
+    for (const subscriber of this.subscribers) this.send(subscriber, event);
   }
 
   private deliverToUsers(userIds: string[], event: RealtimeEvent): void {

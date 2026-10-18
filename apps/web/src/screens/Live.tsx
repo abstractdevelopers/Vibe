@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { api, ApiError, idempotencyKey, mediaSrc } from "../api";
 import { useNav } from "../nav";
+import { useRealtime } from "../realtime";
 import {
   ArrowLeftIcon, RadioIcon, GoalIcon, FilmIcon, MusicIcon, ClockIcon, UsersIcon,
   ShareIcon, BellIcon, CheckIcon, ShieldIcon, InfoIcon, LinkIcon, GlobeIcon, LockIcon,
@@ -116,6 +117,13 @@ export function LiveScreen({ onBack }: { onBack: () => void }) {
   }, []);
 
   useEffect(() => { reload(); }, [reload]);
+
+  // A room created, ended or deleted anywhere should change this list at once.
+  // The event carries only an id and a change kind, so nothing private travels
+  // on the shared channel.
+  useRealtime((event) => {
+    if (event.type === "rooms.changed") reload();
+  });
 
   return (
     <div>

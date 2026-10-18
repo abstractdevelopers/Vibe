@@ -25,6 +25,18 @@ function fakeBus() {
 }
 
 describe("realtime hub", () => {
+  // The Live list is not inside any room, so a room ending or being deleted used
+  // to be invisible to it until a manual refresh. A broadcast reaches every
+  // socket, including one that never joined a room.
+  it("broadcasts a public lifecycle change to sockets that are in no room", () => {
+    const hub = new RealtimeHub();
+    const watcher = fakeSocket();
+    hub.subscribe(watcher, "user-watch", []);
+    hub.publishBroadcast({ type: "rooms.changed", entityId: "room-9", payload: { roomId: "room-9", change: "deleted" } });
+    expect(watcher.sent.length).toBe(1);
+    expect(JSON.parse(watcher.sent[0]!).type).toBe("rooms.changed");
+  });
+
   it("delivers a room event only to sockets present in that room", () => {
     const hub = new RealtimeHub();
     const a = fakeSocket();
