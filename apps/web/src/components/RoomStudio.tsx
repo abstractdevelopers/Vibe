@@ -160,6 +160,14 @@ export function RoomStudio({ roomId, viewerId, viewerName, onBack, onLeft }: Pro
       setTicket(t.ticket);
       setStage(m.stage);
       setAudience(m.audience);
+      // Membership is a fact on the server, not something the viewer should have
+      // to assert. The host is written to room_members when the room is created,
+      // so the host is already in — but `joined` started false, so the host was
+      // shown a Join button for their own room and had to press it before the mic
+      // would come on. Derive it from the member lists instead.
+      if (m.stage.some((x) => x.id === viewerId) || m.audience.some((x) => x.id === viewerId)) {
+        setJoined(true);
+      }
       // A match room has a score; other kinds return null.
       if (r.room.kind === "sports") {
         const s = await api<{ score: Score | null }>(`/v1/activities/rooms/${roomId}/score`).catch(() => ({ score: null }));
@@ -168,7 +176,7 @@ export function RoomStudio({ roomId, viewerId, viewerName, onBack, onLeft }: Pro
     } catch (e) {
       setError(e instanceof ApiError ? e.message : "Could not load this room");
     }
-  }, [roomId]);
+  }, [roomId, viewerId]);
 
   useEffect(() => { void load(); }, [load]);
 

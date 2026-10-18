@@ -118,6 +118,46 @@ describe("activity rooms", () => {
   });
 });
 
+
+// Two phones, both with the mic on, and neither could hear the other. The stage
+// list is what the client builds peer connections from, and a joiner used to be
+// written as 'member' — audience — so a guest was never on the stage and no peer
+// was ever created. The migration says a voice room is an open stage; these
+// tests pin that, and pin that a broadcast room is not.
+describe("voice room stage", () => {
+  const stageOf = async (roomId: string, token: string) => {
+    const res = await h.app.inject({ method: "GET", url: `/v1/activities/rooms/${roomId}/members`, headers: auth(token) });
+    return res.json() as { stage: Array<{ id: string }>; audience: Array<{ id: string }> };
+  };
+
+  it("puts a guest on the stage of an open voice room so peers can form", async () => {
+    const room = await makeRoom({ kind: "voice", title: "Open mic", layout: "stage" });
+    const id = room.json().room.id as string;
+    await h.app.inject({ method: "POST", url: `/v1/activities/rooms/${id}/join`, headers: auth(fan.token), payload: {} });
+    const { stage, audience } = await stageOf(id, host.token);
+    expect(stage.some((m) => m.id === fan.id)).toBe(true);
+    expect(audience.some((m) => m.id === fan.id)).toBe(false);
+  });
+
+  it("keeps a listener in the audience of a broadcast voice room", async () => {
+    const room = await makeRoom({ kind: "voice", title: "Broadcast", layout: "broadcast" });
+    const id = room.json().room.id as string;
+    await h.app.inject({ method: "POST", url: `/v1/activities/rooms/${id}/join`, headers: auth(fan.token), payload: {} });
+    const { stage, audience } = await stageOf(id, host.token);
+    expect(stage.some((m) => m.id === fan.id)).toBe(false);
+    expect(audience.some((m) => m.id === fan.id)).toBe(true);
+  });
+
+  it("keeps a listener in the audience of a music room", async () => {
+    const room = await makeRoom({ kind: "listen", title: "Listening party" });
+    const id = room.json().room.id as string;
+    await h.app.inject({ method: "POST", url: `/v1/activities/rooms/${id}/join`, headers: auth(fan.token), payload: {} });
+    const { audience } = await stageOf(id, host.token);
+    expect(audience.some((m) => m.id === fan.id)).toBe(true);
+  });
+});
+
+
 describe("viral loop", () => {
   it("previews a link without a session, then returns the member to the room", async () => {
     const room = (await makeRoom({ title: "Share me" })).json().room;

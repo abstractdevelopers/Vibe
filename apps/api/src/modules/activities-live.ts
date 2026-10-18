@@ -335,10 +335,20 @@ export function activityRoutes(ctx: AppContext) {
           throw ApiError.paymentRequired("This room needs a ticket");
         }
       }
+      // A voice room is an open stage: the migration says anyone who joins can
+      // speak. Everyone used to be inserted as the default 'member' role, which
+      // is audience, so a guest was never on the stage, the client built no peer
+      // from the stage list, and two people who both pressed "mic on" still
+      // heard nothing. An open voice room now puts the joiner on the stage.
+      //
+      // A broadcast room is the opposite: the host publishes and listeners
+      // subscribe, so a joiner stays in the audience. A listen room follows the
+      // host's playback, so it also stays audience.
+      const openStage = room.kind === "voice" && room.layout !== "broadcast";
       await ctx.pool.query(
-        `INSERT INTO room_members (room_id, user_id) VALUES ($1,$2)
+        `INSERT INTO room_members (room_id, user_id, role) VALUES ($1,$2,$3)
          ON CONFLICT (room_id, user_id) DO NOTHING`,
-        [id, user.id],
+        [id, user.id, openStage ? "speaker" : "member"],
       );
       trackSafe(ctx.pool, { name: "room_joined", userId: user.id, properties: { kind: room.kind, entityType: "room", entityId: id } });
       return { room: await loadRoom(ctx, id, user.id), joined: true };
