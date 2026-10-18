@@ -974,3 +974,42 @@ Gotchas the harnesses encode, in case you write new checks:
 - Overlap findings inside a sheet are usually the dimmed page behind the sheet.
   Confirm with a direct `getBoundingClientRect` probe before changing CSS.
 
+
+## Deploy access survives at /workspace/.tools
+
+- **`/tmp` is wiped between sessions; `/workspace/.tools` is not.** The Coolify
+  host key lives at `/workspace/.tools/keys/coolify_host_0`, and
+  `/workspace/.tools/vps.py '<cmd>'` (or `-f script.sh`) runs a command on the
+  VPS over paramiko using that key. Do not re-mint credentials in `/tmp` — use
+  this. `ssh` itself may be missing from the image; `vps.py` does not need it.
+- **Deploy with `/workspace/.tools/deploy.sh`** (mint a short-lived token in
+  `coolify-db`, then `POST /api/v1/deploy` for app
+  `4odwboyulnfdthdlv9hzrguf`). Poll the returned `deployment_uuid`.
+- **A deploy can report `finished` and still ship the old bundle.** Check the
+  running container: its name carries the commit timestamp, and
+  `/app/apps/web/src/<file>` inside it shows whether the new source is present.
+  The bundle hash on the web host changing is the only proof the web shipped.
+
+## The feed
+
+- **A voice room is an open stage, and the stage list is what builds audio
+  peers.** Joining used to insert the guest as `member` (audience), so no peer
+  was ever created and two people who both pressed "mic on" heard nothing.
+  `join` now inserts a speaker for an open voice room, and stays audience for a
+  broadcast or listen room. If voice is silent again, check the joiner's `role`
+  in `room_members` first — not the client.
+- **Membership is derived, not asserted.** `joined` started false and only the
+  Join button set it, so a host saw "Join" on its own room. Read it from the
+  member lists in `load()`.
+- **Feed visibility lives in one `VISIBILITY` clause** in `feed.ts`: public is
+  visible to all, `connections` needs an accepted follow, `circle` needs
+  membership, and blocks/mutes always apply. Do not add a second copy of that
+  rule anywhere; a "fix" that loosens it is a privacy bug.
+- **`/v1/discover/creators`** is the people-to-follow source. It must keep
+  excluding followed, self, private, blocked and muted accounts, and must never
+  rank by anything paid.
+- **`overflow-x: hidden` on `body` does not clip the viewport.** A deliberately
+  oversized decorative element (the auth imprint, `inset: -10% -24%`) still made
+  the whole app draggable sideways. `overflow-x: clip` on `html` fixes it without
+  creating a scroll container, so `position: sticky` keeps working.
+
