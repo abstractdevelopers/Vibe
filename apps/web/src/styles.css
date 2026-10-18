@@ -34,6 +34,12 @@ body {
 
 html {
   -webkit-text-size-adjust: 100%;
+  /* The auth hero's decorative imprint is deliberately wider than the screen
+     (inset: -10% -24%). `overflow-x: hidden` on body alone does not clip the
+     viewport scroll, so the whole app could be dragged sideways on the login
+     screen. `clip` on the root stops that without creating a scroll container,
+     so position: sticky keeps working. */
+  overflow-x: clip;
 }
 
 body {
@@ -846,6 +852,245 @@ select {
 .pill-row::-webkit-scrollbar {
   display: none;
 }
+
+/* ---- Discovery rail ----
+   The strip above the feed that shows what is live, what is being argued about,
+   and who is worth following. Flat surfaces and one accent, no gradients: the
+   art of a live room is the only image, so the cards stay quiet around it. */
+.rail {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  margin-bottom: var(--space-4);
+}
+
+.rail-section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.rail-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.rail-title {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin: 0;
+  font-size: var(--text-supporting);
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+/* A live dot only pulses on the section that is actually live. */
+.rail-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--accent);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .rail-dot {
+    animation: rail-pulse 1.6s var(--ease-out) infinite;
+  }
+}
+
+@keyframes rail-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.35; }
+}
+
+/* One horizontal scroller per section. Scroll snap makes a card land square
+   instead of half off the edge. */
+.rail-track {
+  display: flex;
+  gap: var(--space-3);
+  overflow-x: auto;
+  scroll-snap-type: x mandatory;
+  padding-bottom: var(--space-1);
+  scrollbar-width: none;
+}
+
+.rail-track::-webkit-scrollbar {
+  display: none;
+}
+
+.rail-track > * {
+  scroll-snap-align: start;
+  flex: 0 0 auto;
+}
+
+/* A live room: a wide card with the room art behind a solid scrim, so the text
+   is always legible whatever the banner is. */
+.live-card {
+  position: relative;
+  width: 236px;
+  height: 140px;
+  border-radius: var(--radius-card);
+  overflow: hidden;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  display: flex;
+  align-items: flex-end;
+  cursor: pointer;
+}
+
+.live-card-art {
+  position: absolute;
+  inset: 0;
+  background-size: cover;
+  background-position: center;
+}
+
+/* The scrim is a single flat, opaque wash rather than a gradient: the art fills
+   the card and this strip sits on the bottom, so the title is legible whatever
+   the banner image is. */
+.live-card-body {
+  position: relative;
+  width: 100%;
+  padding: var(--space-3);
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  background: var(--surface-0);
+}
+
+.live-badge {
+  align-self: flex-start;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: var(--surface-3);
+  color: var(--text-muted);
+}
+
+.live-badge.on {
+  background: var(--accent);
+  color: var(--accent-ink);
+}
+
+.live-card-title {
+  font-size: var(--text-supporting);
+  font-weight: 700;
+  color: var(--text);
+  display: -webkit-box;
+  -webkit-line-clamp: 1;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.live-card-meta {
+  font-size: var(--text-caption);
+  color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* A battle: the two sides and a split bar that is the actual tally, not decor. */
+.battle-card {
+  width: 210px;
+  padding: var(--space-3);
+  border-radius: var(--radius-card);
+  background: var(--surface-1);
+  border: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  text-align: left;
+  cursor: pointer;
+}
+
+.battle-card-title {
+  font-size: var(--text-supporting);
+  font-weight: 700;
+  color: var(--text);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  min-height: 2.6em;
+}
+
+.battle-split {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--text-caption);
+  font-weight: 700;
+}
+
+.battle-side {
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.battle-vs {
+  color: var(--text-muted);
+  font-weight: 500;
+}
+
+.battle-bar {
+  display: flex;
+  height: 6px;
+  border-radius: 999px;
+  overflow: hidden;
+  background: var(--surface-3);
+}
+
+.battle-bar-a {
+  background: var(--accent);
+}
+
+.battle-card-meta {
+  font-size: var(--text-caption);
+  color: var(--text-muted);
+}
+
+/* A creator to follow. */
+.creator-card {
+  width: 104px;
+  padding: var(--space-3) var(--space-2);
+  border-radius: var(--radius-card);
+  background: var(--surface-1);
+  border: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-2);
+  cursor: pointer;
+}
+
+.creator-name {
+  font-size: var(--text-caption);
+  font-weight: 700;
+  color: var(--text);
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.creator-handle {
+  font-size: 11px;
+  color: var(--text-muted);
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 
 /* The host options inside the Create sheet. Two columns of small, equal tiles,
    so "what am I making" reads as one set of choices rather than a list. */

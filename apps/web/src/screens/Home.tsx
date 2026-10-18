@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { api, ApiError, mediaSrc } from "../api";
 import type { Comment, FeedItem, Me, PollActivity } from "../types";
+import { DiscoveryRail } from "../components/DiscoveryRail";
 import {
   CloseIcon,
   CommentIcon,
@@ -49,11 +50,14 @@ interface Props {
   refreshKey: number;
   onChanged: () => void;
   onCreate: (mode: CreateMode) => void;
+  onOpenLive?: (id: string) => void;
+  onOpenBattle?: (id: string) => void;
+  onOpenCreator?: (id: string) => void;
 }
 
 type FeedTab = "for-you" | "following";
 
-export function HomeScreen({ me, refreshKey, onChanged, onCreate }: Props) {
+export function HomeScreen({ me, refreshKey, onChanged, onCreate, onOpenLive, onOpenBattle, onOpenCreator }: Props) {
   const [tab, setTab] = useState<FeedTab>("for-you");
   const [items, setItems] = useState<FeedItem[] | null>(null);
   const [cursor, setCursor] = useState<string | null>(null);
@@ -240,6 +244,10 @@ export function HomeScreen({ me, refreshKey, onChanged, onCreate }: Props) {
             </button>
           }
         />
+      )}
+
+      {tab === "for-you" && onOpenLive && onOpenBattle && onOpenCreator && (
+        <DiscoveryRail onOpenLive={onOpenLive} onOpenBattle={onOpenBattle} onOpenCreator={onOpenCreator} />
       )}
 
       <div className="stream">

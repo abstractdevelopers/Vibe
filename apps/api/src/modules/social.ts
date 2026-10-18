@@ -111,5 +111,46 @@ export function socialRoutes(ctx: AppContext) {
       );
       return { users: rows.map(publicUser) };
     });
+
+    // People worth following, for the feed's discovery rail. This is deliberately
+    // people the viewer does NOT already follow — a "people to follow" rail that
+    // shows people you follow is noise. Ranked by real signal only: how many
+    // people follow them, and whether they share an interest with the viewer.
+    // Someone who is private, blocked, muted or already followed is excluded.
+    app.get("/v1/discover/creators", async (req) => {
+      const user = await requireUser(ctx, req);
+      const limit = Math.min(Number((req.query as { limit?: string }).limit ?? 12) || 12, 30);
+      const rows = await queryMany<UserLike & { follower_count: string }>(
+        ctx.pool,
+        `SELECT u.id, u.handle, u.display_name, u.bio, u.avatar_url,
+                (SELECT count(*) FROM follows f2
+                  WHERE f2.followee_id = u.id AND f2.state = 'accepted') AS follower_count
+           FROM users u
+           LEFT JOIN follows f
+             ON f.followee_id = u.id AND f.follower_id = $1
+          WHERE u.id <> $1
+            AND u.deleted_at IS NULL
+            AND u.discoverable
+            AND u.profile_audience <> 'private'
+            AND f.follower_id IS NULL
+            AND NOT EXISTS (SELECT 1 FROM blocks b
+                             WHERE (b.blocker_id = $1 AND b.blocked_id = u.id)
+                                OR (b.blocker_id = u.id AND b.blocked_id = $1))
+            AND NOT EXISTS (SELECT 1 FROM mutes m WHERE m.muter_id = $1 AND m.muted_id = u.id)
+          ORDER BY
+            -- Shared interests first, then reach. Both are real signals; neither
+            -- is a paid placement.
+            (CASE WHEN EXISTS (SELECT 1 FROM users me
+                                WHERE me.id = $1
+                                  AND me.interests && u.interests
+                                  AND array_length(u.interests, 1) > 0)
+                  THEN 0 ELSE 1 END),
+            follower_count DESC,
+            u.created_at DESC
+          LIMIT $2`,
+        [user.id, limit],
+      );
+      return { users: rows.map((r) => ({ ...publicUser(r), followerCount: Number(r.follower_count) })) };
+    });
   };
 }

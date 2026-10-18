@@ -273,6 +273,9 @@ export function App() {
                     refreshKey={refreshKey}
                     onChanged={bump}
                     onCreate={(mode) => openCreate(mode)}
+                    onOpenLive={(id) => push({ name: "room", roomId: id })}
+                    onOpenBattle={(id) => push({ name: "battle", battleId: id })}
+                    onOpenCreator={(id) => push({ name: "profile", userId: id })}
                   />
                 )}
                 {tab === "circles" && <CirclesScreen me={me} refreshKey={refreshKey} onChanged={bump} />}
