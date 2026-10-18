@@ -1,0 +1,191 @@
+{
+  "home": {
+    "url": "https://vibe.launchverse.site/",
+    "viewport": {
+      "w": 390,
+      "h": 844
+    },
+    "findings": [
+      {
+        "kind": "invisible-button",
+        "el": "button.",
+        "detail": "Home"
+      },
+      {
+        "kind": "invisible-button",
+        "el": "button.",
+        "detail": "Circles"
+      },
+      {
+        "kind": "invisible-button",
+        "el": "button.",
+        "detail": "Play"
+      },
+      {
+        "kind": "invisible-button",
+        "el": "button.",
+        "detail": "Explore"
+      }
+    ]
+  },
+  "circles": {
+    "url": "https://vibe.launchverse.site/",
+    "viewport": {
+      "w": 390,
+      "h": 844
+    },
+    "findings": [
+      {
+        "kind": "invisible-button",
+        "el": "button.",
+        "detail": "Home"
+      },
+      {
+        "kind": "invisible-button",
+        "el": "button.",
+        "detail": "Circles"
+      },
+      {
+        "kind": "invisible-button",
+        "el": "button.",
+        "detail": "Play"
+      },
+      {
+        "kind": "invisible-button",
+        "el": "button.",
+        "detail": "Explore"
+      }
+    ]
+  },
+  "play": {
+    "url": "https://vibe.launchverse.site/",
+    "viewport": {
+      "w": 390,
+      "h": 844
+    },
+    "findings": [
+      {
+        "kind": "invisible-button",
+        "el": "button.",
+        "detail": "Home"
+      },
+      {
+        "kind": "invisible-button",
+        "el": "button.",
+        "detail": "Circles"
+      },
+      {
+        "kind": "invisible-button",
+        "el": "button.",
+        "detail": "Play"
+      },
+      {
+        "kind": "invisible-button",
+        "el": "button.",
+        "detail": "Explore"
+      }
+    ]
+  },
+  "explore": {
+    "url": "https://vibe.launchverse.site/",
+    "viewport": {
+      "w": 390,
+      "h": 844
+    },
+    "findings": [
+      {
+        "kind": "overflow-right",
+        "el": "button.pill",
+        "detail": "right=438 vw=390"
+      },
+      {
+        "kind": "overflow-right",
+        "el": "button.pill",
+        "detail": "right=512 vw=390"
+      },
+      {
+        "kind": "overflow-right",
+        "el": "button.pill",
+        "detail": "right=586 vw=390"
+      },
+      {
+        "kind": "invisible-button",
+        "el": "button.",
+        "detail": "Home"
+      },
+      {
+        "kind": "invisible-button",
+        "el": "button.",
+        "detail": "Circles"
+      },
+      {
+        "kind": "invisible-button",
+        "el": "button.",
+        "detail": "Play"
+      },
+      {
+        "kind": "invisible-button",
+        "el": "button.",
+        "detail": "Explore"
+      }
+    ]
+  },
+  "live": {
+    "url": "https://vibe.launchverse.site/",
+    "viewport": {
+      "w": 390,
+      "h": 844
+    },
+    "findings": [
+      {
+        "kind": "invisible-button",
+        "el": "button.",
+        "detail": "Home"
+      },
+      {
+        "kind": "invisible-button",
+        "el": "button.",
+        "detail": "Circles"
+      },
+      {
+        "kind": "invisible-button",
+        "el": "button.",
+        "detail": "Play"
+      },
+      {
+        "kind": "invisible-button",
+        "el": "button.",
+        "detail": "Explore"
+      }
+    ]
+  },
+  "battles": {
+    "url": "https://vibe.launchverse.site/",
+    "viewport": {
+      "w": 390,
+      "h": 844
+    },
+    "findings": [
+      {
+        "kind": "invisible-button",
+        "el": "button.",
+        "detail": "Home"
+      },
+      {
+        "kind": "invisible-button",
+        "el": "button.",
+        "detail": "Circles"
+      },
+      {
+        "kind": "invisible-button",
+        "el": "button.",
+        "detail": "Play"
+      },
+      {
+        "kind": "invisible-button",
+        "el": "button.",
+        "detail": "Explore"
+      }
+    ]
+  }
+}

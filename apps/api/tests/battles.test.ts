@@ -81,6 +81,27 @@ afterAll(async () => {
 });
 
 describe("battles", () => {
+  // The list route read `req.user`, which the API never sets, so it passed an
+  // empty viewer id to a uuid column. Postgres rejected the cast and the global
+  // error handler turned it into "not_found" — so every signed-in user saw an
+  // empty Battles tab. No test called the list route, so nothing caught it.
+  it("lists battles for a signed-in viewer", async () => {
+    const host = await registerUser(h.app, "blister");
+    const created = await h.app.inject({
+      method: "POST",
+      url: "/v1/battles",
+      headers: auth(host.token),
+      payload: { title: "Tea vs Coffee", sideA: "Tea", sideB: "Coffee" },
+    });
+    expect(created.statusCode).toBe(201);
+
+    const listed = await h.app.inject({ method: "GET", url: "/v1/battles", headers: auth(host.token) });
+    expect(listed.statusCode).toBe(200);
+    const battles = listed.json().battles as Array<{ id: string; title: string }>;
+    expect(battles.some((b) => b.id === created.json().battle.id)).toBe(true);
+    expect(battles.some((b) => b.title === "Tea vs Coffee")).toBe(true);
+  });
+
   it("runs a free battle: create, join, vote, close, and count one vote each", async () => {
     const host = await registerUser(h.app, "bhost");
     const voter = await registerUser(h.app, "bvoter");

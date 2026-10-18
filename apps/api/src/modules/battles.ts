@@ -239,7 +239,7 @@ async function settle(ctx: AppContext, battle: BattleRow, winner: "a" | "b" | "t
 export function battleRoutes(ctx: AppContext) {
   return async function register(app: FastifyInstance): Promise<void> {
     app.get("/v1/battles", async (req) => {
-      await requireUser(ctx, req);
+      const user = await requireUser(ctx, req);
       const q = parse(z.object({ status: z.enum(["open", "closed"]).optional(), limit: z.coerce.number().int().min(1).max(50).default(20) }), req.query);
       const rows = await queryMany<BattleRow>(
         ctx.pool,
@@ -249,7 +249,7 @@ export function battleRoutes(ctx: AppContext) {
           LIMIT $2`,
         [q.status ?? null, q.limit],
       );
-      return { battles: await Promise.all(rows.map((r) => battleView(ctx, r, (req as unknown as { user: { id: string } }).user?.id ?? ""))) };
+      return { battles: await Promise.all(rows.map((r) => battleView(ctx, r, user.id))) };
     });
 
     app.post("/v1/battles", async (req, reply) => {

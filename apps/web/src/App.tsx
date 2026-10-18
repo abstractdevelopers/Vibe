@@ -18,6 +18,7 @@ import { StorefrontScreen, ProductScreen, OrdersScreen, OrderScreen, SellerOrder
 import { EventsScreen } from "./screens/Events";
 import { LiveScreen } from "./screens/Live";
 import { CreateSheet } from "./components/CreateSheet";
+import { CreateSomethingSheet } from "./components/CreateSomething";
 import {
   ChatIcon,
   CirclesIcon,
@@ -33,7 +34,7 @@ import {
   PlusIcon,
   ReceiptIcon,
   SettingsIcon,
-  SparklesIcon,
+  SplitIcon,
   WalletIcon,
   ShieldIcon,
   TicketIcon,
@@ -66,7 +67,7 @@ import { applyTheme, restoreTheme, rotateAutoTheme, themeMode, ROTATION_MS } fro
 import { Avatar } from "./components/Avatar";
 import type { Me } from "./types";
 
-export type Tab = "home" | "circles" | "play" | "explore" | "you";
+export type Tab = "home" | "circles" | "play" | "battles" | "explore" | "you";
 
 /**
  * The app routes in memory, so a shared link cannot reach a screen on its own.
@@ -93,6 +94,7 @@ export function App() {
   const [createOpen, setCreateOpen] = useState(false);
   const [createMode, setCreateMode] = useState<CreateMode>("post");
   const [refreshKey, setRefreshKey] = useState(0);
+  const [somethingOpen, setSomethingOpen] = useState(false);
 
   const openCreate = (mode: CreateMode) => {
     setCreateMode(mode);
@@ -250,7 +252,7 @@ export function App() {
                 onMeChanged={loadMe}
                 onOpenProfile={() => push({ name: "profile", userId: me.id })}
                 onOpenYou={() => { goToTabs(); setTab("you"); }}
-                onStartSomething={() => openCreate("post")}
+                onStartSomething={() => setSomethingOpen(true)}
               />
             </div>
           </header>
@@ -277,6 +279,11 @@ export function App() {
                 {tab === "play" && (
                   <Suspense fallback={<div className="skeleton" aria-busy="true" />}>
                     <GamesScreen onBack={goToTabs} />
+                  </Suspense>
+                )}
+                {tab === "battles" && (
+                  <Suspense fallback={<div className="skeleton" aria-busy="true" />}>
+                    <BattlesScreen />
                   </Suspense>
                 )}
                 {tab === "explore" && <ExploreScreen me={me} />}
@@ -400,9 +407,30 @@ export function App() {
               route={route}
               onNavigate={goToTabs}
             />
+            <NavButton
+              id="battles"
+              label="Battles"
+              Icon={SplitIcon}
+              tab={tab}
+              setTab={setTab}
+              route={route}
+              onNavigate={goToTabs}
+            />
             <NavButton id="explore" label="Explore" Icon={CompassIcon} tab={tab} setTab={setTab} route={route} onNavigate={goToTabs} />
           </nav>
         </>
+      )}
+
+      {somethingOpen && me && (
+        <CreateSomethingSheet
+          onClose={() => setSomethingOpen(false)}
+          onCreated={() => {
+            setSomethingOpen(false);
+            setRoute({ name: "tabs" });
+            setTab("home");
+            bump();
+          }}
+        />
       )}
 
       {createOpen && me && (
@@ -628,16 +656,6 @@ function AccountMenu({
           </button>
 
           <p className="menu-group" role="presentation">More</p>
-          <button
-            className="menu-item"
-            role="menuitem"
-            onClick={() => {
-              setOpen(false);
-              nav.push({ name: "assist" });
-            }}
-          >
-            <SparklesIcon width={17} height={17} /> Assist
-          </button>
           <button
             className="menu-item"
             role="menuitem"
