@@ -2846,8 +2846,8 @@ select {
   margin-top: var(--space-4);
   border: 1px solid var(--border);
   border-radius: var(--radius-pill);
-  background: var(--surface);
-  color: var(--muted);
+  background: var(--surface-2);
+  color: var(--text-muted);
 }
 .game-search input {
   flex: 1;
@@ -2861,12 +2861,23 @@ select {
 }
 .game-search input::-webkit-search-cancel-button { display: none; }
 
-.chip-live {
+/* A "Stakes" chip was used across the games UI but never defined, so it
+   rendered as a plain chip. Gold from the warning token, so it follows the
+   environment like every other interactive colour. */
+.chip-gold {
+  background: color-mix(in srgb, var(--warning) 26%, transparent);
+  color: var(--text);
+  border: 1px solid color-mix(in srgb, var(--warning) 55%, transparent);
+}
+
+/* Not .chip-live: that class already marks whose turn it is in GameTable. */
+.chip-livecount {
   display: inline-flex;
   align-items: center;
   gap: 5px;
-  background: var(--surface-2);
+  background: color-mix(in srgb, var(--surface-2) 80%, transparent);
   color: var(--text);
+  border: 1px solid var(--hairline);
 }
 
 .game-rules {
@@ -2885,8 +2896,29 @@ select {
   font-weight: 700;
   letter-spacing: 0.06em;
   text-transform: uppercase;
-  color: var(--muted);
+  color: var(--text-muted);
 }
+
+/* ---- Battle backers ------------------------------------------------------
+   The faces behind each side. A staked backer carries a ring so money and a
+   free vote are told apart at a glance, and the list is ordered by when people
+   joined, never by how much they put in. */
+.battle-faces {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-top: var(--space-3);
+}
+.battle-face {
+  display: inline-flex;
+  border-radius: var(--radius-pill);
+  box-shadow: 0 0 0 2px var(--surface-2);
+}
+.battle-face.staked {
+  box-shadow: 0 0 0 2px var(--surface-2), 0 0 0 4px color-mix(in srgb, var(--warning) 70%, transparent);
+}
+.battle-faces-more { font-size: 0.78rem; }
 
 /* ---- Avatar studio -------------------------------------------------------
    The 2D/3D switch in the profile editor. The face keeps its circle so the

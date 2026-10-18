@@ -298,7 +298,7 @@ export function GamesScreen({ onBack }: { onBack?: () => void }) {
                   </span>
                   <span className="game-tile-tags">
                     {liveByGame[g.id] ? (
-                      <span className="chip chip-live"><span className="live-dot" aria-hidden="true" /> {liveByGame[g.id]} live</span>
+                      <span className="chip chip-livecount"><span className="live-dot" aria-hidden="true" /> {liveByGame[g.id]} live</span>
                     ) : null}
                     {g.stakeEnabled && g.availability === "playable" && <span className="chip chip-gold">Stakes</span>}
                     {g.availability === "playable" && <span className="chip chip-quiet">Playable</span>}
