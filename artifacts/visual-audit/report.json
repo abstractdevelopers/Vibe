@@ -5,28 +5,7 @@
       "w": 390,
       "h": 844
     },
-    "findings": [
-      {
-        "kind": "invisible-button",
-        "el": "button.",
-        "detail": "Home"
-      },
-      {
-        "kind": "invisible-button",
-        "el": "button.",
-        "detail": "Circles"
-      },
-      {
-        "kind": "invisible-button",
-        "el": "button.",
-        "detail": "Play"
-      },
-      {
-        "kind": "invisible-button",
-        "el": "button.",
-        "detail": "Explore"
-      }
-    ]
+    "findings": []
   },
   "circles": {
     "url": "https://vibe.launchverse.site/",
@@ -34,28 +13,7 @@
       "w": 390,
       "h": 844
     },
-    "findings": [
-      {
-        "kind": "invisible-button",
-        "el": "button.",
-        "detail": "Home"
-      },
-      {
-        "kind": "invisible-button",
-        "el": "button.",
-        "detail": "Circles"
-      },
-      {
-        "kind": "invisible-button",
-        "el": "button.",
-        "detail": "Play"
-      },
-      {
-        "kind": "invisible-button",
-        "el": "button.",
-        "detail": "Explore"
-      }
-    ]
+    "findings": []
   },
   "play": {
     "url": "https://vibe.launchverse.site/",
@@ -63,28 +21,7 @@
       "w": 390,
       "h": 844
     },
-    "findings": [
-      {
-        "kind": "invisible-button",
-        "el": "button.",
-        "detail": "Home"
-      },
-      {
-        "kind": "invisible-button",
-        "el": "button.",
-        "detail": "Circles"
-      },
-      {
-        "kind": "invisible-button",
-        "el": "button.",
-        "detail": "Play"
-      },
-      {
-        "kind": "invisible-button",
-        "el": "button.",
-        "detail": "Explore"
-      }
-    ]
+    "findings": []
   },
   "explore": {
     "url": "https://vibe.launchverse.site/",
@@ -92,43 +29,7 @@
       "w": 390,
       "h": 844
     },
-    "findings": [
-      {
-        "kind": "overflow-right",
-        "el": "button.pill",
-        "detail": "right=438 vw=390"
-      },
-      {
-        "kind": "overflow-right",
-        "el": "button.pill",
-        "detail": "right=512 vw=390"
-      },
-      {
-        "kind": "overflow-right",
-        "el": "button.pill",
-        "detail": "right=586 vw=390"
-      },
-      {
-        "kind": "invisible-button",
-        "el": "button.",
-        "detail": "Home"
-      },
-      {
-        "kind": "invisible-button",
-        "el": "button.",
-        "detail": "Circles"
-      },
-      {
-        "kind": "invisible-button",
-        "el": "button.",
-        "detail": "Play"
-      },
-      {
-        "kind": "invisible-button",
-        "el": "button.",
-        "detail": "Explore"
-      }
-    ]
+    "findings": []
   },
   "live": {
     "url": "https://vibe.launchverse.site/",
@@ -136,28 +37,7 @@
       "w": 390,
       "h": 844
     },
-    "findings": [
-      {
-        "kind": "invisible-button",
-        "el": "button.",
-        "detail": "Home"
-      },
-      {
-        "kind": "invisible-button",
-        "el": "button.",
-        "detail": "Circles"
-      },
-      {
-        "kind": "invisible-button",
-        "el": "button.",
-        "detail": "Play"
-      },
-      {
-        "kind": "invisible-button",
-        "el": "button.",
-        "detail": "Explore"
-      }
-    ]
+    "findings": []
   },
   "battles": {
     "url": "https://vibe.launchverse.site/",
@@ -165,26 +45,40 @@
       "w": 390,
       "h": 844
     },
+    "findings": []
+  },
+  "you": {
+    "url": "https://vibe.launchverse.site/",
+    "viewport": {
+      "w": 390,
+      "h": 844
+    },
+    "findings": []
+  },
+  "menu": {
+    "url": "https://vibe.launchverse.site/",
+    "viewport": {
+      "w": 390,
+      "h": 844
+    },
+    "findings": []
+  },
+  "create": {
+    "url": "https://vibe.launchverse.site/",
+    "viewport": {
+      "w": 390,
+      "h": 844
+    },
     "findings": [
       {
-        "kind": "invisible-button",
-        "el": "button.",
-        "detail": "Home"
+        "kind": "text-overlap",
+        "el": "h1.screen-title <> p.eyebrow",
+        "detail": "55x18"
       },
       {
-        "kind": "invisible-button",
-        "el": "button.",
-        "detail": "Circles"
-      },
-      {
-        "kind": "invisible-button",
-        "el": "button.",
-        "detail": "Play"
-      },
-      {
-        "kind": "invisible-button",
-        "el": "button.",
-        "detail": "Explore"
+        "kind": "text-overlap",
+        "el": "p.vibe-line <> h2.",
+        "detail": "55x21"
       }
     ]
   }

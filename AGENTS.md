@@ -925,3 +925,52 @@ Gotchas the harnesses encode, in case you write new checks:
   `data:` and `blob:` URLs untouched. Raw binary uploads likewise use
   `apiUrl()`. Miss either and images silently 404 while the upload itself
   succeeds, which reads as "upload is broken".
+
+## Realtime, auth, and the traps that cost days
+
+- **`req.user` is never set.** Nothing in `apps/api/src` decorates the request
+  with the authenticated user. Every route that needs the caller must call
+  `requireUser(ctx, req)` and use the value it *returns*. Reading
+  `(req as any).user?.id` yields `undefined`, and `?? ""` then sends an empty
+  string into a `uuid` column. Postgres raises `22P02`, and the global error
+  handler maps that code to a `not_found` 404 — so the screen shows "Not found"
+  for a route that works perfectly. This is what hid the whole Battles tab.
+- **A route is not tested until its list path is tested.** The battles suite
+  covered create, join, vote and close but never `GET /v1/battles`, which is the
+  only call the screen makes. Passing tests said nothing about the broken screen.
+  When a screen breaks, add the call the screen actually makes.
+- **Realtime has four scopes, and the default one is too narrow for lists.**
+  `publishToRoom` only reaches sockets that joined *that* room. A list screen
+  (Live, notifications) is in no room, so it hears nothing. Use
+  `publishBroadcast` for lifecycle changes to public things — it carries an id
+  and a state only, never content. Adding a scope means widening the
+  `RealtimeScope` union, the `PostgresBus` handler, and the `deliverTo*` routing
+  in `apps/api/src/realtime.ts` together.
+- **A list screen must subscribe, or nothing it is told will matter.** Live.tsx
+  now calls `useRealtime`; without that call the broadcast had nowhere to land.
+
+## Voice rooms
+
+- **Joining must turn the mic on.** `join()` in `RoomStudio` calls
+  `toggleMic()` for the host and for anyone already on the stage. An earlier
+  comment claimed the host's mic was on by default; the code did not do it, so
+  `micOn` stayed false, no track was ever sent, and every voice room was silent.
+- **Who offers is a pure function, `apps/web/src/rtc-mesh.ts`.** One offer per
+  pair, decided by id order; in a broadcast only the host offers. It runs on
+  every stage change, not only on the mic toggle, so a peer that joins or is
+  promoted later still connects. Tested in `apps/web/tests/rtc-mesh.test.ts`.
+- **`disconnected` is not terminal.** A peer that reports `disconnected` gets a
+  five-second grace period; only `failed` and `closed` tear it down. Tearing down
+  on `disconnected` ended calls permanently on a phone changing network.
+
+## Visual audits
+
+- `scripts/audit-visual.mjs` drives the live site at 390x844, sets `vibe.token`
+  in `localStorage`, and clicks real nav buttons (the app has no URL routing).
+  Pages: home, circles, play, explore, live, battles, you, menu, create.
+- Ignore overflow findings inside a horizontal scroller — a `.pill-row` is meant
+  to sit past the edge. The script skips them; do not "fix" one by removing
+  `overflow-x`.
+- Overlap findings inside a sheet are usually the dimmed page behind the sheet.
+  Confirm with a direct `getBoundingClientRect` probe before changing CSS.
+

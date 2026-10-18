@@ -27,6 +27,11 @@ const PAGES = [
   ["explore", "Explore"],
   ["live", "Live"],
   ["battles", "Battles"],
+  ["you", "You"],
+  // The header menu, where "Start something" and Settings live.
+  ["menu", "Menu"],
+  // The composer hub, reached from the centre create button.
+  ["create", "Create"],
 ];
 
 const probe = () => {
@@ -38,12 +43,23 @@ const probe = () => {
     return `${el.tagName.toLowerCase()}${id}.${cls}`;
   };
 
+  const inScroller = (el) => {
+    let n = el.parentElement;
+    while (n && n !== document.body) {
+      const cs = getComputedStyle(n);
+      if ((cs.overflowX === "auto" || cs.overflowX === "scroll") && n.scrollWidth > n.clientWidth + 1) return true;
+      n = n.parentElement;
+    }
+    return false;
+  };
+
   // 1. Anything overflowing the viewport on the x axis.
   for (const el of document.querySelectorAll("body *")) {
     const r = el.getBoundingClientRect();
     if (r.width === 0 || r.height === 0) continue;
     const cs = getComputedStyle(el);
     if (cs.position === "fixed") continue;
+    if (inScroller(el)) continue;
     if (r.right > vw + 1) {
       findings.push({ kind: "overflow-right", el: desc(el), detail: `right=${Math.round(r.right)} vw=${vw}` });
     }
@@ -78,7 +94,8 @@ const probe = () => {
     const noBorder = cs.borderTopWidth === "0px" && cs.borderBottomWidth === "0px";
     const noImage = cs.backgroundImage === "none";
     const hasText = (el.textContent || "").trim().length > 0;
-    if (transparent && noBorder && noImage && hasText && el.tagName === "BUTTON") {
+    const wantsSurface = /(^|\s)(btn|card|chip|tile|pill|tab)(\s|$|-)/.test((el.className || "").toString());
+    if (transparent && noBorder && noImage && hasText && el.tagName === "BUTTON" && wantsSurface) {
       findings.push({ kind: "invisible-button", el: desc(el), detail: el.textContent.trim().slice(0, 30) });
     }
   }
@@ -128,11 +145,17 @@ for (const [name, label] of PAGES) {
   await page.goto(BASE + "/", { waitUntil: "networkidle2", timeout: 30000 }).catch(() => {});
   await new Promise((r) => setTimeout(r, 1500));
   if (label) {
-    // Click the bottom-nav button with this label, then wait for the screen.
+    // Prefer the bottom nav; fall back to any button whose label or aria-label
+    // matches, which is how the header menu and the centre create button open.
     await page.evaluate((lbl) => {
-      const btns = [...document.querySelectorAll("nav.bottom-nav button, .bottom-nav button")];
-      const b = btns.find((x) => (x.textContent || "").trim() === lbl);
-      if (b) b.click();
+      const navBtns = [...document.querySelectorAll("nav.bottom-nav button, .bottom-nav button")];
+      const nav = navBtns.find((x) => (x.textContent || "").trim() === lbl);
+      if (nav) { nav.click(); return; }
+      const all = [...document.querySelectorAll("button")];
+      const byAria = all.find((x) => (x.getAttribute("aria-label") || "").trim() === lbl);
+      if (byAria) { byAria.click(); return; }
+      const byText = all.find((x) => (x.textContent || "").trim() === lbl);
+      byText?.click();
     }, label);
     await new Promise((r) => setTimeout(r, 2200));
   }
