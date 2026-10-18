@@ -512,7 +512,7 @@ function AccountMenu({
         aria-label="Account menu"
         onClick={() => setOpen((v) => !v)}
       >
-        <Avatar name={me.displayName} url={me.avatarUrl} size="sm" />
+        <Avatar name={me.displayName} url={me.avatarUrl} seed={me.id} size="sm" />
       </button>
       {open && (
         <div className="menu" role="menu">

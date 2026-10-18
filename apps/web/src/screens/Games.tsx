@@ -4,10 +4,11 @@ import { useNav } from "../nav";
 import { ScreenHeader } from "../components/ScreenHeader";
 import { EmptyState } from "../components/EmptyState";
 import { GameArt, GameCover, WORLD_ORDER, worldFor } from "../components/GameArt";
-import { SpinnerIcon, UsersIcon, PlayIcon, RadioIcon, TrophyIcon, SplitIcon, ChevronRightIcon } from "../components/Icons";
+import { SpinnerIcon, UsersIcon, PlayIcon, RadioIcon, TrophyIcon, SplitIcon, ChevronRightIcon, SearchIcon, CloseIcon } from "../components/Icons";
 import { themeForGame } from "../themes";
 import { applyTheme, pickedTheme, themeMode } from "../theme-runtime";
 import { GAME_RAKE_BPS } from "@vibe/shared";
+import { noteFor } from "../gameInfo";
 
 /**
  * Play — the game world.
@@ -73,6 +74,7 @@ export function GamesScreen({ onBack }: { onBack?: () => void }) {
   const [picked, setPicked] = useState<Game | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [category, setCategory] = useState<string | null>(null);
+  const [query, setQuery] = useState("");
 
   const load = useCallback(async () => {
     try {
@@ -102,7 +104,20 @@ export function GamesScreen({ onBack }: { onBack?: () => void }) {
     return acc;
   }, [games]);
 
-  const shown = category ? (byCategory[category] ?? []) : (games ?? []);
+  // How many open tables each game has right now, so the catalogue reflects the
+  // room rather than being a static list.
+  const liveByGame = useMemo(() => {
+    const acc: Record<string, number> = {};
+    for (const s of sessions) acc[s.gameId] = (acc[s.gameId] ?? 0) + 1;
+    return acc;
+  }, [sessions]);
+
+  const shown = useMemo(() => {
+    const base = category ? (byCategory[category] ?? []) : (games ?? []);
+    const q = query.trim().toLowerCase();
+    if (!q) return base;
+    return base.filter((g) => g.name.toLowerCase().includes(q) || g.blurb.toLowerCase().includes(q));
+  }, [category, byCategory, games, query]);
 
   // The room takes on the environment of whatever game is in focus.
   const focus = picked ?? (category ? (byCategory[category]?.[0] ?? featured) : featured);
@@ -128,6 +143,22 @@ export function GamesScreen({ onBack }: { onBack?: () => void }) {
       />
 
       {error && <div className="notice danger" role="alert">{error}</div>}
+
+      <div className="game-search">
+        <SearchIcon width={16} height={16} />
+        <input
+          type="search"
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          placeholder="Search games"
+          aria-label="Search games"
+        />
+        {query && (
+          <button className="icon-button" aria-label="Clear search" onClick={() => setQuery("")}>
+            <CloseIcon width={16} height={16} />
+          </button>
+        )}
+      </div>
 
       {/* The marquee. A lit band carrying the arcade's identity, the game in
           focus, and the one action that matters: enter. */}
@@ -266,6 +297,9 @@ export function GamesScreen({ onBack }: { onBack?: () => void }) {
                     <UsersIcon width={11} height={11} /> {g.minPlayers}–{g.maxPlayers}
                   </span>
                   <span className="game-tile-tags">
+                    {liveByGame[g.id] ? (
+                      <span className="chip chip-live"><span className="live-dot" aria-hidden="true" /> {liveByGame[g.id]} live</span>
+                    ) : null}
                     {g.stakeEnabled && g.availability === "playable" && <span className="chip chip-gold">Stakes</span>}
                     {g.availability === "playable" && <span className="chip chip-quiet">Playable</span>}
                   </span>
@@ -329,6 +363,22 @@ function CreateGameSheet({
           <button className="icon-button" aria-label="Close" onClick={onClose}>&times;</button>
         </div>
         <p className="meta">{game.blurb}</p>
+
+        {(() => {
+          const note = noteFor(game.id, game.blurb);
+          return (
+            <div className="game-rules">
+              <div className="game-rule">
+                <span className="game-rule-label">How you win</span>
+                <span>{note.goal}</span>
+              </div>
+              <div className="game-rule">
+                <span className="game-rule-label">On your turn</span>
+                <span>{note.turn}</span>
+              </div>
+            </div>
+          );
+        })()}
 
         {!playable ? (
           <>

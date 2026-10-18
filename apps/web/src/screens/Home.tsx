@@ -186,7 +186,7 @@ export function HomeScreen({ me, refreshKey, onChanged, onCreate }: Props) {
       {/* One composer. It opens the same create sheet as the centre action, so
           there is a single creation flow rather than two competing ones. */}
       <div className="composer">
-        <Avatar name={me.displayName} url={me.avatarUrl} size="sm" />
+        <Avatar name={me.displayName} url={me.avatarUrl} seed={me.id} size="sm" />
         <button className="composer-prompt" onClick={() => onCreate("post")}>
           What&rsquo;s happening, {firstName}?
         </button>
@@ -384,7 +384,7 @@ function FeedCard({
           aria-label={`View ${item.author.displayName}'s profile`}
           onClick={() => nav.push({ name: "profile", userId: item.author.id })}
         >
-          <Avatar name={item.author.displayName} url={item.author.avatarUrl} size="sm" />
+          <Avatar name={item.author.displayName} url={item.author.avatarUrl} seed={item.author.id} size="sm" />
         </button>
         <div className="grow">
           <button

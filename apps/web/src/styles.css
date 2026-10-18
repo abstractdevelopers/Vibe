@@ -2833,3 +2833,70 @@ select {
 @keyframes auth-imprint-in {
   from { opacity: 0; transform: scale(1.03); }
 }
+
+/* ---- Game hub additions --------------------------------------------------
+   A search field, a live-count chip, and the rules panel on the game sheet.
+   The live chip carries a dot rather than a colour alone, so the count is not
+   lost on a colour-blind reader. */
+.game-search {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 0 var(--space-3);
+  margin-top: var(--space-4);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+  background: var(--surface);
+  color: var(--muted);
+}
+.game-search input {
+  flex: 1;
+  border: none;
+  background: transparent;
+  color: inherit;
+  padding: 10px 0;
+  min-width: 0;
+  outline: none;
+  font: inherit;
+}
+.game-search input::-webkit-search-cancel-button { display: none; }
+
+.chip-live {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  background: var(--surface-2);
+  color: var(--text);
+}
+
+.game-rules {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  margin: var(--space-3) 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-card);
+  background: var(--surface-2);
+}
+.game-rule { display: flex; flex-direction: column; gap: 2px; }
+.game-rule-label {
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+/* ---- Avatar studio -------------------------------------------------------
+   The 2D/3D switch in the profile editor. The face keeps its circle so the
+   preview matches exactly how the avatar will appear in a feed. */
+.avatar-studio {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-2);
+}
+.avatar-studio .avatar { width: 64px; height: 64px; }
+.avatar-studio-switch { display: flex; gap: 4px; }
+.avatar-studio-switch .pill { padding: 3px 12px; font-size: 0.78rem; }

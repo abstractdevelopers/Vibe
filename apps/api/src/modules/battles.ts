@@ -60,8 +60,30 @@ interface SideTally {
   stakedMinor: number;
 }
 
+interface BackerRow {
+  id: string;
+  side: "a" | "b";
+  stake_minor: string;
+  handle: string;
+  display_name: string;
+  avatar_url: string | null;
+}
+
 function num(v: string | number | null): number {
   return v === null ? 0 : Number(v);
+}
+
+/**
+ * What a backer would take if their side wins, given the pot as it stands.
+ *
+ * The pot is split in proportion to what each winner staked, so a side with
+ * many backers is a side with many winners: everyone who backed it gets a
+ * slice. The share is a projection, not a promise — it moves as more people
+ * stake, which is why the screen labels it as it stands right now.
+ */
+function projectedShare(myStake: number, sideStaked: number, pot: number): number {
+  if (myStake <= 0 || sideStaked <= 0 || pot <= 0) return 0;
+  return Math.floor((myStake / sideStaked) * pot);
 }
 
 /** The tallies for both sides, computed from the vote and stake rows. */
@@ -97,6 +119,24 @@ async function battleView(ctx: AppContext, row: BattleRow, viewerId: string) {
     "SELECT id, handle, display_name, avatar_url FROM users WHERE id = $1",
     [row.host_id],
   );
+  // The first people behind the battle, so a large battle still shows who
+  // showed up. This is deliberately ordered by time, not by stake: ranking by
+  // money would let a bigger stake buy standing, and a stake must only ever
+  // decide what you win, never who is seen.
+  const backers = await queryMany<BackerRow>(
+    ctx.pool,
+    `SELECT bp.user_id AS id, bp.side, bp.stake_minor, u.handle, u.display_name, u.avatar_url
+       FROM battle_participants bp
+       JOIN users u ON u.id = bp.user_id
+      WHERE bp.battle_id = $1
+      ORDER BY bp.created_at ASC
+      LIMIT 8`,
+    [row.id],
+  );
+  const pot = num(row.pot_minor);
+  const myStake = num(mine?.stake_minor ?? null);
+  const mySide = (mine?.side as "a" | "b" | undefined) ?? null;
+  const mySideStaked = mySide ? (mySide === "a" ? t.a.stakedMinor : t.b.stakedMinor) : 0;
   return {
     id: row.id,
     title: row.title,
@@ -106,16 +146,24 @@ async function battleView(ctx: AppContext, row: BattleRow, viewerId: string) {
     winner: row.winner,
     stakeMinor: num(row.stake_minor),
     currency: row.currency,
-    potMinor: num(row.pot_minor),
+    potMinor: pot,
     endsAt: row.ends_at,
     createdAt: row.created_at,
     tally: { a: t.a.votes, b: t.b.votes },
     backing: { a: t.a, b: t.b },
     host: host ? publicUser(host) : null,
     // What the viewer did, so the UI can show "you backed A" rather than guess.
-    mySide: mine?.side ?? null,
-    myStakeMinor: num(mine?.stake_minor ?? null),
+    mySide,
+    myStakeMinor: myStake,
     myPayoutMinor: num(mine?.payout_minor ?? null),
+    // What the viewer's stake is worth if their side wins as the pot stands.
+    // Zero until they stake, and labelled as an estimate on the screen.
+    myProjectedMinor: row.status === "open" ? projectedShare(myStake, mySideStaked, pot) : 0,
+    backers: backers.map((b) => ({
+      side: b.side,
+      staked: num(b.stake_minor) > 0,
+      user: publicUser(b),
+    })),
   };
 }
 

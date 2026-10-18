@@ -3,6 +3,7 @@ import { api, ApiError, mediaSrc } from "../api";
 import type { Me } from "../types";
 import { ArrowLeftIcon, CheckIcon, CloseIcon, ImageIcon, UploadIcon } from "../components/Icons";
 import { useMediaUpload, uploadImageFile } from "../media";
+import { AvatarStudio } from "../components/AvatarStudio";
 
 interface Props {
   me: Me;
@@ -81,13 +82,13 @@ export function EditProfileScreen({ me, onBack, onSaved }: Props) {
 
       <div className="card">
         <div className="row" style={{ gap: "var(--space-4)", marginBottom: "var(--space-4)" }}>
-          <span className="avatar" style={{ width: 64, height: 64, fontSize: 24 }} aria-hidden="true">
-            {avatarUrl ? (
+          {avatarUrl ? (
+            <span className="avatar" style={{ width: 64, height: 64 }} aria-hidden="true">
               <img src={mediaSrc(avatarUrl)} alt="" />
-            ) : (
-              displayName.slice(0, 1).toUpperCase() || "?"
-            )}
-          </span>
+            </span>
+          ) : (
+            <AvatarStudio seed={me.id} name={displayName} />
+          )}
           <div className="grow">
             <div className="row" style={{ gap: "var(--space-2)", flexWrap: "wrap" }}>
               <label className="btn" style={{ marginBottom: 0, cursor: media.busy ? "wait" : "pointer" }}>
@@ -118,7 +119,9 @@ export function EditProfileScreen({ me, onBack, onSaved }: Props) {
               )}
             </div>
             <p className="meta" style={{ margin: "var(--space-2) 0 0" }}>
-              A square photo works best. It is resized on your device before upload.
+              {avatarUrl
+                ? "A square photo works best. It is resized on your device before upload."
+                : "No photo? Your drawn face is yours alone, and it is the same on every device. Add a photo any time."}
             </p>
             {media.error && <p className="meta" style={{ color: "var(--danger)", margin: 0 }}>{media.error}</p>}
           </div>

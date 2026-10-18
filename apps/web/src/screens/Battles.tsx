@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { api, ApiError, idempotencyKey } from "../api";
 import { ScreenHeader } from "../components/ScreenHeader";
+import { Avatar } from "../components/Avatar";
 import { EmptyState } from "../components/EmptyState";
 import { useNav } from "../nav";
 import { ArrowLeftIcon, SplitIcon, TrophyIcon, UsersIcon } from "../components/Icons";
@@ -39,6 +40,8 @@ interface Battle {
   mySide: "a" | "b" | null;
   myStakeMinor: number;
   myPayoutMinor: number;
+  myProjectedMinor: number;
+  backers: Array<{ side: "a" | "b"; staked: boolean; user: { id: string; handle: string; displayName: string; avatarUrl: string | null } }>;
 }
 
 function formatMinor(amountMinor: number, currency: string): string {
@@ -319,6 +322,9 @@ export function BattleScreen({ battleId, onBack }: { battleId: string; viewerId:
         {battle.myStakeMinor > 0 && (
           <p className="meta">
             You backed {battle.mySide === "a" ? battle.sides.a : battle.sides.b} with {formatMinor(battle.myStakeMinor, battle.currency)}.
+            {battle.status === "open" && battle.myProjectedMinor > 0 && (
+              <> If your side wins as the pot stands, you take {formatMinor(battle.myProjectedMinor, battle.currency)}.</>
+            )}
             {battle.myPayoutMinor > 0 && ` You won ${formatMinor(battle.myPayoutMinor, battle.currency)}.`}
           </p>
         )}
@@ -346,6 +352,18 @@ export function BattleScreen({ battleId, onBack }: { battleId: string; viewerId:
             <span className="muted">{battle.backing.b.backers} backers · {formatMinor(battle.backing.b.stakedMinor, battle.currency)}</span>
           </div>
         </div>
+        {battle.backers.length > 0 && (
+          <div className="battle-faces" aria-label="People in this battle">
+            {battle.backers.map((b) => (
+              <span key={b.user.id} className={`battle-face${b.staked ? " staked" : ""}`} title={b.user.displayName}>
+                <Avatar name={b.user.displayName} url={b.user.avatarUrl} seed={b.user.id} size="sm" />
+              </span>
+            ))}
+            {battle.backing.a.backers + battle.backing.b.backers > battle.backers.length && (
+              <span className="muted battle-faces-more">+{battle.backing.a.backers + battle.backing.b.backers - battle.backers.length} more</span>
+            )}
+          </div>
+        )}
       </section>
     </>
   );

@@ -82,7 +82,7 @@ export function YouScreen({ me, onMeChanged }: Props) {
 
       <div className="card" style={{ marginBottom: "var(--space-3)" }}>
         <div className="row" style={{ gap: "var(--space-4)" }}>
-          <Avatar name={me.displayName} url={me.avatarUrl} style={{ width: 56, height: 56, fontSize: 22 }} />
+          <Avatar name={me.displayName} url={me.avatarUrl} seed={me.id} style={{ width: 56, height: 56, fontSize: 22 }} />
           <div className="grow">
             <div className="feed-author" style={{ fontSize: 18 }}>
               {me.displayName}

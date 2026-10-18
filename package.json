@@ -14,7 +14,7 @@
     "dev:api": "npm --workspace @vibe/api run dev",
     "dev:web": "npm --workspace @vibe/web run dev",
     "typecheck": "npm --workspace @vibe/api run typecheck && npm --workspace @vibe/web run typecheck",
-    "test": "npm --workspace @vibe/api run test",
+    "test": "npm --workspace @vibe/api run test && npm --workspace @vibe/web run test",
     "build": "npm --workspace @vibe/web run build",
     "check-bundle": "node scripts/check-bundle.mjs",
     "verify": "npm run typecheck && npm test && npm run build && npm run check-bundle"

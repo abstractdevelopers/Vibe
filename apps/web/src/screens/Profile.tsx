@@ -122,7 +122,7 @@ export function ProfileScreen({ userId, me, onChanged }: Props) {
         <>
           <div className="card" style={{ marginBottom: "var(--space-3)" }}>
             <div className="row" style={{ gap: "var(--space-4)", marginBottom: "var(--space-3)" }}>
-              <Avatar name={profile.displayName} url={profile.avatarUrl} style={{ width: 64, height: 64, fontSize: 24 }} />
+              <Avatar name={profile.displayName} url={profile.avatarUrl} seed={profile.id} style={{ width: 64, height: 64, fontSize: 24 }} />
               <div className="grow">
                 <h1 style={{ fontSize: 22 }}>{profile.displayName}</h1>
                 <div className="meta">

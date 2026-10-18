@@ -535,7 +535,7 @@ export function RoomStudio({ roomId, viewerId, viewerName, onBack, onLeft }: Pro
           <div className="stage-grid">
             {stage.map((m) => (
               <div key={m.id} className={`stage-seat${speaking.has(m.id) ? " speaking" : ""}${m.muted ? " muted" : ""}`}>
-                <Avatar name={m.displayName} url={m.avatarUrl} />
+                <Avatar name={m.displayName} url={m.avatarUrl} seed={m.id} />
                 <span className="stage-name truncate">{m.id === viewerId ? "You" : m.displayName}</span>
                 <span className="stage-role">{m.role === "host" ? "Host" : "Speaker"}</span>
                 {m.muted && <span className="stage-mute" title="Muted"><MicIcon width={12} height={12} /></span>}
