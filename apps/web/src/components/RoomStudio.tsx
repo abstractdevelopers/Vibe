@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { api, ApiError, idempotencyKey, mediaSrc } from "../api";
 import { useRoomChannel, type RealtimeEvent } from "../realtime";
+import { peersToOfferTo } from "../rtc-mesh";
 import { audioProfileFor, loadIceServers, type AudioProfile } from "../rtc";
 import { uploadImageFile } from "../media";
 import { Avatar } from "./Avatar";
@@ -245,7 +246,20 @@ export function RoomStudio({ roomId, viewerId, viewerName, onBack, onLeft }: Pro
       if (e.candidate) signalRef.current({ type: "rtc.ice", to: peerId, payload: e.candidate.toJSON() });
     };
     pc.onconnectionstatechange = () => {
-      if (["failed", "closed", "disconnected"].includes(pc.connectionState)) closePeer(peerId);
+      // "disconnected" is usually a transient blip (a phone changing network, a
+      // moment of packet loss) and recovers on its own. Tearing the peer down on
+      // it killed the call for good — the other person simply went silent with no
+      // way back. Only "failed" and "closed" are terminal; a disconnected peer
+      // gets a short grace period and is dropped only if it does not recover.
+      if (pc.connectionState === "failed" || pc.connectionState === "closed") {
+        closePeer(peerId);
+        return;
+      }
+      if (pc.connectionState === "disconnected") {
+        window.setTimeout(() => {
+          if (peerConns.current.get(peerId) === pc && pc.connectionState === "disconnected") closePeer(peerId);
+        }, 5000);
+      }
     };
     if (initiator && localStream.current) {
       void pc.createOffer()
@@ -354,12 +368,8 @@ export function RoomStudio({ roomId, viewerId, viewerName, onBack, onLeft }: Pro
       // host publishes, so a host offers to every listener and a listener who is
       // brought up offers only to the host — that is what lets a broadcast carry
       // far more listeners than a full mesh before it needs an SFU.
-      const targets = room?.layout === "broadcast"
-        ? stageOthers.filter((m) => (isHost ? true : m.role === "host"))
-        : stageOthers;
-      for (const m of targets) {
-        if (m.id === viewerId) continue;
-        if (viewerId < m.id) ensurePeer(m.id, true);
+      for (const id of peersToOfferTo({ viewerId, peerIds: stageOthers.map((m) => m.id), layout: room?.layout, isHost })) {
+        ensurePeer(id, true);
       }
     } catch {
       setMicError("Microphone permission is needed to speak. Allow it in your browser, then try again.");
@@ -412,6 +422,20 @@ export function RoomStudio({ roomId, viewerId, viewerName, onBack, onLeft }: Pro
     } catch (e) { setError(e instanceof ApiError ? e.message : "Could not join"); }
     finally { setBusy(false); }
   }
+
+  // A voice room is only worth entering if you can be heard. The host goes on
+  // the stage when they join, so the host's mic must come on with it — before
+  // this, joining turned nothing on, `micOn` stayed false, and both sides sat
+  // in silence until each pressed a button they had no reason to know about.
+  // Speakers join the same way; a listener in a broadcast room stays muted.
+  useEffect(() => {
+    if (!joined || !canSpeak || micOn) return;
+    if (!isHost && !isOnStage) return;
+    void toggleMic();
+    // toggleMic is stable for a given room; re-running on every stage change
+    // would re-acquire the mic and fight the user's own mute.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [joined, canSpeak, isHost, isOnStage]);
 
   async function send() {
     if (!draft.trim()) return;
@@ -469,6 +493,21 @@ export function RoomStudio({ roomId, viewerId, viewerName, onBack, onLeft }: Pro
 
   const stageOthers = useMemo(() => stage.filter((m) => m.id !== viewerId), [stage, viewerId]);
   useActivityTheme(room ? themeForRoom(room.kind) : null);
+
+  // Keep the mesh converged as the stage changes.
+  //
+  // Peer setup used to happen only inside toggleMic, and only for peers whose id
+  // sorted above the viewer's. If the lower-sorting id joined last, nobody ever
+  // offered and the call stayed silent. The same gap appeared whenever someone
+  // was promoted to the stage after both sides had already turned their mic on.
+  // Deciding by id still avoids a double offer, but it is now re-evaluated on
+  // every stage change, so the peer that should speak up always does.
+  useEffect(() => {
+    if (!joined || !micOn) return;
+    for (const id of peersToOfferTo({ viewerId, peerIds: stageOthers.map((m) => m.id), layout: room?.layout, isHost })) {
+      ensurePeer(id, true);
+    }
+  }, [joined, micOn, stageOthers, room?.layout, isHost, viewerId, ensurePeer]);
 
   if (!room) {
     return (
