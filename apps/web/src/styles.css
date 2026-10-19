@@ -397,11 +397,7 @@ h4 {
   margin: 0 var(--space-4) var(--space-3);
   padding: var(--space-3);
   border-radius: var(--radius-card);
-  background: linear-gradient(
-    100deg,
-    color-mix(in srgb, var(--interactive) 22%, transparent),
-    color-mix(in srgb, var(--coral) 18%, transparent)
-  );
+  background: color-mix(in srgb, var(--interactive) 20%, transparent);
   border: 1px solid color-mix(in srgb, var(--interactive) 35%, transparent);
 }
 .eq {
@@ -440,11 +436,7 @@ h4 {
   text-align: left;
   margin-bottom: var(--space-3);
   border-color: color-mix(in srgb, var(--coral) 45%, transparent);
-  background: linear-gradient(
-    100deg,
-    color-mix(in srgb, var(--coral) 16%, transparent),
-    color-mix(in srgb, var(--interactive) 14%, transparent)
-  );
+  background: color-mix(in srgb, var(--coral) 15%, transparent);
 }
 .live-cta .meta {
   flex: 1;
@@ -456,11 +448,7 @@ h4 {
   margin: 0 var(--space-4) var(--space-3);
   padding: var(--space-4);
   border-radius: var(--radius-card);
-  background: linear-gradient(
-    120deg,
-    color-mix(in srgb, var(--interactive) 24%, transparent),
-    color-mix(in srgb, var(--coral) 16%, transparent)
-  );
+  background: color-mix(in srgb, var(--interactive) 20%, transparent);
   border: 1px solid color-mix(in srgb, var(--interactive) 40%, transparent);
 }
 
@@ -596,11 +584,7 @@ h4 {
 .card {
   position: relative;
   padding: var(--space-5);
-  background: linear-gradient(
-    168deg,
-    color-mix(in srgb, var(--surface-2) 92%, transparent),
-    color-mix(in srgb, var(--surface-1) 96%, transparent)
-  );
+  background: var(--surface-1);
   border: 1px solid var(--border);
   border-radius: var(--radius-card);
   box-shadow: var(--shadow-md);
@@ -613,7 +597,7 @@ h4 {
   position: absolute;
   inset: 0 0 auto 0;
   height: 1px;
-  background: linear-gradient(90deg, transparent, var(--border-strong), transparent);
+  background: var(--border-strong);
 }
 
 .card.interactive {
@@ -679,7 +663,7 @@ h4 {
 
 .btn.violet {
   color: #fff;
-  background: linear-gradient(140deg, var(--interactive), #5b48e0);
+  background: var(--interactive);
   border-color: transparent;
   box-shadow: var(--shadow-violet);
 }
@@ -1148,7 +1132,7 @@ select {
 
 .pill[aria-pressed="true"] {
   color: #fff;
-  background: linear-gradient(135deg, var(--interactive), #5b48e0);
+  background: var(--interactive);
   border-color: transparent;
   box-shadow: var(--shadow-violet);
 }
@@ -1185,11 +1169,11 @@ select {
 }
 
 .avatar.violet {
-  background: linear-gradient(140deg, var(--interactive), var(--blue));
+  background: var(--interactive);
 }
 
 .avatar.coral {
-  background: linear-gradient(140deg, var(--coral), var(--orange));
+  background: var(--coral);
 }
 
 .avatar img {
@@ -1248,7 +1232,7 @@ select {
   letter-spacing: var(--tracking-wide);
   text-transform: uppercase;
   color: var(--accent-ink);
-  background: linear-gradient(120deg, var(--orange), var(--coral));
+  background: var(--coral);
   border-radius: var(--radius-pill);
 }
 
@@ -1410,7 +1394,7 @@ select {
 .option-fill {
   position: absolute;
   inset: 0 auto 0 0;
-  background: linear-gradient(90deg, color-mix(in srgb, var(--interactive) 34%, transparent), transparent);
+  background: var(--interactive);
   transition: width var(--motion-slow) var(--ease-out);
   pointer-events: none;
 }
@@ -1548,7 +1532,7 @@ select {
   max-height: 90vh;
   overflow-y: auto;
   padding: var(--space-3) var(--space-5) calc(var(--space-8) + env(safe-area-inset-bottom));
-  background: linear-gradient(180deg, var(--surface-1), var(--surface-0));
+  background: var(--surface-1);
   border: 1px solid var(--border);
   border-bottom: none;
   border-radius: var(--radius-lg) var(--radius-lg) 0 0;
@@ -1575,7 +1559,7 @@ select {
   overflow-y: auto;
   overscroll-behavior: contain;
   padding: var(--space-4) var(--space-5) calc(var(--space-8) + env(safe-area-inset-bottom));
-  background: linear-gradient(180deg, var(--surface-1), var(--surface-0));
+  background: var(--surface-1);
   border: 1px solid var(--border);
   border-bottom: none;
   border-radius: var(--radius-lg) var(--radius-lg) 0 0;
@@ -1836,7 +1820,7 @@ select {
   --tag: var(--accent);
   padding-left: var(--space-3);
   border-left: 3px solid var(--accent);
-  background: linear-gradient(90deg, color-mix(in srgb, var(--accent) 9%, transparent), transparent 42%);
+  background: color-mix(in srgb, var(--accent) 9%, transparent);
 }
 .post.type-announcement .post-body { font-weight: 600; }
 /* A video is a screening: a dark, cinematic frame and a play mark on the media. */
@@ -2629,7 +2613,7 @@ select {
   display: block;
   height: 100%;
   border-radius: 999px;
-  background: linear-gradient(90deg, var(--accent-soft), var(--accent));
+  background: var(--accent);
   transition: width 400ms var(--ease-out);
 }
 .energy-value { font-variant-numeric: tabular-nums; font-weight: 700; }
@@ -2721,7 +2705,7 @@ select {
   bottom: 0;
   z-index: 30;
   padding-top: var(--space-2);
-  background: linear-gradient(to bottom, transparent, var(--surface-1) 28%);
+  background: var(--surface-1);
   backdrop-filter: blur(8px);
 }
 .studio-controls {
@@ -2761,7 +2745,7 @@ select {
   height: 100%;
   width: 0;
   border-radius: 999px;
-  background: linear-gradient(90deg, var(--accent-soft), var(--accent));
+  background: var(--accent);
   transition: width 90ms linear;
 }
 .mic-state { flex-basis: 100%; }
@@ -2944,7 +2928,7 @@ select {
   margin-top: var(--space-5);
   border: 1px solid var(--border);
   border-radius: var(--radius-card);
-  background: linear-gradient(100deg, var(--surface-2), var(--surface));
+  background: var(--surface-2);
   color: inherit;
   cursor: pointer;
 }

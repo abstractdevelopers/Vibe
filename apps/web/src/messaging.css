@@ -96,7 +96,7 @@
 }
 .bubble.mine {
   color: #fff;
-  background: linear-gradient(140deg, var(--interactive), #5b48e0);
+  background: var(--interactive);
   border-bottom-right-radius: var(--radius-sm);
 }
 .bubble.sending {
