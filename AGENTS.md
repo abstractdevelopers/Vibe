@@ -1013,3 +1013,28 @@ Gotchas the harnesses encode, in case you write new checks:
   the whole app draggable sideways. `overflow-x: clip` on `html` fixes it without
   creating a scroll container, so `position: sticky` keeps working.
 
+## Local dev environment after a reset
+
+- Docker's state does not survive a reset: `/var/run/docker.sock` is gone and
+  the daemon has no containers or images. `sudo -n dockerd > /tmp/dockerd.log 2>&1 &`
+  brings the daemon back (it may report failure on the first check and be up a
+  few seconds later), then recreate Postgres from `docker-compose.yml`:
+  `sudo -n docker run -d --name vibe-pg -e POSTGRES_USER=vibe -e POSTGRES_PASSWORD=vibe -e POSTGRES_DB=vibe -p 5432:5432 postgres:16`,
+  wait for `pg_isready`, and run `npm run migrate`.
+- The socket is root-owned, so `docker ...` needs `sudo -n` even though the
+  daemon was started from the shell.
+
+## Game tables
+
+- **`/leave` answers `{ left }`, not a session.** Never feed its reply to
+  `setSession`; navigate away instead. Feeding it a reply with no `session`
+  leaves the table stuck on "Loading the table" forever.
+- **Leave belongs in the header, not only the lobby.** A player must be able to
+  leave a running game, not just a lobby, and Back must stay plain navigation
+  that does not silently abandon a table.
+- **A lobby the host abandons is deleted and everyone still waiting is
+  refunded** through `postGameRefund`. A guest leaving only refunds that guest
+  and keeps the table. If you touch this route, keep both branches refunding
+  through the ledger — a dead session holding a pot is real money stranded.
+
+
