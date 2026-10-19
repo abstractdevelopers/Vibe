@@ -1021,8 +1021,19 @@ Gotchas the harnesses encode, in case you write new checks:
   few seconds later), then recreate Postgres from `docker-compose.yml`:
   `sudo -n docker run -d --name vibe-pg -e POSTGRES_USER=vibe -e POSTGRES_PASSWORD=vibe -e POSTGRES_DB=vibe -p 5432:5432 postgres:16`,
   wait for `pg_isready`, and run `npm run migrate`.
-- The socket is root-owned, so `docker ...` needs `sudo -n` even though the
-  daemon was started from the shell.
+- **The socket is root-owned, so `docker ...` needs `sudo -n`** even though the
+  daemon was started from the shell. `/workspace/.tools/pg-up.sh` does the whole
+  recovery in one step (start dockerd, recreate `vibe-pg`, wait, migrate).
+
+## Look and feel
+
+- **No gradients in the chrome.** Cards, buttons, pills, avatars, progress,
+  sheets, chat bubbles and banners are flat: one surface per element, one accent
+  where an accent is meant. `--brand-gradient` is a single colour, so anything
+  built on it is flat too. The gradients kept on purpose are functional, not
+  decorative: the `select` arrow, the skeleton shimmer, the spoiler hatch, the
+  auth imprint's mask, and the ambient light field. `environments.css` keeps its
+  gradients because the game worlds are art.
 
 ## Game tables
 
