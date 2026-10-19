@@ -67,7 +67,7 @@ function money(minor: number, currency: string): string {
 
 const STAKES = [0, 5_000, 10_000, 20_000, 50_000];
 
-export function GamesScreen({ onBack }: { onBack?: () => void }) {
+export function GamesScreen({ onBack, viewerId }: { onBack?: () => void; viewerId?: string }) {
   const nav = useNav();
   const [games, setGames] = useState<Game[] | null>(null);
   const [sessions, setSessions] = useState<Session[]>([]);
@@ -97,6 +97,17 @@ export function GamesScreen({ onBack }: { onBack?: () => void }) {
 
   const playable = useMemo(() => (games ?? []).filter((g) => g.availability === "playable"), [games]);
   const featured = playable[0] ?? games?.[0] ?? null;
+
+  // A table you are already sitting at is not something to browse past - it is
+  // where you were going. Split it out so returning is the first thing offered.
+  const mine = useMemo(
+    () => sessions.filter((s) => viewerId && s.players.some((p) => p.id === viewerId)),
+    [sessions, viewerId],
+  );
+  const others = useMemo(
+    () => sessions.filter((s) => !viewerId || !s.players.some((p) => p.id === viewerId)),
+    [sessions, viewerId],
+  );
 
   const byCategory = useMemo(() => {
     const acc: Record<string, Game[]> = {};
@@ -184,13 +195,38 @@ export function GamesScreen({ onBack }: { onBack?: () => void }) {
         </section>
       )}
 
+      {/* Your tables — where you already are, so returning is the first offer. */}
+      {mine.length > 0 && (
+        <section className="stack">
+          <div className="row spread">
+            <h2 className="section-title"><PlayIcon width={16} height={16} /> Your tables</h2>
+            <span className="chip chip-gold">{mine.length} waiting</span>
+          </div>
+          <div className="live-rail">
+            {mine.map((s) => (
+              <button key={s.id} className="live-card" onClick={() => nav.push({ name: "game", sessionId: s.id })}>
+                <span className="live-card-top">
+                  <GameCover gameId={s.gameId} category={s.category} name="" size={44} />
+                  <span className={`live-dot${s.status === "active" ? " playing" : ""}`} aria-hidden="true" />
+                </span>
+                <strong className="truncate">{s.gameName}</strong>
+                <span className="meta truncate">
+                  {s.status === "active" ? "In play" : "Waiting"} · {s.players.length}/{s.maxPlayers}
+                </span>
+                <span className="chip chip-livecount">Rejoin</span>
+              </button>
+            ))}
+          </div>
+        </section>
+      )}
+
       {/* Live now — real sessions, with an honest empty state. */}
       <section className="stack">
         <div className="row spread">
           <h2 className="section-title"><RadioIcon width={16} height={16} /> Live now</h2>
-          {sessions.length > 0 && <span className="chip">{sessions.length} open</span>}
+          {others.length > 0 && <span className="chip">{others.length} open</span>}
         </div>
-        {sessions.length === 0 ? (
+        {others.length === 0 ? (
           <EmptyState
             icon={<UsersIcon />}
             title="No tables open yet"
@@ -198,7 +234,7 @@ export function GamesScreen({ onBack }: { onBack?: () => void }) {
           />
         ) : (
           <div className="live-rail">
-            {sessions.map((s) => (
+            {others.map((s) => (
               <button key={s.id} className="live-card" onClick={() => nav.push({ name: "game", sessionId: s.id })}>
                 <span className="live-card-top">
                   <GameCover gameId={s.gameId} category={s.category} name="" size={44} />

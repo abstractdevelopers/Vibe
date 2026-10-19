@@ -281,7 +281,7 @@ export function App() {
                 {tab === "circles" && <CirclesScreen me={me} refreshKey={refreshKey} onChanged={bump} />}
                 {tab === "play" && (
                   <Suspense fallback={<div className="skeleton" aria-busy="true" />}>
-                    <GamesScreen onBack={goToTabs} />
+                    <GamesScreen onBack={goToTabs} viewerId={me?.id} />
                   </Suspense>
                 )}
                 {tab === "battles" && (
@@ -332,7 +332,7 @@ export function App() {
             {route.name === "live" && <LiveScreen onBack={back} />}
             {route.name === "games" && (
               <Suspense fallback={<div className="skeleton" aria-busy="true" />}>
-                <GamesScreen onBack={back} />
+                <GamesScreen onBack={back} viewerId={me?.id} />
               </Suspense>
             )}
             {route.name === "battles" && (
