@@ -1080,11 +1080,15 @@ Gotchas the harnesses encode, in case you write new checks:
 - **A CSS rule declared later wins at equal specificity.** `.studio-controls
   .btn` beat `.studio-controls .mic-btn`, so the mic could not shrink; order the
   generic rule before the specific one.
-- **Money is formatted in one place.** `apps/web/src/money.ts#formatMoney` renders
-  minor units, using the shared `currencyExponent` so a zero-decimal currency is
-  not divided by 100. Never print a `*Minor` field raw and never add a local
-  copy: seven screens each had their own and disagreed, and advertising showed
-  the raw minor units.
+- **Money is formatted in one place, and parsed in one place.** `apps/web/src/money.ts`
+  exports `formatMoney` (minor units to display) and `toMinorUnits` (typed text to
+  minor units); both defer to the shared `currencyExponent`, so a zero-decimal
+  currency is neither divided nor multiplied by 100. Never print a `*Minor` field
+  raw, never hand-roll `Number(x) * 100` in a form, and never add a local copy:
+  seven screens each had their own formatter and disagreed (advertising showed the
+  raw minor units), and six forms each did `* 100`, so a yen budget was off by 100x.
+  Server-side, split fees/rake with `Math.floor` so the counterparty is never short
+  and the journal entries sum exactly to the pot.
 - **The visual audit has three scripts.** `scripts/audit-visual.mjs` walks the
   nine top-level screens; `scripts/audit-deep.mjs` drills into the sub-pages
   (wallet, orders, pass, advertising, settings, admin, inbox, a conversation, a
