@@ -675,7 +675,7 @@ export function activityRoutes(ctx: AppContext) {
       const { id } = req.params as { id: string };
       const input = parse(
         z.object({
-          action: z.enum(["remove_post", "slow_mode", "close_room", "reopen_room"]),
+          action: z.enum(["remove_post", "slow_mode", "close_room", "reopen_room", "kick", "mute_all"]),
           targetId: z.string().uuid().optional(),
           slowModeSeconds: z.coerce.number().int().min(0).max(600).optional(),
         }),
@@ -701,6 +701,29 @@ export function activityRoutes(ctx: AppContext) {
         ctx.hub.publishBroadcast({ type: "rooms.changed", entityId: id, payload: { roomId: id, change: "ended" } });
       } else if (input.action === "reopen_room") {
         await ctx.pool.query(`UPDATE activity_rooms SET state_override = NULL WHERE id = $1`, [id]);
+      } else if (input.action === "kick") {
+        if (!input.targetId) throw ApiError.badRequest("targetId is required");
+        // The host cannot remove themselves, and cannot remove another host.
+        if (input.targetId === user.id) throw ApiError.badRequest("You cannot remove yourself");
+        const target = await queryOne<{ role: string }>(
+          ctx.pool,
+          `SELECT role FROM room_members WHERE room_id = $1 AND user_id = $2`,
+          [id, input.targetId],
+        );
+        if (!target) throw ApiError.notFound("That person is not in this room");
+        if (target.role === "host") throw ApiError.badRequest("You cannot remove the host");
+        await ctx.pool.query(`DELETE FROM room_members WHERE room_id = $1 AND user_id = $2`, [id, input.targetId]);
+        ctx.hub.publishToRoom(id, { type: "room.kicked", entityId: id, payload: { userId: input.targetId } });
+        ctx.hub.publishBroadcast({ type: "rooms.changed", entityId: id, payload: { roomId: id, change: "left" } });
+      } else if (input.action === "mute_all") {
+        // Silence the whole stage at once, the way a host mutes a room. The
+        // host is left alone so they can still run the room.
+        await ctx.pool.query(
+          `UPDATE room_members SET muted_by_host = true
+            WHERE room_id = $1 AND role = 'speaker' AND user_id <> $2`,
+          [id, user.id],
+        );
+        ctx.hub.publishToRoom(id, { type: "room.stage", entityId: id, payload: { action: "mute_all", by: user.id } });
       }
       await ctx.pool.query(
         `INSERT INTO room_moderation_actions (id, room_id, actor_id, action, target_id) VALUES ($1,$2,$3,$4,$5)`,

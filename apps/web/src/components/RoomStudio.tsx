@@ -121,6 +121,7 @@ export function RoomStudio({ roomId, viewerId, viewerName, onBack, onLeft }: Pro
   const [gifting, setGifting] = useState(false);
   const [paidGifting, setPaidGifting] = useState(false);
   const [editing, setEditing] = useState(false);
+  const [people, setPeople] = useState(false);
   const [peers, setPeers] = useState<Record<string, MediaStream>>({});
   const [speaking, setSpeaking] = useState<Set<string>>(new Set());
   const [score, setScore] = useState<Score | null>(null);
@@ -312,6 +313,16 @@ export function RoomStudio({ roomId, viewerId, viewerName, onBack, onLeft }: Pro
       void load();
       return;
     }
+    if (event.type === "room.kicked") {
+      if (p.userId === viewerId) {
+        peerConns.current.forEach((pc) => pc.close());
+        peerConns.current.clear();
+        setError("You were removed from this room.");
+      } else {
+        void load();
+      }
+      return;
+    }
     if (event.type === "room.deleted" || event.type === "room.ended") {
       // The room is over: drop every peer so the mic is not left publishing into
       // nothing, and say so plainly instead of showing a room that is gone.
@@ -485,6 +496,22 @@ export function RoomStudio({ roomId, viewerId, viewerName, onBack, onLeft }: Pro
   async function stageAction(userId: string, action: "promote" | "demote" | "mute" | "unmute") {
     try { await api(`/v1/activities/rooms/${roomId}/stage`, { body: { userId, action } }); await load(); }
     catch (e) { setError(e instanceof ApiError ? e.message : "Could not change the stage"); }
+  }
+
+  /** Remove someone from the room (host). */
+  async function kickMember(userId: string) {
+    try {
+      await api(`/v1/activities/rooms/${roomId}/moderate`, { body: { action: "kick", targetId: userId } });
+      await load();
+    } catch (e) { setError(e instanceof ApiError ? e.message : "Could not remove them"); }
+  }
+
+  /** Mute the whole stage at once (host). */
+  async function muteAll() {
+    try {
+      await api(`/v1/activities/rooms/${roomId}/moderate`, { body: { action: "mute_all" } });
+      await load();
+    } catch (e) { setError(e instanceof ApiError ? e.message : "Could not mute the stage"); }
   }
 
   async function buyTicket() {
@@ -733,6 +760,12 @@ export function RoomStudio({ roomId, viewerId, viewerName, onBack, onLeft }: Pro
               <HandIcon width={15} height={15} /> {audience.find((a) => a.id === viewerId)?.handRaised ? "Hand raised" : "Raise hand"}
             </button>
           )}
+          <button className="btn ghost" onClick={() => setPeople(true)}>
+            <UsersIcon width={15} height={15} /> People · {stage.length + audience.length}
+          </button>
+          {isHost && canSpeak && stage.some((m) => m.role === "speaker" && !m.muted) && (
+            <button className="btn ghost" onClick={() => void muteAll()}>Mute all</button>
+          )}
           <button className="btn ghost" onClick={share}><ShareIcon width={15} height={15} /> Share</button>
           {isHost && <button className="btn ghost" onClick={() => setEditing(true)}><EditIcon width={15} height={15} /> Edit</button>}
           {isHost && room.state === "live" && (
@@ -826,6 +859,18 @@ export function RoomStudio({ roomId, viewerId, viewerName, onBack, onLeft }: Pro
         <PaidGiftSheet recipientId={room.host.id} recipientName={room.host.handle} roomId={room.id} onClose={() => setPaidGifting(false)} onPurchased={load} />
       )}
       {editing && <RoomEditSheet room={room} onClose={() => setEditing(false)} onSaved={() => { setEditing(false); void load(); }} />}
+      {people && (
+        <PeopleSheet
+          stage={stage}
+          audience={audience}
+          viewerId={viewerId}
+          isHost={isHost}
+          canSpeak={canSpeak}
+          onClose={() => setPeople(false)}
+          onStageAction={stageAction}
+          onKick={kickMember}
+        />
+      )}
     </div>
   );
 }
@@ -907,3 +952,77 @@ function RoomEditSheet({ room, onClose, onSaved }: { room: Room; onClose: () => 
     </div>
   );
 }
+
+/**
+ * The people roster: who is on the stage and who is listening, with the host's
+ * controls on each row. The audience used to be a strip of chips with no way to
+ * act on anyone, so a host could see a name and do nothing about it.
+ */
+function PeopleSheet({
+  stage, audience, viewerId, isHost, canSpeak, onClose, onStageAction, onKick,
+}: {
+  stage: Member[];
+  audience: Member[];
+  viewerId: string;
+  isHost: boolean;
+  canSpeak: boolean;
+  onClose: () => void;
+  onStageAction: (userId: string, action: "promote" | "demote" | "mute" | "unmute") => void;
+  onKick: (userId: string) => void;
+}) {
+  const row = (m: Member) => {
+    const isSelf = m.id === viewerId;
+    return (
+      <li key={m.id} className="people-row">
+        <Avatar name={m.displayName} url={m.avatarUrl} seed={m.id} size="sm" />
+        <span className="grow" style={{ minWidth: 0 }}>
+          <span className="people-name truncate">{isSelf ? "You" : m.displayName}</span>
+          <span className="meta row" style={{ gap: 4 }}>
+            {m.role === "host" ? "Host" : m.role === "speaker" ? "Speaker" : "Listener"}
+            {m.handRaised && <><HandIcon width={11} height={11} /> Hand raised</>}
+            {m.muted && <><MicIcon width={11} height={11} /> Muted</>}
+          </span>
+        </span>
+        {isHost && !isSelf && m.role !== "host" && (
+          <span className="people-actions">
+            {canSpeak && (m.role === "speaker" ? (
+              <button className="mini" onClick={() => onStageAction(m.id, "demote")} title="Send to audience">↓</button>
+            ) : (
+              <button className="mini" onClick={() => onStageAction(m.id, "promote")} title="Invite to speak">↑</button>
+            ))}
+            {canSpeak && m.role === "speaker" && (
+              <button className="mini" onClick={() => onStageAction(m.id, m.muted ? "unmute" : "mute")} title={m.muted ? "Unmute" : "Mute"}>
+                {m.muted ? <MicOffIcon width={13} height={13} /> : <MicOnIcon width={13} height={13} />}
+              </button>
+            )}
+            <button className="mini danger" onClick={() => onKick(m.id)} title="Remove from room">✕</button>
+          </span>
+        )}
+      </li>
+    );
+  };
+
+  return (
+    <div className="sheet" role="dialog" aria-modal="true" onClick={onClose}>
+      <div className="sheet-card" onClick={(e) => e.stopPropagation()}>
+        <div className="sheet-head">
+          <h2>People</h2>
+          <button className="icon-button" onClick={onClose} aria-label="Close"><CloseIcon width={18} height={18} /></button>
+        </div>
+
+        <p className="eyebrow"><MicIcon width={13} height={13} /> On stage · {stage.length}</p>
+        <ul className="people-list">
+          {stage.map(row)}
+          {stage.length === 0 && <li className="meta">No one is on the stage.</li>}
+        </ul>
+
+        <p className="eyebrow"><UsersIcon width={13} height={13} /> Listening · {audience.length}</p>
+        <ul className="people-list">
+          {audience.map(row)}
+          {audience.length === 0 && <li className="meta">No one is listening yet.</li>}
+        </ul>
+      </div>
+    </div>
+  );
+}
+

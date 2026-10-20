@@ -216,6 +216,62 @@ describe("ending a room", () => {
   });
 });
 
+// The roster: a host can remove someone, and can silence the whole stage. Before
+// this a host could see a name in the audience and do nothing about it.
+describe("room roster controls", () => {
+  const membersOf = async (roomId: string, token: string) => {
+    const res = await h.app.inject({ method: "GET", url: `/v1/activities/rooms/${roomId}/members`, headers: auth(token) });
+    return res.json() as { stage: Array<{ id: string; muted: boolean }>; audience: Array<{ id: string }> };
+  };
+
+  it("lets the host remove a guest, and refuses when a non-host tries", async () => {
+    const room = await makeRoom({ kind: "voice", title: "Kick test", layout: "stage" });
+    const id = room.json().room.id as string;
+    await h.app.inject({ method: "POST", url: `/v1/activities/rooms/${id}/join`, headers: auth(fan.token), payload: {} });
+
+    const asGuest = await h.app.inject({
+      method: "POST", url: `/v1/activities/rooms/${id}/moderate`,
+      headers: auth(fan.token), payload: { action: "kick", targetId: host.id },
+    });
+    expect(asGuest.statusCode).toBe(403);
+
+    const asHost = await h.app.inject({
+      method: "POST", url: `/v1/activities/rooms/${id}/moderate`,
+      headers: auth(host.token), payload: { action: "kick", targetId: fan.id },
+    });
+    expect(asHost.statusCode).toBe(200);
+    const after = await membersOf(id, host.token);
+    expect(after.stage.some((m) => m.id === fan.id)).toBe(false);
+    expect(after.audience.some((m) => m.id === fan.id)).toBe(false);
+  });
+
+  it("refuses to remove the host from their own room", async () => {
+    const room = await makeRoom({ kind: "voice", title: "Self kick" });
+    const id = room.json().room.id as string;
+    const res = await h.app.inject({
+      method: "POST", url: `/v1/activities/rooms/${id}/moderate`,
+      headers: auth(host.token), payload: { action: "kick", targetId: host.id },
+    });
+    expect(res.statusCode).toBe(400);
+  });
+
+  it("mutes the whole stage but leaves the host alone", async () => {
+    const room = await makeRoom({ kind: "voice", title: "Mute all", layout: "stage" });
+    const id = room.json().room.id as string;
+    await h.app.inject({ method: "POST", url: `/v1/activities/rooms/${id}/join`, headers: auth(fan.token), payload: {} });
+    expect((await membersOf(id, host.token)).stage.some((m) => m.id === fan.id && !m.muted)).toBe(true);
+
+    const res = await h.app.inject({
+      method: "POST", url: `/v1/activities/rooms/${id}/moderate`,
+      headers: auth(host.token), payload: { action: "mute_all" },
+    });
+    expect(res.statusCode).toBe(200);
+    const after = await membersOf(id, host.token);
+    expect(after.stage.find((m) => m.id === fan.id)?.muted).toBe(true);
+    expect(after.stage.find((m) => m.id === host.id)?.muted).toBe(false);
+  });
+});
+
 
 describe("viral loop", () => {
   it("previews a link without a session, then returns the member to the room", async () => {
