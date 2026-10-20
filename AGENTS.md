@@ -1074,5 +1074,22 @@ Gotchas the harnesses encode, in case you write new checks:
 - **A CSS rule declared later wins at equal specificity.** `.studio-controls
   .btn` beat `.studio-controls .mic-btn`, so the mic could not shrink; order the
   generic rule before the specific one.
+- **Money is formatted in one place.** `apps/web/src/money.ts#formatMoney` renders
+  minor units, using the shared `currencyExponent` so a zero-decimal currency is
+  not divided by 100. Never print a `*Minor` field raw and never add a local
+  copy: seven screens each had their own and disagreed, and advertising showed
+  the raw minor units.
+- **The visual audit has three scripts.** `scripts/audit-visual.mjs` walks the
+  nine top-level screens; `scripts/audit-deep.mjs` drills into the sub-pages
+  (wallet, orders, pass, advertising, settings, admin, inbox, a conversation, a
+  profile, a circle, a game table, a battle, an event, a live room, a place, a
+  storefront) by clicking real rows, so it needs seeded data
+  (`/workspace/.tools/seed-audit.py`, and an admin user for the console);
+  `scripts/audit-room-math.mjs` asserts the live-room geometry at 390/360/320px
+  and exits non-zero on failure. All three share
+  `scripts/lib/probe-overflow.mjs`.
+- **A sheet left open by an audit driver collides with the page behind it.**
+  Those `text-overlap` hits against `menu-group`/`sheet` are the driver's doing,
+  not a layout fault; `audit-deep.mjs` filters them.
 
 
