@@ -829,6 +829,14 @@ Gotchas the harnesses encode, in case you write new checks:
   the client — Snakes rolls server-side for exactly this reason.
 - **Party games are picks or guesses from a fixed set, not free text.** A server
   can only settle a game it can judge, and settlement is what staking depends on.
+- **The Play catalogue is an editorial shelf, not a grid dump.** `Games.tsx` is a
+  vertical stack of `.shelf` sections: a `.games-hero`, search, then shelves for
+  your tables, live now, worlds and the catalogue. Two rules make it feel spaced
+  rather than evenly stuffed: a shelf's own head sits closer to its content
+  (`--space-4`) than the shelves sit to each other (`--space-8`), and the world
+  and table rows pan horizontally (`.shelf-row`) so one shelf is never taller
+  than its content needs. Keep new sections inside `.games-flow` so they inherit
+  the rhythm. Local material lives in `apps/web/src/environments.css`.
 - **Themes are authored, not random.** `apps/web/src/themes.ts` holds 34 base
   palettes × 4 styles, plus 4 named environments = 140 themes; each computes its accent ink by luminance so
   text stays legible. The atmosphere glows read `--theme-glow-a/--theme-glow-b`,

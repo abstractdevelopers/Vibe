@@ -137,11 +137,11 @@ export function GamesScreen({ onBack, viewerId }: { onBack?: () => void; viewerI
   }, [focus?.id]);
 
   return (
-    <>
+    <div className="games-flow">
       <ScreenHeader
         eyebrow="Play"
         title="Games"
-        subtitle="Play with friends or strangers. Stake Vibe Yens and the winner takes the pot."
+        subtitle="Join a table, stake Vibe Yens, and let the winner take the pot."
         action={
           onBack ? (
             <button className="icon-button" aria-label="Back" onClick={onBack}>
@@ -153,13 +153,37 @@ export function GamesScreen({ onBack, viewerId }: { onBack?: () => void; viewerI
 
       {error && <div className="notice danger" role="alert">{error}</div>}
 
-      <div className="game-search">
-        <SearchIcon width={16} height={16} />
+      {/* The featured band. One game at a time, given the whole width, with the
+          room lit behind it — the arcade's window. */}
+      {featured && (
+        <section className="games-hero" aria-label="Featured game">
+          <div className="games-hero-glow" aria-hidden="true" />
+          <div className="games-hero-copy">
+            <span className="games-hero-eyebrow">Now featuring</span>
+            <h2 className="games-hero-title">{featured.name}</h2>
+            <p className="games-hero-blurb">{featured.blurb}</p>
+            <div className="games-hero-meta">
+              <span className="chip"><UsersIcon width={12} height={12} /> {featured.minPlayers}–{featured.maxPlayers} players</span>
+              {featured.stakeEnabled && <span className="chip chip-gold">Stakes</span>}
+              <span className="chip">{worldFor(featured.category).label}</span>
+            </div>
+            <button className="btn primary games-hero-cta" onClick={() => setPicked(featured)}>
+              <PlayIcon width={17} height={17} /> {featured.availability === "playable" ? "Start a table" : "Coming soon"}
+            </button>
+          </div>
+          <div className="games-hero-art" aria-hidden="true">
+            <GameCover gameId={featured.id} category={featured.category} name="" size={196} />
+          </div>
+        </section>
+      )}
+
+      <div className="games-search">
+        <SearchIcon width={17} height={17} />
         <input
           type="search"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
-          placeholder="Search games"
+          placeholder="Search the arcade"
           aria-label="Search games"
         />
         {query && (
@@ -169,49 +193,25 @@ export function GamesScreen({ onBack, viewerId }: { onBack?: () => void; viewerI
         )}
       </div>
 
-      {/* The marquee. A lit band carrying the arcade's identity, the game in
-          focus, and the one action that matters: enter. */}
-      {featured && (
-        <section className="marquee" aria-label="Featured game">
-          <div className="marquee-glow" aria-hidden="true" />
-          <div className="marquee-body">
-            <span className="marquee-eyebrow">Now featured</span>
-            <h2 className="marquee-name">{featured.name}</h2>
-            <p className="marquee-blurb">{featured.blurb}</p>
-            <div className="marquee-meta">
-              <span className="chip"><UsersIcon width={12} height={12} /> {featured.minPlayers}–{featured.maxPlayers} players</span>
-              {featured.stakeEnabled && <span className="chip chip-gold">Stakes</span>}
-              <span className="chip">{worldFor(featured.category).label}</span>
-            </div>
-            <button className="btn primary marquee-cta" onClick={() => setPicked(featured)}>
-              <PlayIcon width={17} height={17} /> {featured.availability === "playable" ? "Start a table" : "Coming soon"}
-            </button>
-          </div>
-          <div className="marquee-art" aria-hidden="true">
-            <GameCover gameId={featured.id} category={featured.category} name="" size={188} />
-          </div>
-        </section>
-      )}
-
       {/* Your tables — where you already are, so returning is the first offer. */}
       {mine.length > 0 && (
-        <section className="stack">
-          <div className="row spread">
+        <section className="shelf">
+          <div className="shelf-head">
             <h2 className="section-title"><PlayIcon width={16} height={16} /> Your tables</h2>
             <span className="chip chip-gold">{mine.length} waiting</span>
           </div>
-          <div className="live-rail">
+          <div className="shelf-row">
             {mine.map((s) => (
-              <button key={s.id} className="live-card" onClick={() => nav.push({ name: "game", sessionId: s.id })}>
-                <span className="live-card-top">
-                  <GameCover gameId={s.gameId} category={s.category} name="" size={44} />
+              <button key={s.id} className="table-card" onClick={() => nav.push({ name: "game", sessionId: s.id })}>
+                <span className="table-card-top">
+                  <GameCover gameId={s.gameId} category={s.category} name="" size={48} />
                   <span className={`live-dot${s.status === "active" ? " playing" : ""}`} aria-hidden="true" />
                 </span>
-                <strong className="truncate">{s.gameName}</strong>
+                <strong className="table-card-name truncate">{s.gameName}</strong>
                 <span className="meta truncate">
                   {s.status === "active" ? "In play" : "Waiting"} · {s.players.length}/{s.maxPlayers}
                 </span>
-                <span className="chip chip-livecount">Rejoin</span>
+                <span className="table-card-cta">Rejoin</span>
               </button>
             ))}
           </div>
@@ -219,8 +219,8 @@ export function GamesScreen({ onBack, viewerId }: { onBack?: () => void; viewerI
       )}
 
       {/* Live now — real sessions, with an honest empty state. */}
-      <section className="stack">
-        <div className="row spread">
+      <section className="shelf">
+        <div className="shelf-head">
           <h2 className="section-title"><RadioIcon width={16} height={16} /> Live now</h2>
           {others.length > 0 && <span className="chip">{others.length} open</span>}
         </div>
@@ -231,22 +231,19 @@ export function GamesScreen({ onBack, viewerId }: { onBack?: () => void; viewerI
             text="Start one below and it appears here for anyone to join."
           />
         ) : (
-          <div className="live-rail">
+          <div className="shelf-row">
             {others.map((s) => (
-              <button key={s.id} className="live-card" onClick={() => nav.push({ name: "game", sessionId: s.id })}>
-                <span className="live-card-top">
-                  <GameCover gameId={s.gameId} category={s.category} name="" size={44} />
+              <button key={s.id} className="table-card" onClick={() => nav.push({ name: "game", sessionId: s.id })}>
+                <span className="table-card-top">
+                  <GameCover gameId={s.gameId} category={s.category} name="" size={48} />
                   <span className={`live-dot${s.status === "active" ? " playing" : ""}`} aria-hidden="true" />
                 </span>
-                <strong className="truncate">{s.gameName}</strong>
+                <strong className="table-card-name truncate">{s.gameName}</strong>
                 <span className="meta truncate">
-                  {s.status === "active" ? "In play" : "Lobby"} · {s.players.length}/{s.maxPlayers}
+                  {s.players.find((p) => p.id === s.hostId)?.displayName ?? "someone"}'s table · {s.players.length}/{s.maxPlayers}
                 </span>
-                <span className="meta truncate">
-                  {s.players.find((p) => p.id === s.hostId)?.displayName ?? "someone"}'s table
-                </span>
-                <span className={s.stakeMinor > 0 ? "chip chip-gold" : "chip"}>
-                  {s.stakeMinor > 0 ? formatMoney(s.potMinor, s.currency) : "Free"}
+                <span className={s.stakeMinor > 0 ? "table-card-cta gold" : "table-card-cta"}>
+                  {s.stakeMinor > 0 ? formatMoney(s.potMinor, s.currency) : "Free to join"}
                 </span>
               </button>
             ))}
@@ -254,20 +251,18 @@ export function GamesScreen({ onBack, viewerId }: { onBack?: () => void; viewerI
         )}
       </section>
 
-      {/* The worlds. Each category is a lit room; choosing one changes the
-          whole environment, not just a filter. */}
-      <section className="stack">
-        <div className="row spread">
+      {/* The worlds. Choosing one re-lights the whole screen, then the
+          catalogue below narrows to it — a filter that feels like a doorway. */}
+      <section className="shelf">
+        <div className="shelf-head">
           <h2 className="section-title">Worlds</h2>
-          {category && (
-            <button className="link-button" onClick={() => setCategory(null)}>Clear</button>
-          )}
+          {category && <button className="link-button" onClick={() => setCategory(null)}>Show all</button>}
         </div>
-        <div className="world-shelf">
-          <button className="world-tile" aria-pressed={category === null} onClick={() => setCategory(null)}>
-            <span className="world-tile-swatch" aria-hidden="true" />
-            <span className="world-tile-body">
-              <span className="world-tile-name">All worlds</span>
+        <div className="shelf-row">
+          <button className="world-chip" aria-pressed={category === null} onClick={() => setCategory(null)}>
+            <span className="world-chip-swatch all" aria-hidden="true" />
+            <span className="world-chip-body">
+              <span className="world-chip-label">All worlds</span>
               <span className="meta">{games?.length ?? 0} games</span>
             </span>
           </button>
@@ -276,17 +271,17 @@ export function GamesScreen({ onBack, viewerId }: { onBack?: () => void; viewerI
             return (
               <button
                 key={c}
-                className="world-tile"
+                className="world-chip"
                 aria-pressed={category === c}
                 onClick={() => setCategory(c)}
                 style={{ ["--world" as string]: w.accent, ["--world-from" as string]: w.from, ["--world-to" as string]: w.to }}
               >
-                <span className="world-tile-swatch" aria-hidden="true" />
-                <span className="world-tile-body">
-                  <span className="world-tile-name">{w.label}</span>
+                <span className="world-chip-swatch" aria-hidden="true" />
+                <span className="world-chip-body">
+                  <span className="world-chip-label truncate">{w.label}</span>
                   <span className="meta truncate">{w.tagline}</span>
                 </span>
-                <span className="world-tile-count">{byCategory[c]!.length}</span>
+                <span className="world-chip-count">{byCategory[c]!.length}</span>
               </button>
             );
           })}
@@ -296,8 +291,8 @@ export function GamesScreen({ onBack, viewerId }: { onBack?: () => void; viewerI
       {/* The catalogue. */}
       {games === null && <div className="skeleton" aria-busy="true" />}
       {games && (
-        <section className="stack">
-          <div className="row spread">
+        <section className="shelf">
+          <div className="shelf-head">
             <h2 className="section-title">{category ? worldFor(category).label : "All games"}</h2>
             <span className="meta">{shown.length} {shown.length === 1 ? "game" : "games"}</span>
           </div>
@@ -313,11 +308,11 @@ export function GamesScreen({ onBack, viewerId }: { onBack?: () => void; viewerI
                   aria-label={`${g.name}${g.availability === "planned" ? " (coming soon)" : ""}`}
                 >
                   <span className="game-tile-art">
-                    <GameCover gameId={g.id} category={g.category} name={g.name} size={64} className="game-tile-cover" />
+                    <GameCover gameId={g.id} category={g.category} name={g.name} size={72} className="game-tile-cover" />
                     {g.availability === "planned" && <span className="game-tile-soon">Soon</span>}
                   </span>
                   <span className="game-tile-name">{g.name}</span>
-                  <span className="game-tile-players">
+                  <span className="game-tile-sub">
                     <UsersIcon width={11} height={11} /> {g.minPlayers}–{g.maxPlayers}
                   </span>
                   <span className="game-tile-tags">
@@ -341,7 +336,7 @@ export function GamesScreen({ onBack, viewerId }: { onBack?: () => void; viewerI
           onCreated={(sessionId) => { setPicked(null); nav.push({ name: "game", sessionId }); }}
         />
       )}
-    </>
+    </div>
   );
 }
 

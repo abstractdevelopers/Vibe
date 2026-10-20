@@ -62,7 +62,7 @@
 
 .env-feature-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
   gap: var(--space-3);
 }
 
@@ -139,91 +139,140 @@
 }
 
 /* ============================================================
-   Play — the game world
+   Play — a well-spaced, editorial arcade
    ============================================================
 
-   A destination, not a list. The order is deliberate: a lit marquee that states
-   what the arcade is, the tables that are live right now, the worlds you can
-   walk into, then the catalogue. Everything is built from the environment
-   tokens plus a per-category `--world` accent, so choosing a world re-lights the
-   whole screen rather than filtering a list. */
+   The shelf is the unit of rhythm: a titled section with a deliberate gap above
+   it, then its content. The hero gets the whole width and the deepest padding;
+   rows and grid share one hairline card language. Space is the hierarchy — a
+   section is separated from the next by more than its own head is from its
+   content, so the eye groups before it reads. Everything is a multiple of 4px,
+   most of it of 8. */
 
-/* ---- The marquee ------------------------------------------------------- */
+.games-flow {
+  display: flex;
+  flex-direction: column;
+}
 
-.marquee {
+/* A shelf: title block, then content. The gap below the head is a fixed step;
+   the gap above the shelf is set by the rhythm rule below, and is the larger
+   of the two, so sections never run together. */
+.shelf { display: flex; flex-direction: column; }
+.shelf-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  margin-bottom: var(--space-4);
+  min-height: 24px;
+}
+.shelf-head .section-title { display: inline-flex; align-items: center; gap: var(--space-2); margin: 0; }
+
+/* Horizontal rails for tables and worlds: they carry more than fits, so they
+   pan sideways and snap, and the last card stays a comfortable width rather
+   than stretching to fill. The row itself stays inside the content box, so
+   nothing overflows the parent; only the cards inside pan, and the shared
+   overflow probe skips anything inside a horizontal scroller. */
+.shelf-row {
+  display: flex;
+  gap: var(--space-3);
+  overflow-x: auto;
+  scroll-snap-type: x proximity;
+  padding-bottom: var(--space-2);
+  margin-bottom: var(--space-1);
+  scrollbar-width: none;
+}
+.shelf-row::-webkit-scrollbar { display: none; }
+.shelf-row > * { scroll-snap-align: start; flex: none; }
+
+/* ---- The featured band ------------------------------------------------- */
+
+.games-hero {
   position: relative;
   display: grid;
   grid-template-columns: 1fr auto;
   align-items: center;
-  gap: var(--space-4);
-  padding: var(--space-5);
-  margin-bottom: var(--space-5);
-  border-radius: var(--radius-card);
-  border: 1px solid color-mix(in srgb, var(--accent) 34%, var(--border));
+  gap: var(--space-5);
+  padding: var(--space-6) var(--space-5);
+  margin: 0 0 var(--space-1);
+  border-radius: var(--radius-lg);
+  border: 1px solid color-mix(in srgb, var(--accent) 32%, var(--border));
   overflow: hidden;
   isolation: isolate;
-  background:
-    linear-gradient(160deg, color-mix(in srgb, var(--surface-2) 92%, transparent), var(--surface-0) 78%);
+  background: linear-gradient(160deg, color-mix(in srgb, var(--surface-2) 94%, transparent), var(--surface-0) 82%);
 }
-/* The rig: a wash of the room accent from the top-right, and a floor light
-   rising from the bottom-left. Two lights, not a single flat gradient. */
-.marquee-glow {
+.games-hero-glow {
   position: absolute;
   inset: 0;
   z-index: -1;
   pointer-events: none;
   background:
-    radial-gradient(90% 120% at 88% -20%, color-mix(in srgb, var(--accent) 42%, transparent), transparent 60%),
-    radial-gradient(70% 90% at 0% 120%, color-mix(in srgb, var(--accent) 18%, transparent), transparent 62%);
+    radial-gradient(105% 130% at 90% -25%, color-mix(in srgb, var(--accent) 40%, transparent), transparent 58%),
+    radial-gradient(80% 100% at -5% 120%, color-mix(in srgb, var(--accent) 16%, transparent), transparent 60%);
 }
-/* A faint scanline sweep across the band — the arcade's marquee bulbs. */
-.marquee::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  z-index: -1;
-  pointer-events: none;
-  opacity: 0.16;
-  background: repeating-linear-gradient(90deg, transparent 0 22px, color-mix(in srgb, var(--accent) 55%, transparent) 22px 23px);
-  mask-image: linear-gradient(180deg, #000, transparent 70%);
-}
-.marquee-body { display: flex; flex-direction: column; align-items: flex-start; gap: var(--space-2); min-width: 0; }
-.marquee-eyebrow {
+.games-hero-copy { display: flex; flex-direction: column; align-items: flex-start; gap: var(--space-3); min-width: 0; }
+.games-hero-eyebrow {
   font-size: var(--text-meta);
   font-weight: 800;
   letter-spacing: var(--tracking-wide);
   text-transform: uppercase;
   color: var(--accent);
 }
-.marquee-name {
+.games-hero-title {
   margin: 0;
   font-family: var(--font-display);
-  font-size: clamp(28px, 7vw, 40px);
+  font-size: clamp(30px, 8vw, 42px);
   font-weight: 800;
   letter-spacing: var(--tracking-display);
-  line-height: 1;
+  line-height: var(--leading-tight);
 }
-.marquee-blurb { margin: 0; color: var(--text-secondary); max-width: 44ch; }
-.marquee-meta { display: flex; flex-wrap: wrap; gap: 6px; }
-.marquee-cta { margin-top: var(--space-2); }
-.marquee-art {
-  display: grid;
-  place-items: center;
-  filter: drop-shadow(0 26px 44px rgba(0, 0, 0, 0.6));
-}
-.marquee-art svg { animation: marquee-breathe 6s var(--ease-out, ease) infinite; }
-@keyframes marquee-breathe {
+.games-hero-blurb { margin: 0; color: var(--text-secondary); max-width: 40ch; line-height: var(--leading-body); }
+.games-hero-meta { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+.games-hero-cta { margin-top: var(--space-2); }
+.games-hero-art { display: grid; place-items: center; filter: drop-shadow(0 28px 46px rgba(0, 0, 0, 0.62)); }
+.games-hero-art svg { animation: games-hero-breathe 6s var(--ease-out) infinite; }
+@keyframes games-hero-breathe {
   0%, 100% { transform: translateY(-5px) scale(1); }
   50% { transform: translateY(5px) scale(1.015); }
 }
 @media (max-width: 560px) {
-  .marquee { grid-template-columns: 1fr; }
-  .marquee-art { justify-self: end; margin-top: calc(-1 * var(--space-3)); }
-  .marquee-art svg { width: 116px; height: 116px; }
+  .games-hero { gap: var(--space-3); padding: var(--space-6) var(--space-5); }
+  .games-hero-art svg { width: 108px; height: 108px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .games-hero-art svg { animation: none; }
 }
 
-/* ---- Live tables ------------------------------------------------------- */
+/* ---- Search ------------------------------------------------------------ */
 
+.games-search {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: 0 var(--space-4);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+  background: var(--surface-2);
+  color: var(--text-muted);
+  transition: border-color var(--motion-fast) var(--ease-out);
+}
+.games-search:focus-within { border-color: color-mix(in srgb, var(--accent) 55%, var(--border)); }
+.games-search input {
+  flex: 1;
+  border: none;
+  background: transparent;
+  color: inherit;
+  padding: 12px 0;
+  min-width: 0;
+  outline: none;
+  font: inherit;
+}
+.games-search input::-webkit-search-cancel-button { display: none; }
+
+/* ---- Table cards (live now, your tables) ------------------------------- */
+
+/* Shared with the discovery rail: a live table card and the live indicator.
+   Kept here so the rail on the feed keeps its styling. */
 .live-rail {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(158px, 1fr));
@@ -266,66 +315,99 @@
   50% { box-shadow: 0 0 0 8px rgba(55, 214, 122, 0.05); }
 }
 
-/* ---- The world shelf --------------------------------------------------- */
-
-.world-shelf {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
-  gap: var(--space-2);
+.table-card {
+  width: 172px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-1);
+  padding: var(--space-4);
+  text-align: left;
+  border-radius: var(--radius-card);
+  border: 1px solid var(--border);
+  background: linear-gradient(165deg, color-mix(in srgb, var(--surface-2) 80%, transparent), var(--surface-0));
+  cursor: pointer;
+  transition: transform var(--motion-fast) var(--ease-out), border-color var(--motion-fast) var(--ease-out),
+    box-shadow var(--motion-base) var(--ease-out);
 }
-.world-tile {
+.table-card:hover {
+  transform: translateY(-3px);
+  border-color: color-mix(in srgb, var(--accent) 55%, var(--border));
+  box-shadow: 0 18px 36px -22px color-mix(in srgb, var(--accent) 85%, transparent);
+}
+.table-card-top { display: flex; align-items: center; justify-content: space-between; width: 100%; margin-bottom: var(--space-2); }
+.table-card-name { font-size: var(--text-body); font-weight: 700; line-height: var(--leading-snug); }
+.table-card-cta {
+  margin-top: var(--space-2);
+  font-size: var(--text-meta);
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+.table-card-cta.gold { color: var(--warning); }
+
+/* ---- The world chips --------------------------------------------------- */
+
+.world-chip {
   position: relative;
+  width: 216px;
   display: flex;
   align-items: center;
   gap: var(--space-3);
-  padding: var(--space-3);
+  padding: var(--space-3) var(--space-4);
   text-align: left;
   border-radius: var(--radius-card);
   border: 1px solid var(--border);
   overflow: hidden;
   cursor: pointer;
-  background: linear-gradient(150deg, color-mix(in srgb, var(--surface-2) 80%, transparent), var(--surface-0));
-  transition: border-color var(--motion-fast) var(--ease-out), transform var(--motion-fast) var(--ease-out);
+  background: linear-gradient(150deg, color-mix(in srgb, var(--surface-2) 82%, transparent), var(--surface-0));
+  transition: border-color var(--motion-fast) var(--ease-out), transform var(--motion-fast) var(--ease-out),
+    box-shadow var(--motion-fast) var(--ease-out);
 }
-.world-tile:hover { transform: translateY(-2px); border-color: var(--border-strong); }
-.world-tile[aria-pressed="true"] {
-  border-color: color-mix(in srgb, var(--world, var(--accent)) 70%, transparent);
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--world, var(--accent)) 40%, transparent);
+.world-chip:hover { transform: translateY(-2px); border-color: var(--border-strong); }
+.world-chip[aria-pressed="true"] {
+  border-color: color-mix(in srgb, var(--world, var(--accent)) 72%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--world, var(--accent)) 42%, transparent),
+    0 16px 32px -22px color-mix(in srgb, var(--world, var(--accent)) 90%, transparent);
 }
-/* The swatch is the world's own plate, so the shelf reads as a row of rooms. */
-.world-tile-swatch {
-  width: 40px;
-  height: 40px;
+.world-chip-swatch {
+  width: 44px;
+  height: 44px;
   flex: none;
-  border-radius: 11px;
+  border-radius: 12px;
   border: 1px solid rgba(255, 255, 255, 0.14);
   background: linear-gradient(150deg, var(--world-from, var(--surface-3)), var(--world-to, var(--surface-1)));
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.18);
 }
-.world-tile-body { display: flex; flex-direction: column; min-width: 0; flex: 1; }
-.world-tile-name { font-weight: 700; letter-spacing: -0.01em; }
-.world-tile-count {
+.world-chip-swatch.all {
+  background: conic-gradient(from 210deg, #ff7ab8, #5cc8ff, #4fe0c6, #ffc247, #ff9d3c, #e07aff, #ff7ab8);
+}
+.world-chip-body { display: flex; flex-direction: column; min-width: 0; flex: 1; }
+.world-chip-label { font-weight: 700; letter-spacing: -0.01em; }
+.world-chip-count {
   font-size: var(--text-meta);
   font-weight: 800;
   color: var(--world, var(--accent));
+  flex: none;
 }
 
-/* ---- The catalogue ----------------------------------------------------- */
+/* ---- The catalogue grid ------------------------------------------------ */
 
 .game-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(126px, 1fr));
-  gap: var(--space-3);
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: var(--space-4);
 }
 .game-tile {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 5px;
-  padding: var(--space-3) var(--space-2);
+  gap: var(--space-2);
+  padding: var(--space-5) var(--space-3) var(--space-4);
   border-radius: var(--radius-card);
   border: 1px solid var(--border);
-  background: color-mix(in srgb, var(--surface-1) 60%, transparent);
+  background: color-mix(in srgb, var(--surface-1) 62%, transparent);
   cursor: pointer;
   text-align: center;
   transition: transform var(--motion-fast) var(--ease-out), border-color var(--motion-fast) var(--ease-out),
@@ -334,39 +416,48 @@
 .game-tile:hover {
   transform: translateY(-4px);
   border-color: color-mix(in srgb, var(--world, var(--accent)) 60%, var(--border));
-  background: color-mix(in srgb, var(--surface-2) 70%, transparent);
-  box-shadow: 0 18px 36px -22px color-mix(in srgb, var(--world, var(--accent)) 90%, transparent);
+  background: color-mix(in srgb, var(--surface-2) 72%, transparent);
+  box-shadow: 0 20px 38px -24px color-mix(in srgb, var(--world, var(--accent)) 90%, transparent);
 }
-.game-tile-art { position: relative; display: grid; place-items: center; }
+.game-tile-art { position: relative; display: grid; place-items: center; margin-bottom: var(--space-1); }
 .game-tile-cover {
-  border-radius: 14px;
-  box-shadow: 0 10px 22px -12px rgba(0, 0, 0, 0.75);
+  border-radius: 16px;
+  box-shadow: 0 12px 24px -14px rgba(0, 0, 0, 0.78);
   transition: transform var(--motion-base) var(--ease-out);
 }
-.game-tile:hover .game-tile-cover { transform: scale(1.07) translateY(-2px); }
+.game-tile:hover .game-tile-cover { transform: scale(1.06) translateY(-2px); }
 .game-tile-soon {
   position: absolute;
-  bottom: -6px;
+  bottom: -8px;
   font-size: 10px;
   font-weight: 800;
   letter-spacing: 0.06em;
   text-transform: uppercase;
-  padding: 2px 7px;
+  padding: 3px 8px;
   border-radius: var(--radius-pill);
   background: var(--surface-3);
   color: var(--text-secondary);
   border: 1px solid var(--border-strong);
 }
-.game-tile-name { font-weight: 700; line-height: 1.2; }
-.game-tile-players {
+.game-tile-name { font-weight: 700; font-size: var(--text-body); line-height: var(--leading-snug); }
+.game-tile-sub {
   display: inline-flex;
   align-items: center;
-  gap: 3px;
+  gap: 4px;
   font-size: var(--text-meta);
   color: var(--text-muted);
 }
-.game-tile-tags { display: flex; flex-wrap: wrap; gap: 4px; justify-content: center; min-height: 18px; }
+.game-tile-tags { display: flex; flex-wrap: wrap; gap: 5px; justify-content: center; min-height: 20px; margin-top: var(--space-1); }
 
+/* ---- The vertical rhythm ---------------------------------------------- */
+
+/* Each shelf is separated from the one before by a clear step. This is the rule
+   that turns a stack of equally-spaced blocks into a deliberately paced page:
+   the space between sections is larger than the space inside them. */
+.games-flow > * + *,
+.games-flow > section + section { margin-top: var(--space-4); }
+.games-flow > .shelf + .shelf { margin-top: var(--space-8); }
+.games-flow > .games-hero + * { margin-top: var(--space-5); }
 .chip-quiet {
   background: color-mix(in srgb, var(--surface-3) 80%, transparent);
   color: var(--text-muted);
@@ -385,10 +476,10 @@
 .link-button:hover { text-decoration: underline; }
 
 @media (prefers-reduced-motion: reduce) {
-  .marquee-art svg,
+  .games-hero-art svg,
   .live-dot.playing { animation: none; }
-  .marquee::after { opacity: 0.08; }
-  .world-tile:hover,
+  .table-card:hover,
+  .world-chip:hover,
   .game-tile:hover,
   .live-card:hover { transform: none; }
   .game-tile:hover .game-tile-cover { transform: none; }
