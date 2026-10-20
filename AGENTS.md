@@ -1066,5 +1066,13 @@ Gotchas the harnesses encode, in case you write new checks:
   removes a member (never the host, never yourself), `mute_all` silences every
   speaker but the host. New actions must also be added to the
   `room_moderation_actions.action` CHECK constraint, or the audit insert fails.
+- **The control dock must stay one row.** It is `position: sticky` at the bottom
+  of the room's scroll, so every extra row it grows covers the stage and the
+  conversation. Keep it to the mic, raise hand, people, join/leave and More;
+  anything else belongs in the More sheet. Check it at 390px wide - a wrapped
+  row also pushes the last button off the right edge.
+- **A CSS rule declared later wins at equal specificity.** `.studio-controls
+  .btn` beat `.studio-controls .mic-btn`, so the mic could not shrink; order the
+  generic rule before the specific one.
 
 
