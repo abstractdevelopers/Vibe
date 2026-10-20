@@ -9,6 +9,7 @@ import {
 } from "../components/Icons";
 import { uploadImageFile } from "../media";
 import { PLATFORM_FEE_BPS } from "@vibe/shared";
+import { formatMoney, toMinorUnits } from "../money";
 
 /**
  * Live Now + activity rooms (addendum §1–§4, §8).
@@ -79,11 +80,6 @@ const KIND_LABEL: Record<string, string> = {
   voice: "Voice room",
   listen: "Listen together",
 };
-
-/** Format a minor-unit price the way the rest of the app does. */
-function naira(minor: number): string {
-  return `₦${(minor / 100).toLocaleString(undefined, { maximumFractionDigits: 0 })}`;
-}
 
 /** The honest host label. Rendered everywhere a host name appears. */
 export function HostLabel({ host }: { host: Room["host"] }) {
@@ -173,7 +169,7 @@ export function LiveScreen({ onBack }: { onBack: () => void }) {
               {room.isSponsored && <span className="sponsored-tag">{room.sponsorLabel ?? "Sponsored"}</span>}
               {KIND_LABEL[room.kind] && <span className="chip tiny">{KIND_LABEL[room.kind]}</span>}
               {room.isTicketed ? (
-                <span className="chip tiny"><TicketIcon width={11} height={11} /> {naira(room.ticketPriceMinor)}</span>
+                <span className="chip tiny"><TicketIcon width={11} height={11} /> {formatMoney(room.ticketPriceMinor, "NGN")}</span>
               ) : (
                 <span className="chip tiny">Free</span>
               )}
@@ -227,6 +223,10 @@ function GoLiveSheet({ onClose, onCreated }: { onClose: () => void; onCreated: (
   const [cadence, setCadence] = useState<(typeof CADENCES)[number]>("");
   const [paid, setPaid] = useState(false);
   const [price, setPrice] = useState(1000);
+  // What the host keeps: the ticket price less Vibe's cut. Floor the fee, the
+  // same way the server does, so the number shown is never a naira over.
+  const priceMinor = toMinorUnits(String(price), "NGN") ?? 0;
+  const keepsMinor = priceMinor - Math.floor((priceMinor * PLATFORM_FEE_BPS.ticket) / 10_000);
   const [trackTitle, setTrackTitle] = useState("");
   const [trackArtist, setTrackArtist] = useState("");
   const [bannerUrl, setBannerUrl] = useState<string | null>(null);
@@ -266,7 +266,7 @@ function GoLiveSheet({ onClose, onCreated }: { onClose: () => void; onCreated: (
           visibility: "public",
           ...(canBroadcast ? { layout } : {}),
           ...(cadence ? { recurrence: cadence } : {}),
-          ticketPriceMinor: paid ? Math.round(price * 100) : 0,
+          ticketPriceMinor: paid ? priceMinor : 0,
           currency: "NGN",
           ...(bannerUrl ? { bannerUrl } : {}),
           ...(isAudio && trackTitle.trim()
@@ -411,7 +411,7 @@ function GoLiveSheet({ onClose, onCreated }: { onClose: () => void; onCreated: (
               <input id="livePrice" type="number" min={1} value={price} onChange={(e) => setPrice(Number(e.target.value) || 0)} />
             </div>
             <p className="meta grow" style={{ alignSelf: "flex-end", marginBottom: 8 }}>
-              You earn {naira(Math.round(price * 100 * 0.7))} per ticket.
+              You earn {formatMoney(keepsMinor, "NGN")} per ticket.
             </p>
           </div>
         )}
