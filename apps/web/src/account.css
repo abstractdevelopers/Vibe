@@ -1,0 +1,67 @@
+/* ============================================================
+   You — the account surface
+   ============================================================
+
+   You is a set of panels, not a feed, so it does not use the shelf/row
+   language. What it was missing was rhythm: every panel sat 12px from the next
+   as an inline margin, so the identity block, the privacy controls and the
+   payments note all read at the same weight. Here the identity block is a
+   distinct object, the panels below it share one gap, and each panel owns its
+   head and its internal spacing. Spacing is a multiple of 4px. */
+
+.you-flow { display: flex; flex-direction: column; }
+.you-flow > * + * { margin-top: var(--space-4); }
+
+/* The identity block stands apart: it is who you are, not a setting. */
+.you-identity {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  padding: var(--space-5);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-card);
+  background: linear-gradient(150deg, color-mix(in srgb, var(--interactive) 12%, var(--surface-1)), var(--surface-0));
+}
+.you-identity .grow { min-width: 0; }
+.you-identity-name { font-size: var(--text-title); font-weight: 700; letter-spacing: -0.01em; line-height: 1.15; }
+.you-identity-handle { margin-top: var(--space-1); overflow-wrap: anywhere; }
+.you-flow > .you-identity + * { margin-top: var(--space-6); }
+
+.you-panel {
+  display: flex;
+  flex-direction: column;
+  padding: var(--space-5);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-card);
+  background: var(--surface-1);
+}
+.you-panel-head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin-bottom: var(--space-4);
+  color: var(--violet-soft);
+}
+.you-panel-head .section-title { margin: 0; color: var(--text); }
+
+/* A row inside a panel: one label block, one control, a hairline between rows
+   and none after the last. */
+.you-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: var(--space-3) 0;
+  border-bottom: 1px solid var(--hairline);
+}
+.you-row:last-child { border-bottom: none; }
+.you-row-label { display: block; font-weight: 600; }
+.you-toggle { cursor: pointer; }
+
+.you-foot {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  margin-top: var(--space-5);
+}

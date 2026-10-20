@@ -77,32 +77,28 @@ export function YouScreen({ me, onMeChanged }: Props) {
   }
 
   return (
-    <div>
+    <div className="you-flow">
       <h1 className="screen-title">You</h1>
 
-      <div className="card" style={{ marginBottom: "var(--space-3)" }}>
-        <div className="row" style={{ gap: "var(--space-4)" }}>
-          <Avatar name={me.displayName} url={me.avatarUrl} seed={me.id} style={{ width: 56, height: 56, fontSize: 22 }} />
-          <div className="grow">
-            <div className="feed-author" style={{ fontSize: 18 }}>
-              {me.displayName}
-            </div>
-            <div className="meta">
-              @{me.handle} · {me.email}
-            </div>
+      <div className="you-identity">
+        <Avatar name={me.displayName} url={me.avatarUrl} seed={me.id} style={{ width: 56, height: 56, fontSize: 22 }} />
+        <div className="grow">
+          <div className="you-identity-name">{me.displayName}</div>
+          <div className="meta you-identity-handle">
+            @{me.handle} · {me.email}
           </div>
-          <button className="btn" onClick={() => nav.push({ name: "edit-profile" })}>
-            <EditIcon width={16} height={16} /> Edit
-          </button>
         </div>
+        <button className="btn" onClick={() => nav.push({ name: "edit-profile" })}>
+          <EditIcon width={16} height={16} /> Edit
+        </button>
       </div>
 
-      <div className="card" style={{ marginBottom: "var(--space-3)" }}>
-        <div className="row" style={{ gap: "var(--space-2)", marginBottom: "var(--space-3)" }}>
-          <MapPinIcon width={18} height={18} style={{ color: "var(--violet-soft)" }} />
+      <div className="you-panel">
+        <div className="you-panel-head">
+          <MapPinIcon width={18} height={18} />
           <span className="section-title">Your area</span>
         </div>
-        <p className="muted" style={{ marginTop: 0 }}>
+        <p className="meta" style={{ margin: "0 0 var(--space-3)" }}>
           Used to rank Explore by area. This is a city and area label you type — Vibe never reads
           your device location and never stores coordinates.
         </p>
@@ -128,6 +124,7 @@ export function YouScreen({ me, onMeChanged }: Props) {
         </div>
         <button
           className="btn block"
+          style={{ marginTop: "var(--space-3)" }}
           disabled={saving}
           onClick={async () => {
             setSaving(true);
@@ -150,9 +147,9 @@ export function YouScreen({ me, onMeChanged }: Props) {
         </button>
       </div>
 
-      <div className="card" style={{ marginBottom: "var(--space-3)" }}>
-        <div className="row" style={{ gap: "var(--space-2)", marginBottom: "var(--space-4)" }}>
-          <ShieldIcon width={18} height={18} style={{ color: "var(--violet-soft)" }} />
+      <div className="you-panel">
+        <div className="you-panel-head">
+          <ShieldIcon width={18} height={18} />
           <span className="section-title">Privacy</span>
         </div>
 
@@ -200,16 +197,16 @@ export function YouScreen({ me, onMeChanged }: Props) {
           <option value="private">Private</option>
         </select>
 
-        {message && <div className={`notice ${message.tone === "ok" ? "success" : "danger"}`}>{message.text}</div>}
+        {message && <div className={`notice ${message.tone === "ok" ? "success" : "danger"}`} style={{ marginTop: "var(--space-3)" }}>{message.text}</div>}
 
-        <button className="btn primary block" onClick={() => void savePrivacy()} disabled={saving}>
+        <button className="btn primary block" style={{ marginTop: "var(--space-3)" }} onClick={() => void savePrivacy()} disabled={saving}>
           {saving ? "Saving…" : "Save privacy settings"}
         </button>
       </div>
 
-      <div className="card" style={{ marginBottom: "var(--space-3)" }}>
-        <div className="row" style={{ gap: "var(--space-2)", marginBottom: "var(--space-4)" }}>
-          <GlobeIcon width={18} height={18} style={{ color: "var(--violet-soft)" }} />
+      <div className="you-panel">
+        <div className="you-panel-head">
+          <GlobeIcon width={18} height={18} />
           <span className="section-title">Appearance</span>
         </div>
         <button className="btn block" onClick={toggleTheme}>
@@ -217,22 +214,18 @@ export function YouScreen({ me, onMeChanged }: Props) {
         </button>
       </div>
 
-      <div className="card" style={{ marginBottom: "var(--space-3)" }}>
-        <div className="row" style={{ gap: "var(--space-2)", marginBottom: "var(--space-3)" }}>
-          <ShieldIcon width={18} height={18} style={{ color: "var(--violet-soft)" }} />
+      <div className="you-panel">
+        <div className="you-panel-head">
+          <ShieldIcon width={18} height={18} />
           <span className="section-title">Blocked accounts</span>
         </div>
         {blocked.length === 0 ? (
-          <p className="muted" style={{ margin: 0 }}>
+          <p className="meta" style={{ margin: 0 }}>
             You haven&rsquo;t blocked anyone.
           </p>
         ) : (
           blocked.map((u) => (
-            <div
-              key={u.id}
-              className="row spread"
-              style={{ padding: "var(--space-2) 0", borderBottom: "1px solid var(--hairline)" }}
-            >
+            <div key={u.id} className="you-row">
               <span>
                 {u.displayName} <span className="meta">@{u.handle}</span>
               </span>
@@ -244,12 +237,12 @@ export function YouScreen({ me, onMeChanged }: Props) {
         )}
       </div>
 
-      <div className="card" style={{ marginBottom: "var(--space-3)" }}>
-        <div className="row" style={{ gap: "var(--space-2)", marginBottom: "var(--space-3)" }}>
-          <WalletIcon width={18} height={18} style={{ color: "var(--violet-soft)" }} />
+      <div className="you-panel">
+        <div className="you-panel-head">
+          <WalletIcon width={18} height={18} />
           <span className="section-title">Payments</span>
         </div>
-        <p className="muted" style={{ margin: 0 }}>
+        <p className="meta" style={{ margin: 0 }}>
           Vibe tracks and coordinates shared expenses, and connects you to shops. It never holds your
           money: payments are collected by the payment provider.
         </p>
@@ -259,7 +252,7 @@ export function YouScreen({ me, onMeChanged }: Props) {
         <LogOutIcon width={18} height={18} /> Log out
       </button>
 
-      <p className="meta" style={{ textAlign: "center", marginTop: "var(--space-5)", display: "flex", gap: 6, justifyContent: "center" }}>
+      <p className="meta you-foot">
         <LockIcon width={13} height={13} /> Your data stays yours.
       </p>
     </div>
@@ -280,13 +273,9 @@ function Toggle({
   onChange: (value: boolean) => void;
 }) {
   return (
-    <label
-      htmlFor={id}
-      className="row spread"
-      style={{ padding: "var(--space-3) 0", borderBottom: "1px solid var(--hairline)", cursor: "pointer" }}
-    >
+    <label htmlFor={id} className="you-row you-toggle">
       <span className="grow" style={{ paddingRight: "var(--space-3)" }}>
-        <span style={{ display: "block", fontWeight: 600 }}>{label}</span>
+        <span className="you-row-label">{label}</span>
         <span className="meta">{hint}</span>
       </span>
       {/* Same switch as the Settings screen: a track and knob plus an explicit

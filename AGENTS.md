@@ -861,6 +861,14 @@ Gotchas the harnesses encode, in case you write new checks:
   card stretched to full width and its sides grew into boxes. Two components, two
   namespaces: the rail's are now `.rail-battle-*`. A shared name across screens is
   a hidden coupling; rename rather than "fix it with more specificity".
+- **You is panels, not a shelf.** `You.tsx` is a set of account panels, so it does
+  not use the shelf/row language - but it does keep the same rhythm rule: one gap
+  between panels, a distinct identity block, and each panel owning its head and
+  internal spacing. Local material lives in `apps/web/src/account.css`. Note the
+  mobile spacing scale is tighter than the desktop one (`--space-4` is 12px and
+  `--space-6`/`--space-8` are 24px under 720px), so a rhythm built on `--space-4`
+  and `--space-6` reads as 12px and 24px on a phone - always measure, do not
+  assume the desktop numbers.
 - **Themes are authored, not random.** `apps/web/src/themes.ts` holds 34 base
   palettes × 4 styles, plus 4 named environments = 140 themes; each computes its accent ink by luminance so
   text stays legible. The atmosphere glows read `--theme-glow-a/--theme-glow-b`,
