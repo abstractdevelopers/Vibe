@@ -837,6 +837,15 @@ Gotchas the harnesses encode, in case you write new checks:
   and table rows pan horizontally (`.shelf-row`) so one shelf is never taller
   than its content needs. Keep new sections inside `.games-flow` so they inherit
   the rhythm. Local material lives in `apps/web/src/environments.css`.
+- **Explore chunks by result kind, and shares one row language.** `Explore.tsx`
+  mixes people, posts, events/places and shops, so each kind is its own `.shelf`
+  and every row reuses `.result-row` from `apps/web/src/discover.css` — a person,
+  a shop and an event read as peers of one page rather than four components. The
+  search field and its two facet rows are one `.discover-tools` block, because a
+  filter belongs next to the field it filters. Do not put a raw `.stack` of mixed
+  kinds back: proximity is the whole point. The empty state only claims "nothing
+  matches" when *every* kind is empty, so a query that found a person is not told
+  it found nothing.
 - **Themes are authored, not random.** `apps/web/src/themes.ts` holds 34 base
   palettes Ã— 4 styles, plus 4 named environments = 140 themes; each computes its accent ink by luminance so
   text stays legible. The atmosphere glows read `--theme-glow-a/--theme-glow-b`,

@@ -6,6 +6,7 @@ import "./messaging.css";
 import "./gifts.css";
 import "./profile-card.css";
 import "./environments.css";
+import "./discover.css";
 import { App } from "./App";
 
 ReactDOM.createRoot(document.getElementById("root")!).render(

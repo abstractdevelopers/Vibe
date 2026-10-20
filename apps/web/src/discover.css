@@ -1,0 +1,119 @@
+/* ============================================================
+   Discover — a chunked, well-spaced search surface
+   ============================================================
+
+   Explore mixes four kinds of result: people, posts, events/places and shops.
+   The page's job is to make that mixture legible, so it is built on chunking
+   and proximity: every kind is its own shelf, a shelf's head sits closer to its
+   own rows than the next shelf does, and rows inside a shelf are tight because
+   they are one group. The search field and its two facet rows are one
+   instrument, so they share a block and the facets stay close to the field they
+   belong to. Spacing is a multiple of 4px throughout. */
+
+.discover { display: flex; flex-direction: column; }
+.discover > * + * { margin-top: var(--space-5); }
+.discover > .shelf + .shelf { margin-top: var(--space-8); }
+.discover > .card.live-cta { margin-top: 0; }
+
+.discover-head { display: flex; flex-direction: column; }
+.discover-head .eyebrow { margin: 0 0 var(--space-1); }
+
+/* Search and facets as one instrument. */
+.discover-tools { display: flex; flex-direction: column; gap: var(--space-3); }
+.discover-search {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: 0 var(--space-4);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+  background: var(--surface-2);
+  color: var(--text-muted);
+  transition: border-color var(--motion-fast) var(--ease-out);
+}
+.discover-search:focus-within { border-color: color-mix(in srgb, var(--accent) 55%, var(--border)); }
+.discover-search input {
+  flex: 1;
+  min-width: 0;
+  border: none;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  padding: 12px 0;
+  outline: none;
+}
+.discover-search input::-webkit-search-cancel-button { display: none; }
+
+.discover-place {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+}
+.discover-place .meta { min-width: 0; }
+
+/* A shelf here is the same rhythm as the Play catalogue: head, then rows. */
+.discover .shelf { display: flex; flex-direction: column; }
+.discover .shelf-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  margin-bottom: var(--space-3);
+}
+.discover .shelf-head .section-title { margin: 0; }
+
+/* One list language for every result kind, so a person, a shop and an event
+   read as peers of the same page rather than four different components. */
+.result-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+.result-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  width: 100%;
+  text-align: left;
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--radius-card);
+  border: 1px solid var(--border);
+  background: color-mix(in srgb, var(--surface-1) 62%, transparent);
+  cursor: pointer;
+  transition: transform var(--motion-fast) var(--ease-out), border-color var(--motion-fast) var(--ease-out),
+    background var(--motion-base) var(--ease-out);
+}
+.result-row:hover {
+  transform: translateY(-2px);
+  border-color: var(--border-strong);
+  background: color-mix(in srgb, var(--surface-2) 72%, transparent);
+}
+.result-row-title { display: block; font-weight: 700; line-height: var(--leading-snug); }
+.result-row-body { margin: var(--space-1) 0 0; color: var(--text-secondary); line-height: var(--leading-snug); }
+.result-row-icon {
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  flex: none;
+  border-radius: 12px;
+  color: var(--violet-soft);
+  background: color-mix(in srgb, var(--interactive) 14%, transparent);
+  border: 1px solid color-mix(in srgb, var(--interactive) 26%, transparent);
+}
+
+/* Events and places are the richest rows: a card with a heading, the facts in
+   one wrapping line, and the ranking reasons as small tags. They reuse the
+   shared `.card` material but get their own internal rhythm. */
+.result-list .card.interactive {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: var(--space-4) var(--space-5);
+}
+.result-list .card h3 { margin: var(--space-2) 0; font-size: var(--text-section); line-height: var(--leading-snug); }
+
+@media (prefers-reduced-motion: reduce) {
+  .result-row:hover { transform: none; }
+}

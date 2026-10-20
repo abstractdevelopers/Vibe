@@ -5,6 +5,7 @@ import { EmptyState } from "../components/EmptyState";
 import {
   CalendarIcon,
   ChevronRightIcon,
+  CloseIcon,
   CompassIcon,
   MapPinIcon,
   MoneyIcon,
@@ -148,8 +149,12 @@ export function ExploreScreen({ me }: { me: Me }) {
   }, [load]);
 
   return (
-    <div>
-      <h1 className="screen-title">Explore</h1>
+    <div className="discover">
+      <header className="discover-head">
+        <p className="eyebrow">Discover</p>
+        <h1 className="screen-title" style={{ margin: 0 }}>Explore</h1>
+        <p className="screen-subtitle">Events, places and shops, ranked for where you are.</p>
+      </header>
 
       {/* Live is the loudest thing on Explore: a room happening now is the
           fastest way into a real-world experience. Games has its own tab, so it
@@ -163,170 +168,196 @@ export function ExploreScreen({ me }: { me: Me }) {
         <ChevronRightIcon width={18} height={18} />
       </button>
 
-      <div className="row" style={{ gap: "var(--space-2)", marginBottom: "var(--space-3)" }}>
-        <div className="grow" style={{ position: "relative" }}>
-          <SearchIcon
-            width={17}
-            height={17}
-            style={{ position: "absolute", left: 14, top: "50%", transform: "translateY(-50%)", color: "var(--text-faint)" }}
-          />
+      {/* Search and its facets are one instrument, so they share a block. */}
+      <div className="discover-tools">
+        <div className="discover-search">
+          <SearchIcon width={17} height={17} aria-hidden />
           <input
             aria-label="Search Vibe"
             placeholder="Search events, places, shops…"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            style={{ marginBottom: 0, paddingLeft: 40 }}
           />
+          {query && (
+            <button className="icon-button" aria-label="Clear search" onClick={() => setQuery("")}>
+              <CloseIcon width={16} height={16} />
+            </button>
+          )}
         </div>
-      </div>
 
-      <div className="pill-row" role="tablist" aria-label="Result type">
-        <button className="pill" role="tab" aria-pressed={kind === "all"} onClick={() => setKind("all")}>
-          All
-        </button>
-        <button className="pill" role="tab" aria-pressed={kind === "event"} onClick={() => setKind("event")}>
-          Events
-        </button>
-        <button className="pill" role="tab" aria-pressed={kind === "place"} onClick={() => setKind("place")}>
-          Places &amp; shops
-        </button>
-      </div>
-
-      <div className="pill-row" role="tablist" aria-label="Categories">
-        {CATEGORIES.map((c) => (
-          <button
-            key={c.id}
-            className="pill"
-            role="tab"
-            aria-pressed={category === c.id}
-            onClick={() => setCategory(c.id)}
-          >
-            {c.label}
+        <div className="pill-row" role="tablist" aria-label="Result type">
+          <button className="pill" role="tab" aria-pressed={kind === "all"} onClick={() => setKind("all")}>
+            All
           </button>
-        ))}
-      </div>
+          <button className="pill" role="tab" aria-pressed={kind === "event"} onClick={() => setKind("event")}>
+            Events
+          </button>
+          <button className="pill" role="tab" aria-pressed={kind === "place"} onClick={() => setKind("place")}>
+            Places &amp; shops
+          </button>
+        </div>
 
-      <div className="row" style={{ gap: "var(--space-2)", marginBottom: "var(--space-3)", flexWrap: "wrap" }}>
-        <button className="btn small ghost" onClick={useMyLocation} disabled={locating}>
-          <MapPinIcon width={14} height={14} /> {locating ? "Locating…" : "Use my location"}
-        </button>
-        <span className="meta">
-          {[me.area, me.city].filter(Boolean).join(", ")
-            ? `Ranking for ${[me.area, me.city].filter(Boolean).join(", ")}`
-            : "Add a city in You, or share a rounded position"}
-        </span>
+        <div className="pill-row" role="tablist" aria-label="Categories">
+          {CATEGORIES.map((c) => (
+            <button
+              key={c.id}
+              className="pill"
+              role="tab"
+              aria-pressed={category === c.id}
+              onClick={() => setCategory(c.id)}
+            >
+              {c.label}
+            </button>
+          ))}
+        </div>
+
+        <div className="discover-place">
+          <button className="btn small ghost" onClick={useMyLocation} disabled={locating}>
+            <MapPinIcon width={14} height={14} /> {locating ? "Locating…" : "Use my location"}
+          </button>
+          <span className="meta">
+            {[me.area, me.city].filter(Boolean).join(", ")
+              ? `Ranking for ${[me.area, me.city].filter(Boolean).join(", ")}`
+              : "Add a city in You, or share a rounded position"}
+          </span>
+        </div>
+        {locatedNote && <p className="meta">{locatedNote}</p>}
       </div>
-      {locatedNote && <p className="meta" style={{ marginBottom: "var(--space-3)" }}>{locatedNote}</p>}
 
       {error && <div className="notice danger">{error}</div>}
 
+      {/* Each kind of result is its own shelf, so the page reads as a set of
+          groups rather than one long list — and a person is never presented as
+          an event, or a shop as a place. */}
       {people.length > 0 && (
-        <div style={{ marginBottom: "var(--space-4)" }}>
-          <p className="eyebrow">People</p>
-          <div className="stack">
+        <section className="shelf">
+          <div className="shelf-head">
+            <h2 className="section-title">People</h2>
+            <span className="meta">{people.length}</span>
+          </div>
+          <div className="result-list">
             {people.map((person) => (
               <button
                 key={person.id}
-                className="row"
-                style={{
-                  gap: "var(--space-3)",
-                  width: "100%",
-                  textAlign: "left",
-                  padding: "var(--space-2) 0",
-                  background: "none",
-                  border: "none",
-                  cursor: "pointer",
-                }}
+                className="result-row"
                 onClick={() => nav.push({ name: "profile", userId: person.id })}
               >
                 <span className="avatar sm" aria-hidden="true">
                   {person.displayName.slice(0, 1).toUpperCase()}
                 </span>
                 <span className="grow">
-                  <span style={{ display: "block", fontWeight: 600 }}>{person.displayName}</span>
+                  <span className="result-row-title">{person.displayName}</span>
                   <span className="meta">@{person.handle}</span>
                 </span>
                 <ChevronRightIcon width={16} height={16} style={{ color: "var(--text-faint)" }} />
               </button>
             ))}
           </div>
-        </div>
+        </section>
       )}
 
       {posts.length > 0 && (
-        <div style={{ marginBottom: "var(--space-4)" }}>
-          <p className="eyebrow">Posts</p>
-          <div className="stack">
+        <section className="shelf">
+          <div className="shelf-head">
+            <h2 className="section-title">Posts</h2>
+            <span className="meta">{posts.length}</span>
+          </div>
+          <div className="result-list">
             {posts.map((post) => (
               <button
                 key={post.id}
-                className="card"
-                style={{ width: "100%", textAlign: "left", cursor: "pointer" }}
+                className="result-row"
                 onClick={() => nav.push({ name: "profile", userId: post.author.id })}
               >
-                <span className="meta">@{post.author.handle}</span>
-                <p style={{ margin: "var(--space-1) 0 0" }}>{post.body}</p>
+                <span className="grow">
+                  <span className="meta">@{post.author.handle}</span>
+                  <p className="result-row-body">{post.body}</p>
+                </span>
+                <ChevronRightIcon width={16} height={16} style={{ color: "var(--text-faint)" }} />
               </button>
             ))}
           </div>
+        </section>
+      )}
+
+      <section className="shelf">
+        <div className="shelf-head">
+          <h2 className="section-title">{query.trim() || category ? "Results" : "Near you"}</h2>
+          {results && results.length > 0 && <span className="meta">{results.length}</span>}
         </div>
-      )}
 
-      {results === null && (
-        <div aria-busy="true">
-          <div className="skeleton" />
-          <div className="skeleton" />
-        </div>
-      )}
-
-      {results?.length === 0 && (
-        <EmptyState
-          icon={<CompassIcon />}
-          title="Nothing matches yet"
-          text="Try a different word or category. Discovery covers events, places and shops by area."
-          action={
-            <button
-              className="btn"
-              onClick={() => {
-                setQuery("");
-                setCategory("");
-                setKind("all");
-              }}
-            >
-              Clear filters
-            </button>
-          }
-        />
-      )}
-
-      <div className="stack">
-        {results?.map((r) =>
-          r.kind === "event" ? (
-            <EventCard
-              key={r.id}
-              result={r}
-              onOpen={() => nav.push(r.vibeEvent ? { name: "event", eventId: r.id } : { name: "plan", planId: r.id })}
-            />
-          ) : (
-            <PlaceCard key={r.id} result={r} onOpen={() => nav.push({ name: "place", placeId: r.id })} />
-          ),
+        {results === null && (
+          <div aria-busy="true">
+            <div className="skeleton" />
+            <div className="skeleton" />
+          </div>
         )}
-      </div>
 
-      <h2 className="section-title" style={{ marginTop: "var(--space-5)" }}>Shops</h2>
-      {shops === null && <div className="skeleton" aria-busy="true" />}
-      {shops?.length === 0 && <p className="meta">No verified shops yet.</p>}
-      <div className="stack">
-        {shops?.map((s) => (
-          <button key={s.id} className="card row spread" onClick={() => nav.push({ name: "store", merchantId: s.id })}>
-            <span>
-              <strong>{s.name}</strong>
-              {s.category && <div className="meta">{s.category}</div>}
-            </span>
-            <span className="audience-tag"><StoreIcon width={12} height={12} /> Verified</span>
-          </button>
-        ))}
-      </div>
+        {results?.length === 0 && people.length === 0 && posts.length === 0 && (
+          <EmptyState
+            icon={<CompassIcon />}
+            title="Nothing matches yet"
+            text="Try a different word or category. Discovery covers events, places and shops by area."
+            action={
+              <button
+                className="btn"
+                onClick={() => {
+                  setQuery("");
+                  setCategory("");
+                  setKind("all");
+                }}
+              >
+                Clear filters
+              </button>
+            }
+          />
+        )}
+
+        {results?.length === 0 && (people.length > 0 || posts.length > 0) && (
+          <p className="meta">No events or places match “{query.trim()}”.</p>
+        )}
+
+        {results && results.length > 0 && (
+          <div className="result-list">
+            {results.map((r) =>
+              r.kind === "event" ? (
+                <EventCard
+                  key={r.id}
+                  result={r}
+                  onOpen={() => nav.push(r.vibeEvent ? { name: "event", eventId: r.id } : { name: "plan", planId: r.id })}
+                />
+              ) : (
+                <PlaceCard key={r.id} result={r} onOpen={() => nav.push({ name: "place", placeId: r.id })} />
+              ),
+            )}
+          </div>
+        )}
+      </section>
+
+      <section className="shelf">
+        <div className="shelf-head">
+          <h2 className="section-title">Shops</h2>
+          {shops && shops.length > 0 && <span className="meta">{shops.length}</span>}
+        </div>
+        {shops === null && <div className="skeleton" aria-busy="true" />}
+        {shops?.length === 0 && <p className="meta">No verified shops yet.</p>}
+        {shops && shops.length > 0 && (
+          <div className="result-list">
+            {shops.map((s) => (
+              <button key={s.id} className="result-row" onClick={() => nav.push({ name: "store", merchantId: s.id })}>
+                <span className="result-row-icon" aria-hidden="true">
+                  <StoreIcon width={16} height={16} />
+                </span>
+                <span className="grow">
+                  <span className="result-row-title">{s.name}</span>
+                  {s.category && <span className="meta">{s.category}</span>}
+                </span>
+                <span className="audience-tag">Verified</span>
+              </button>
+            ))}
+          </div>
+        )}
+      </section>
     </div>
   );
 }
