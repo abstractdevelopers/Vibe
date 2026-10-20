@@ -1088,7 +1088,10 @@ Gotchas the harnesses encode, in case you write new checks:
   seven screens each had their own formatter and disagreed (advertising showed the
   raw minor units), and six forms each did `* 100`, so a yen budget was off by 100x.
   Server-side, split fees/rake with `Math.floor` so the counterparty is never short
-  and the journal entries sum exactly to the pot.
+  and the journal entries sum exactly to the pot. A screen that shows a **share**
+  ("you earn X per ticket") must derive it from `PLATFORM_FEE_BPS`, never a literal:
+  a stale `0.7` told hosts 70% after the ticket fee moved to 15%, and the gift sheet
+  had the same drift before it.
 - **The visual audit has three scripts.** `scripts/audit-visual.mjs` walks the
   nine top-level screens; `scripts/audit-deep.mjs` drills into the sub-pages
   (wallet, orders, pass, advertising, settings, admin, inbox, a conversation, a
