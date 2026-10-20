@@ -179,6 +179,12 @@ npm --workspace @vibe/api run test
   types are dotted ("plan.created"). `NOTIFICATION_FAMILY` in
   `modules/notifications.ts` is the single mapping. Add a mapping for any new
   type or the opt-out silently does nothing.
+- **`notifyUsers` both writes the row and publishes it.** Every caller passes
+  `ctx`, not `ctx.pool`, so the recipient's open socket hears `notification.created`
+  and the unread badge moves without a reload. The frame carries only the type
+  and entity ids; the row with its payload stays the single source of truth over
+  `GET /v1/notifications`. Publish only to the recipients who actually got a row,
+  so an opt-out stays quiet.
 
 ## Content lifecycle (posts and comments)
 - Both posts and comments are **soft-deleted with an undo window**
