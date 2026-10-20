@@ -739,7 +739,7 @@ export function RoomStudio({ roomId, viewerId, viewerName, onBack, onLeft }: Pro
             tall, and because it sticks to the bottom of the scroll it then sat
             over the stage and the conversation. */}
         <div className="studio-controls">
-          {canSpeak && (
+          {(isOnStage || isHost) && canSpeak && (
             <button
               className={`btn mic-btn${micOn ? " live" : ""}`}
               onClick={() => void toggleMic()}
@@ -753,15 +753,16 @@ export function RoomStudio({ roomId, viewerId, viewerName, onBack, onLeft }: Pro
               </span>
             </button>
           )}
+          {/* A listener has no mic. They ask to speak, and the host decides —
+              the same door Clubhouse and Spaces use. */}
           {!isOnStage && canSpeak && (
             <button
-              className="btn ghost icon-only"
-              onClick={() => void raiseHand(true)}
-              disabled={audience.find((a) => a.id === viewerId)?.handRaised}
-              title={audience.find((a) => a.id === viewerId)?.handRaised ? "Hand raised" : "Raise hand"}
-              aria-label={audience.find((a) => a.id === viewerId)?.handRaised ? "Hand raised" : "Raise hand"}
+              className={`btn raise-hand${audience.find((a) => a.id === viewerId)?.handRaised ? " waiting" : ""}`}
+              onClick={() => void raiseHand(!audience.find((a) => a.id === viewerId)?.handRaised)}
+              title={audience.find((a) => a.id === viewerId)?.handRaised ? "Lower your hand" : "Ask to speak"}
             >
               <HandIcon width={16} height={16} />
+              <span>{audience.find((a) => a.id === viewerId)?.handRaised ? "Hand raised" : "Raise hand"}</span>
             </button>
           )}
           <button
@@ -784,10 +785,11 @@ export function RoomStudio({ roomId, viewerId, viewerName, onBack, onLeft }: Pro
         {/* Only when it says something the button does not. The mic button
             already reads "Mic off", and when there is an error the notice below
             is the useful message. */}
-        {canSpeak && micOn && !micError && (
-          <p className="meta mic-state">
-            {isOnStage ? "You are on the stage — everyone can hear you." : "You are unmuted; the host can bring you up."}
-          </p>
+        {canSpeak && isOnStage && micOn && !micError && (
+          <p className="meta mic-state">You are on the stage — everyone can hear you.</p>
+        )}
+        {canSpeak && !isOnStage && audience.find((a) => a.id === viewerId)?.handRaised && (
+          <p className="meta mic-state">Hand raised — the host decides who speaks.</p>
         )}
         {micError && <div className="notice">{micError}</div>}
       </div>

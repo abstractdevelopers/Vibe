@@ -119,24 +119,45 @@ describe("activity rooms", () => {
 });
 
 
-// Two phones, both with the mic on, and neither could hear the other. The stage
-// list is what the client builds peer connections from, and a joiner used to be
-// written as 'member' — audience — so a guest was never on the stage and no peer
-// was ever created. The migration says a voice room is an open stage; these
-// tests pin that, and pin that a broadcast room is not.
+// A voice room is a stage plus an audience, the way Clubhouse and Spaces work:
+// you arrive as a listener, raise your hand, and the host decides who speaks.
+// Joining must never put you on the stage with a live mic. These tests pin that
+// a joiner is audience, and that only a host promotion moves them up.
 describe("voice room stage", () => {
   const stageOf = async (roomId: string, token: string) => {
     const res = await h.app.inject({ method: "GET", url: `/v1/activities/rooms/${roomId}/members`, headers: auth(token) });
     return res.json() as { stage: Array<{ id: string }>; audience: Array<{ id: string }> };
   };
 
-  it("puts a guest on the stage of an open voice room so peers can form", async () => {
+  it("puts a joiner in the audience, never on the stage", async () => {
     const room = await makeRoom({ kind: "voice", title: "Open mic", layout: "stage" });
     const id = room.json().room.id as string;
     await h.app.inject({ method: "POST", url: `/v1/activities/rooms/${id}/join`, headers: auth(fan.token), payload: {} });
     const { stage, audience } = await stageOf(id, host.token);
+    expect(audience.some((m) => m.id === fan.id)).toBe(true);
+    expect(stage.some((m) => m.id === fan.id)).toBe(false);
+  });
+
+  it("lets the host bring a listener up, and only the host", async () => {
+    const room = await makeRoom({ kind: "voice", title: "Approval", layout: "stage" });
+    const id = room.json().room.id as string;
+    await h.app.inject({ method: "POST", url: `/v1/activities/rooms/${id}/join`, headers: auth(fan.token), payload: {} });
+
+    // A listener cannot promote themselves.
+    const asFan = await h.app.inject({
+      method: "POST", url: `/v1/activities/rooms/${id}/stage`,
+      headers: auth(fan.token), payload: { userId: fan.id, action: "promote" },
+    });
+    expect(asFan.statusCode).toBeGreaterThanOrEqual(400);
+
+    // The host can.
+    const asHost = await h.app.inject({
+      method: "POST", url: `/v1/activities/rooms/${id}/stage`,
+      headers: auth(host.token), payload: { userId: fan.id, action: "promote" },
+    });
+    expect(asHost.statusCode).toBeLessThan(300);
+    const { stage } = await stageOf(id, host.token);
     expect(stage.some((m) => m.id === fan.id)).toBe(true);
-    expect(audience.some((m) => m.id === fan.id)).toBe(false);
   });
 
   it("keeps a listener in the audience of a broadcast voice room", async () => {
@@ -166,11 +187,11 @@ describe("leaving a room", () => {
     return res.json() as { stage: Array<{ id: string }>; audience: Array<{ id: string }> };
   };
 
-  it("removes the leaver from the stage and from the member count", async () => {
+  it("removes the leaver from the room and from the member count", async () => {
     const room = await makeRoom({ kind: "voice", title: "Leave test", layout: "stage" });
     const id = room.json().room.id as string;
     await h.app.inject({ method: "POST", url: `/v1/activities/rooms/${id}/join`, headers: auth(fan.token), payload: {} });
-    expect((await membersOf(id, host.token)).stage.some((m) => m.id === fan.id)).toBe(true);
+    expect((await membersOf(id, host.token)).audience.some((m) => m.id === fan.id)).toBe(true);
 
     const leave = await h.app.inject({ method: "POST", url: `/v1/activities/rooms/${id}/leave`, headers: auth(fan.token), payload: {} });
     expect(leave.statusCode).toBe(200);
@@ -259,6 +280,12 @@ describe("room roster controls", () => {
     const room = await makeRoom({ kind: "voice", title: "Mute all", layout: "stage" });
     const id = room.json().room.id as string;
     await h.app.inject({ method: "POST", url: `/v1/activities/rooms/${id}/join`, headers: auth(fan.token), payload: {} });
+    // Bring the listener up first: a joiner is audience now, and mute_all is
+    // about the stage.
+    await h.app.inject({
+      method: "POST", url: `/v1/activities/rooms/${id}/stage`,
+      headers: auth(host.token), payload: { userId: fan.id, action: "promote" },
+    });
     expect((await membersOf(id, host.token)).stage.some((m) => m.id === fan.id && !m.muted)).toBe(true);
 
     const res = await h.app.inject({

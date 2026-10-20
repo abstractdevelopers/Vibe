@@ -27,7 +27,9 @@ const PAGES = [
   ["play", "Play"],
   ["explore", "Explore"],
   ["live", "Live"],
-  ["battles", "Battles"],
+  // Battles is no longer its own tab; it is the second face of Play, reached
+  // through the Play segment control.
+  ["battles", "Battles", "Play"],
   ["you", "You"],
   // The header menu, where "Start something" and Settings live.
   ["menu", "Menu"],
@@ -43,7 +45,7 @@ const browser = await puppeteer.launch({
 });
 
 const report = {};
-for (const [name, label] of PAGES) {
+for (const [name, label, first] of PAGES) {
   const page = await browser.newPage();
   await page.setViewport({ width: 390, height: 844, deviceScaleFactor: 2 });
   if (TOKEN) {
@@ -52,19 +54,23 @@ for (const [name, label] of PAGES) {
   }
   await page.goto(BASE + "/", { waitUntil: "networkidle2", timeout: 30000 }).catch(() => {});
   await new Promise((r) => setTimeout(r, 1500));
-  if (label) {
-    // Prefer the bottom nav; fall back to any button whose label or aria-label
-    // matches, which is how the header menu and the centre create button open.
-    await page.evaluate((lbl) => {
+  // Prefer the bottom nav; fall back to any button whose label or aria-label
+  // matches, which is how the header menu and the centre create button open.
+  const clickLabel = async (lbl) => {
+    await page.evaluate((l) => {
       const navBtns = [...document.querySelectorAll("nav.bottom-nav button, .bottom-nav button")];
-      const nav = navBtns.find((x) => (x.textContent || "").trim() === lbl);
+      const nav = navBtns.find((x) => (x.textContent || "").trim() === l);
       if (nav) { nav.click(); return; }
       const all = [...document.querySelectorAll("button")];
-      const byAria = all.find((x) => (x.getAttribute("aria-label") || "").trim() === lbl);
+      const byAria = all.find((x) => (x.getAttribute("aria-label") || "").trim() === l);
       if (byAria) { byAria.click(); return; }
-      const byText = all.find((x) => (x.textContent || "").trim() === lbl);
+      const byText = all.find((x) => (x.textContent || "").trim() === l);
       byText?.click();
-    }, label);
+    }, lbl);
+  };
+  if (first) { await clickLabel(first); await new Promise((r) => setTimeout(r, 1600)); }
+  if (label) {
+    await clickLabel(label);
     await new Promise((r) => setTimeout(r, 2200));
   }
   report[name] = await page.evaluate(probeOverflow);

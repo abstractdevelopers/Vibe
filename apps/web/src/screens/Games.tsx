@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { api, ApiError, idempotencyKey } from "../api";
 import { useNav } from "../nav";
 import { ScreenHeader } from "../components/ScreenHeader";
+import { PlaySegments } from "../components/PlaySegments";
 import { formatMoney } from "../money";
 import { EmptyState } from "../components/EmptyState";
 import { GameArt, GameCover, WORLD_ORDER, worldFor } from "../components/GameArt";
@@ -65,7 +66,7 @@ interface Session {
 
 const STAKES = [0, 5_000, 10_000, 20_000, 50_000];
 
-export function GamesScreen({ onBack, viewerId }: { onBack?: () => void; viewerId?: string }) {
+export function GamesScreen({ onBack, viewerId, onOpenBattles }: { onBack?: () => void; viewerId?: string; onOpenBattles?: () => void }) {
   const nav = useNav();
   const [games, setGames] = useState<Game[] | null>(null);
   const [sessions, setSessions] = useState<Session[]>([]);
@@ -150,6 +151,8 @@ export function GamesScreen({ onBack, viewerId }: { onBack?: () => void; viewerI
           ) : undefined
         }
       />
+
+      {onOpenBattles && <PlaySegments active="games" onChange={(s) => { if (s === "battles") onOpenBattles(); }} />}
 
       {error && <div className="notice danger" role="alert">{error}</div>}
 

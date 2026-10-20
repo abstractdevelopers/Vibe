@@ -335,20 +335,18 @@ export function activityRoutes(ctx: AppContext) {
           throw ApiError.paymentRequired("This room needs a ticket");
         }
       }
-      // A voice room is an open stage: the migration says anyone who joins can
-      // speak. Everyone used to be inserted as the default 'member' role, which
-      // is audience, so a guest was never on the stage, the client built no peer
-      // from the stage list, and two people who both pressed "mic on" still
-      // heard nothing. An open voice room now puts the joiner on the stage.
+      // Joining a room puts you in the audience, never on the stage. That is the
+      // Clubhouse/Spaces model: you arrive as a listener, raise your hand, and
+      // the host decides who speaks. An earlier version put everyone who joined
+      // a voice room straight onto the stage, which meant the mic was live
+      // without the host ever approving it.
       //
-      // A broadcast room is the opposite: the host publishes and listeners
-      // subscribe, so a joiner stays in the audience. A listen room follows the
-      // host's playback, so it also stays audience.
-      const openStage = room.kind === "voice" && room.layout !== "broadcast";
+      // The host is written to room_members as 'host' when the room is created,
+      // so this insert does nothing for them and they stay on the stage.
       await ctx.pool.query(
-        `INSERT INTO room_members (room_id, user_id, role) VALUES ($1,$2,$3)
+        `INSERT INTO room_members (room_id, user_id, role) VALUES ($1,$2,'member')
          ON CONFLICT (room_id, user_id) DO NOTHING`,
-        [id, user.id, openStage ? "speaker" : "member"],
+        [id, user.id],
       );
       trackSafe(ctx.pool, { name: "room_joined", userId: user.id, properties: { kind: room.kind, entityType: "room", entityId: id } });
       return { room: await loadRoom(ctx, id, user.id), joined: true };

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { api, ApiError, idempotencyKey } from "../api";
 import { ScreenHeader } from "../components/ScreenHeader";
+import { PlaySegments } from "../components/PlaySegments";
 import { formatMoney, toMinorUnits } from "../money";
 import { Avatar } from "../components/Avatar";
 import { EmptyState } from "../components/EmptyState";
@@ -104,7 +105,7 @@ function BattleCard({ battle, onOpen }: { battle: Battle; onOpen: () => void }) 
   );
 }
 
-export function BattlesScreen({ onBack }: { onBack?: () => void }) {
+export function BattlesScreen({ onBack, onOpenGames }: { onBack?: () => void; onOpenGames?: () => void }) {
   const nav = useNav();
   const [battles, setBattles] = useState<Battle[]>([]);
   const [loading, setLoading] = useState(true);
@@ -144,6 +145,8 @@ export function BattlesScreen({ onBack }: { onBack?: () => void }) {
           ) : undefined
         }
       />
+
+      {onOpenGames && <PlaySegments active="battles" onChange={(s) => { if (s === "games") onOpenGames(); }} />}
 
       {error && <div className="notice danger" role="alert">{error}</div>}
 

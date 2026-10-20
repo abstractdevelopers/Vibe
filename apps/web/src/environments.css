@@ -185,6 +185,35 @@
 .shelf-row::-webkit-scrollbar { display: none; }
 .shelf-row > * { scroll-snap-align: start; flex: none; }
 
+/* The Play switcher: Games and Battles are one destination, so this is how you
+   move between them now that Battles is not its own nav tab. */
+.play-segments {
+  display: flex;
+  gap: var(--space-1);
+  padding: var(--space-1);
+  border-radius: var(--radius-pill);
+  background: var(--surface-2);
+  border: 1px solid var(--hairline);
+  align-self: flex-start;
+}
+.play-segment {
+  padding: 7px 18px;
+  border-radius: var(--radius-pill);
+  font-size: var(--text-supporting);
+  font-weight: 600;
+  color: var(--text-muted);
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-family: inherit;
+  transition: color var(--motion-fast) var(--ease-out), background var(--motion-fast) var(--ease-out);
+}
+.play-segment:hover { color: var(--text); }
+.play-segment.active {
+  color: var(--accent-ink);
+  background: var(--brand-gradient);
+}
+
 /* ---- The featured band ------------------------------------------------- */
 
 .games-hero {

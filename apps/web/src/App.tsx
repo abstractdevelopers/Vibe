@@ -34,7 +34,6 @@ import {
   PlusIcon,
   ReceiptIcon,
   SettingsIcon,
-  SplitIcon,
   WalletIcon,
   ShieldIcon,
   TicketIcon,
@@ -67,7 +66,11 @@ import { applyTheme, restoreTheme, rotateAutoTheme, themeMode, ROTATION_MS } fro
 import { Avatar } from "./components/Avatar";
 import type { Me } from "./types";
 
-export type Tab = "home" | "circles" | "play" | "battles" | "explore" | "you";
+export type Tab = "home" | "circles" | "play" | "explore" | "you";
+
+/** Play is one destination with two faces. Battles used to be its own nav tab,
+ *  which made the bar six items wide and pushed the Create button off centre. */
+export type PlaySegment = "games" | "battles";
 
 /**
  * The app routes in memory, so a shared link cannot reach a screen on its own.
@@ -88,6 +91,7 @@ export function App() {
   const [me, setMe] = useState<Me | null>(null);
   const [checking, setChecking] = useState(true);
   const [tab, setTab] = useState<Tab>("home");
+  const [playSegment, setPlaySegment] = useState<PlaySegment>("games");
   const [route, setRoute] = useState<Route>({ name: "tabs" });
   const [routeStack, setRouteStack] = useState<Route[]>([]);
   const [unread, setUnread] = useState(0);
@@ -281,12 +285,14 @@ export function App() {
                 {tab === "circles" && <CirclesScreen me={me} refreshKey={refreshKey} onChanged={bump} />}
                 {tab === "play" && (
                   <Suspense fallback={<div className="skeleton" aria-busy="true" />}>
-                    <GamesScreen onBack={goToTabs} viewerId={me?.id} />
-                  </Suspense>
-                )}
-                {tab === "battles" && (
-                  <Suspense fallback={<div className="skeleton" aria-busy="true" />}>
-                    <BattlesScreen />
+                    {playSegment === "games" ? (
+                      <GamesScreen onBack={goToTabs} viewerId={me?.id} onOpenBattles={() => setPlaySegment("battles")} />
+                    ) : (
+                      <BattlesScreen
+                        onBack={() => setPlaySegment("games")}
+                        onOpenGames={() => setPlaySegment("games")}
+                      />
+                    )}
                   </Suspense>
                 )}
                 {tab === "explore" && <ExploreScreen me={me} />}
@@ -405,15 +411,6 @@ export function App() {
               id="play"
               label="Play"
               Icon={PlayIcon}
-              tab={tab}
-              setTab={setTab}
-              route={route}
-              onNavigate={goToTabs}
-            />
-            <NavButton
-              id="battles"
-              label="Battles"
-              Icon={SplitIcon}
               tab={tab}
               setTab={setTab}
               route={route}

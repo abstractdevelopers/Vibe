@@ -87,48 +87,38 @@
       },
       {
         "kind": "text-overlap",
-        "el": "span.battle-card-title <> label.",
-        "detail": "340x10"
+        "el": "span.rail-battle-title <> label.",
+        "detail": "184x10"
       },
       {
         "kind": "text-overlap",
-        "el": "span.battle-side <> button.btn primary block",
-        "detail": "154x31"
+        "el": "span.rail-battle-meta <> button.btn primary block",
+        "detail": "184x24"
       },
       {
         "kind": "text-overlap",
-        "el": "span.battle-vs <> button.btn primary block",
-        "detail": "16x18"
+        "el": "h2.rail-title <> p.eyebrow",
+        "detail": "131x8"
       },
       {
         "kind": "text-overlap",
-        "el": "span.battle-side <> button.btn primary block",
-        "detail": "154x31"
+        "el": "span.creator-name <> span.meta",
+        "detail": "81x4"
       },
       {
         "kind": "text-overlap",
-        "el": "span.battle-card-meta <> p.eyebrow",
-        "detail": "340x11"
+        "el": "span.creator-name <> span.meta",
+        "detail": "7x4"
       },
       {
         "kind": "text-overlap",
-        "el": "h2.rail-title <> strong.",
-        "detail": "63x14"
+        "el": "span.creator-name <> span.meta",
+        "detail": "7x4"
       },
       {
         "kind": "text-overlap",
-        "el": "span.creator-name <> strong.",
-        "detail": "57x17"
-      },
-      {
-        "kind": "text-overlap",
-        "el": "span.creator-handle <> span.meta",
-        "detail": "43x16"
-      },
-      {
-        "kind": "text-overlap",
-        "el": "span.creator-name <> strong.",
-        "detail": "7x17"
+        "el": "button.feed-author <> span.meta",
+        "detail": "26x6"
       }
     ]
   }

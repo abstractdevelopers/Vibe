@@ -1144,5 +1144,19 @@ Gotchas the harnesses encode, in case you write new checks:
 - **A sheet left open by an audit driver collides with the page behind it.**
   Those `text-overlap` hits against `menu-group`/`sheet` are the driver's doing,
   not a layout fault; `audit-deep.mjs` filters them.
+- **The bottom nav is five items, and Create must land on the centre column.**
+  A grid splits the bar into equal columns, so a centred button needs an odd
+  count. With six items (Home, Circles, Create, Play, Battles, Explore) Create
+  sat on the third column and rendered 31px left of centre. Battles is now the
+  second face of Play, reached through `PlaySegments`, not its own tab; do not
+  add a sixth nav item without re-centring Create.
+- **A voice room is a stage plus an audience, never an open mic.** Joining a
+  room puts you in the audience (`role = 'member'`); only a host `promote` moves
+  you to the stage. The client shows a listener a "Raise hand" button and no mic
+  at all. An earlier version wrote every joiner to the stage, so the mic was live
+  without the host approving it Ñ the Clubhouse/Spaces model is the rule.
+- **`npm test` truncates the tables, so the audit token dies.** `verify` runs the
+  API suite against the same database; re-run `seed-audit.py` after `verify`
+  before any browser audit, or every screen lands on the signed-out splash.
 
 
