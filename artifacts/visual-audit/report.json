@@ -1,6 +1,6 @@
 {
   "home": {
-    "url": "https://vibe.launchverse.site/",
+    "url": "http://localhost:12001/",
     "viewport": {
       "w": 390,
       "h": 844
@@ -8,7 +8,7 @@
     "findings": []
   },
   "circles": {
-    "url": "https://vibe.launchverse.site/",
+    "url": "http://localhost:12001/",
     "viewport": {
       "w": 390,
       "h": 844
@@ -16,61 +16,15 @@
     "findings": []
   },
   "play": {
-    "url": "https://vibe.launchverse.site/",
+    "url": "http://localhost:12001/",
     "viewport": {
       "w": 390,
       "h": 844
     },
-    "findings": [
-      {
-        "kind": "overflow-right",
-        "el": "button.live-card",
-        "detail": "right=435 vw=390"
-      },
-      {
-        "kind": "overflow-right",
-        "el": "span.live-card-top",
-        "detail": "right=422 vw=390"
-      },
-      {
-        "kind": "overflow-right",
-        "el": "span.live-dot",
-        "detail": "right=422 vw=390"
-      },
-      {
-        "kind": "overflow-right",
-        "el": "button.live-card",
-        "detail": "right=435 vw=390"
-      },
-      {
-        "kind": "overflow-right",
-        "el": "span.live-card-top",
-        "detail": "right=422 vw=390"
-      },
-      {
-        "kind": "overflow-right",
-        "el": "span.live-dot",
-        "detail": "right=422 vw=390"
-      },
-      {
-        "kind": "overflow-right",
-        "el": "button.live-card",
-        "detail": "right=435 vw=390"
-      },
-      {
-        "kind": "overflow-right",
-        "el": "span.live-card-top",
-        "detail": "right=422 vw=390"
-      },
-      {
-        "kind": "overflow-right",
-        "el": "span.live-dot",
-        "detail": "right=422 vw=390"
-      }
-    ]
+    "findings": []
   },
   "explore": {
-    "url": "https://vibe.launchverse.site/",
+    "url": "http://localhost:12001/",
     "viewport": {
       "w": 390,
       "h": 844
@@ -78,7 +32,7 @@
     "findings": []
   },
   "live": {
-    "url": "https://vibe.launchverse.site/",
+    "url": "http://localhost:12001/",
     "viewport": {
       "w": 390,
       "h": 844
@@ -86,7 +40,7 @@
     "findings": []
   },
   "battles": {
-    "url": "https://vibe.launchverse.site/",
+    "url": "http://localhost:12001/",
     "viewport": {
       "w": 390,
       "h": 844
@@ -94,7 +48,7 @@
     "findings": []
   },
   "you": {
-    "url": "https://vibe.launchverse.site/",
+    "url": "http://localhost:12001/",
     "viewport": {
       "w": 390,
       "h": 844
@@ -102,7 +56,7 @@
     "findings": []
   },
   "menu": {
-    "url": "https://vibe.launchverse.site/",
+    "url": "http://localhost:12001/",
     "viewport": {
       "w": 390,
       "h": 844
@@ -110,7 +64,7 @@
     "findings": []
   },
   "create": {
-    "url": "https://vibe.launchverse.site/",
+    "url": "http://localhost:12001/",
     "viewport": {
       "w": 390,
       "h": 844
@@ -143,23 +97,18 @@
       },
       {
         "kind": "text-overlap",
-        "el": "span.battle-card-title <> strong.",
-        "detail": "57x21"
+        "el": "span.live-badge on <> strong.",
+        "detail": "46x21"
       },
       {
         "kind": "text-overlap",
-        "el": "span.battle-card-title <> span.meta",
-        "detail": "68x7"
+        "el": "span.live-card-title <> span.meta",
+        "detail": "57x14"
       },
       {
         "kind": "text-overlap",
-        "el": "span.battle-card-title <> strong.",
-        "detail": "85x21"
-      },
-      {
-        "kind": "text-overlap",
-        "el": "span.battle-card-title <> span.meta",
-        "detail": "108x7"
+        "el": "span.live-card-title <> span.meta",
+        "detail": "11x14"
       }
     ]
   }

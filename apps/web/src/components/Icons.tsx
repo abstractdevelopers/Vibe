@@ -44,6 +44,7 @@ import {
   MessageCircle,
   MessageSquare,
   Moon,
+  MoreHorizontal,
   MousePointerClick,
   Plus,
   QrCode,
@@ -125,6 +126,7 @@ export const GlobeIcon = icon(Globe);
 export const UsersIcon = icon(Users);
 export const MapPinIcon = icon(MapPin);
 export const MoonIcon = icon(Moon);
+export const MoreIcon = icon(MoreHorizontal);
 export const LogOutIcon = icon(LogOut);
 export const ChevronRightIcon = icon(ChevronRight);
 export const SendIcon = icon(Send);

@@ -13,7 +13,7 @@ import { themeForRoom } from "../themes";
 import {
   ArrowLeftIcon, BellIcon, CheckIcon, CheerIcon, CloseIcon, EditIcon, FlameIcon, GiftIcon,
   HandIcon, HeadphonesIcon, LinkIcon, MicIcon, MicOffIcon, MicOnIcon, MusicIcon,
-  LogOutIcon, ShareIcon, ShieldIcon, TicketIcon, TrashIcon, UploadIcon, UsersIcon,
+  LogOutIcon, MoreIcon, ShareIcon, ShieldIcon, TicketIcon, TrashIcon, UploadIcon, UsersIcon,
 } from "./Icons";
 import { GiftArt } from "./GiftArt";
 
@@ -122,6 +122,7 @@ export function RoomStudio({ roomId, viewerId, viewerName, onBack, onLeft }: Pro
   const [paidGifting, setPaidGifting] = useState(false);
   const [editing, setEditing] = useState(false);
   const [people, setPeople] = useState(false);
+  const [more, setMore] = useState(false);
   const [peers, setPeers] = useState<Record<string, MediaStream>>({});
   const [speaking, setSpeaking] = useState<Set<string>>(new Set());
   const [score, setScore] = useState<Score | null>(null);
@@ -733,6 +734,10 @@ export function RoomStudio({ roomId, viewerId, viewerName, onBack, onLeft }: Pro
           <button className="react-emoji gift" onClick={() => setPaidGifting(true)} aria-label="Send a paid gift"><GiftIcon width={18} height={18} /></button>
         </div>
 
+        {/* One row, always the same height: the mic, the hand, the people count
+            and one More. A wrapping row of every control made the dock four rows
+            tall, and because it sticks to the bottom of the scroll it then sat
+            over the stage and the conversation. */}
         <div className="studio-controls">
           {canSpeak && (
             <button
@@ -748,33 +753,42 @@ export function RoomStudio({ roomId, viewerId, viewerName, onBack, onLeft }: Pro
               </span>
             </button>
           )}
-          {canSpeak && (
-            <span className="meta mic-state">
-              {micOn
-                ? (isOnStage ? "You are on the stage — everyone can hear you." : "You are unmuted; the host can bring you up.")
-                : "Your mic is off."}
-            </span>
-          )}
           {!isOnStage && canSpeak && (
-            <button className="btn" onClick={() => void raiseHand(true)} disabled={audience.find((a) => a.id === viewerId)?.handRaised}>
-              <HandIcon width={15} height={15} /> {audience.find((a) => a.id === viewerId)?.handRaised ? "Hand raised" : "Raise hand"}
+            <button
+              className="btn ghost icon-only"
+              onClick={() => void raiseHand(true)}
+              disabled={audience.find((a) => a.id === viewerId)?.handRaised}
+              title={audience.find((a) => a.id === viewerId)?.handRaised ? "Hand raised" : "Raise hand"}
+              aria-label={audience.find((a) => a.id === viewerId)?.handRaised ? "Hand raised" : "Raise hand"}
+            >
+              <HandIcon width={16} height={16} />
             </button>
           )}
-          <button className="btn ghost" onClick={() => setPeople(true)}>
-            <UsersIcon width={15} height={15} /> People · {stage.length + audience.length}
+          <button
+            className="btn ghost"
+            onClick={() => setPeople(true)}
+            aria-label={`People, ${stage.length + audience.length} in the room`}
+            title="People in the room"
+          >
+            <UsersIcon width={15} height={15} /> {stage.length + audience.length}
           </button>
-          {isHost && canSpeak && stage.some((m) => m.role === "speaker" && !m.muted) && (
-            <button className="btn ghost" onClick={() => void muteAll()}>Mute all</button>
+          {!joined ? (
+            <button className="btn" onClick={() => void join()} disabled={busy}>Join</button>
+          ) : (
+            <button className="btn" onClick={() => void leaveRoom()}><LogOutIcon width={15} height={15} /> Leave</button>
           )}
-          <button className="btn ghost" onClick={share}><ShareIcon width={15} height={15} /> Share</button>
-          {isHost && <button className="btn ghost" onClick={() => setEditing(true)}><EditIcon width={15} height={15} /> Edit</button>}
-          {isHost && room.state === "live" && (
-            <button className="btn ghost danger" onClick={() => void endRoom()} disabled={busy}>End room</button>
-          )}
-          {isHost && <button className="btn ghost danger" onClick={() => void removeRoom()}><TrashIcon width={15} height={15} /> Delete</button>}
-          {!joined && <button className="btn" onClick={() => void join()} disabled={busy}>Join</button>}
-          {joined && <button className="btn" onClick={() => void leaveRoom()}><LogOutIcon width={15} height={15} /> Leave</button>}
+          <button className="btn ghost icon-only" onClick={() => setMore(true)} title="More" aria-label="More controls">
+            <MoreIcon width={17} height={17} />
+          </button>
         </div>
+        {/* Only when it says something the button does not. The mic button
+            already reads "Mic off", and when there is an error the notice below
+            is the useful message. */}
+        {canSpeak && micOn && !micError && (
+          <p className="meta mic-state">
+            {isOnStage ? "You are on the stage — everyone can hear you." : "You are unmuted; the host can bring you up."}
+          </p>
+        )}
         {micError && <div className="notice">{micError}</div>}
       </div>
 
@@ -859,6 +873,20 @@ export function RoomStudio({ roomId, viewerId, viewerName, onBack, onLeft }: Pro
         <PaidGiftSheet recipientId={room.host.id} recipientName={room.host.handle} roomId={room.id} onClose={() => setPaidGifting(false)} onPurchased={load} />
       )}
       {editing && <RoomEditSheet room={room} onClose={() => setEditing(false)} onSaved={() => { setEditing(false); void load(); }} />}
+      {more && (
+        <MoreSheet
+          isHost={isHost}
+          isLive={room.state === "live"}
+          canMuteAll={canSpeak && stage.some((m) => m.role === "speaker" && !m.muted)}
+          busy={busy}
+          onShare={() => { setMore(false); void share(); }}
+          onEdit={() => { setMore(false); setEditing(true); }}
+          onMuteAll={() => { setMore(false); void muteAll(); }}
+          onEndRoom={() => { setMore(false); void endRoom(); }}
+          onDelete={() => { setMore(false); void removeRoom(); }}
+          onClose={() => setMore(false)}
+        />
+      )}
       {people && (
         <PeopleSheet
           stage={stage}
@@ -1021,6 +1049,52 @@ function PeopleSheet({
           {audience.map(row)}
           {audience.length === 0 && <li className="meta">No one is listening yet.</li>}
         </ul>
+      </div>
+    </div>
+  );
+}
+
+
+/**
+ * Everything that is not the mic. The dock keeps one row for the controls a
+ * call cannot work without; the rest lives here, so the bar never wraps and
+ * never grows over the room.
+ */
+function MoreSheet({
+  isHost, isLive, canMuteAll, busy, onShare, onEdit, onMuteAll, onEndRoom, onDelete, onClose,
+}: {
+  isHost: boolean;
+  isLive: boolean;
+  canMuteAll: boolean;
+  busy: boolean;
+  onShare: () => void;
+  onEdit: () => void;
+  onMuteAll: () => void;
+  onEndRoom: () => void;
+  onDelete: () => void;
+  onClose: () => void;
+}) {
+  return (
+    <div className="sheet" role="dialog" aria-modal="true" onClick={onClose}>
+      <div className="sheet-card" onClick={(e) => e.stopPropagation()}>
+        <div className="sheet-head">
+          <h2>Room controls</h2>
+          <button className="icon-button" onClick={onClose} aria-label="Close"><CloseIcon width={18} height={18} /></button>
+        </div>
+
+        <div className="sheet-actions">
+          <button className="menu-item" onClick={onShare}><ShareIcon width={17} height={17} /> Copy invite link</button>
+          {isHost && <button className="menu-item" onClick={onEdit}><EditIcon width={17} height={17} /> Edit room</button>}
+          {isHost && canMuteAll && (
+            <button className="menu-item" onClick={onMuteAll}><MicOffIcon width={17} height={17} /> Mute everyone on stage</button>
+          )}
+          {isHost && isLive && (
+            <button className="menu-item danger" onClick={onEndRoom} disabled={busy}>End room for everyone</button>
+          )}
+          {isHost && (
+            <button className="menu-item danger" onClick={onDelete}><TrashIcon width={17} height={17} /> Delete room</button>
+          )}
+        </div>
       </div>
     </div>
   );

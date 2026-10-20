@@ -2729,11 +2729,23 @@ select {
 }
 .studio-controls {
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   align-items: center;
   gap: var(--space-2);
-  margin: 0 var(--space-4) var(--space-3);
+  margin: 0 var(--space-4) var(--space-1);
+  overflow-x: auto;
+  scrollbar-width: none;
 }
+.studio-controls::-webkit-scrollbar { display: none; }
+/* One row that fits 390px: the mic gives up its spare width, the meter shrinks
+   first, and nothing is pushed off the right edge. The generic .btn rule comes
+   first so the mic's own flex wins. */
+.studio-controls .btn { flex: 0 0 auto; }
+.studio-controls .mic-btn { flex: 0 1 auto; min-width: 0; }
+.studio-controls .mic-meter { flex: 0 1 54px; }
+.btn.icon-only { padding: 0; width: 46px; justify-content: center; }
+.sheet-actions { display: flex; flex-direction: column; gap: 2px; margin-top: var(--space-2); }
+.sheet-actions .menu-item.danger { color: var(--danger); }
 
 /* The mic is the one control a voice room cannot hide. It carries its own live
    level, so the answer to "is my voice being picked up?" is visible without
@@ -2750,9 +2762,11 @@ select {
   background: color-mix(in srgb, var(--accent) 16%, var(--surface-2));
   color: var(--text);
 }
-.mic-btn-label { font-weight: 600; }
+.mic-btn-label { font-weight: 600; white-space: nowrap; }
 .mic-meter {
   display: inline-block;
+  flex: 0 1 54px;
+  min-width: 0;
   width: 54px;
   height: 6px;
   border-radius: 999px;
