@@ -1,5 +1,4 @@
 import type { FastifyInstance } from "fastify";
-import type pg from "pg";
 import { queryMany, queryOne } from "../db.js";
 import { newId } from "../ids.js";
 import { requireUser, type AppContext } from "../http.js";
@@ -77,9 +76,14 @@ const NOTIFICATION_FAMILY: Record<string, string> = {
  * first segment's family, matched against the NOTIFICATION_TYPES allow-list in
  * modules/account.ts. A recipient who has switched a family off simply gets no
  * row, so quiet-by-choice is enforced server-side, not just in the UI.
+ *
+ * After the rows are written, each recipient who actually got one is told over
+ * realtime, so their unread badge moves while they are looking at the app
+ * instead of waiting for the next page load. Carry only the type and entity ids:
+ * the row itself (with its payload) is fetched from GET /v1/notifications.
  */
 export async function notifyUsers(
-  pool: pg.Pool,
+  ctx: AppContext,
   userIds: string[],
   type: string,
   entityType: string,
@@ -89,18 +93,27 @@ export async function notifyUsers(
   if (userIds.length === 0) return;
   const family = NOTIFICATION_FAMILY[type] ?? type.split(".")[0] ?? type;
   const rows = await queryMany<{ id: string; notification_prefs: Record<string, boolean> | null }>(
-    pool,
+    ctx.pool,
     "SELECT id, notification_prefs FROM users WHERE id = ANY($1::uuid[])",
     [userIds],
   );
+  const notified: string[] = [];
   for (const row of rows) {
     const prefs = row.notification_prefs ?? {};
     // Opt-out only: absent means on. Accept either the family or the full type.
     if (prefs[family] === false || prefs[type] === false) continue;
-    await pool.query(
+    await ctx.pool.query(
       `INSERT INTO notifications (id, user_id, type, entity_type, entity_id, payload)
        VALUES ($1, $2, $3, $4, $5, $6)`,
       [newId(), row.id, type, entityType, entityId, JSON.stringify(payload)],
     );
+    notified.push(row.id);
+  }
+  if (notified.length > 0) {
+    ctx.hub.publishToUsers(notified, {
+      type: "notification.created",
+      entityId,
+      payload: { type, entityType, entityId },
+    });
   }
 }

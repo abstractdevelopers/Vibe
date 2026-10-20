@@ -42,7 +42,7 @@ async function notifyCircle(
     "SELECT user_id FROM circle_members WHERE circle_id = $1 AND user_id <> $2",
     [circleId, exceptUserId],
   );
-  await notifyUsers(ctx.pool, members.map((m) => m.user_id), type, "plan", entityId, payload);
+  await notifyUsers(ctx, members.map((m) => m.user_id), type, "plan", entityId, payload);
   ctx.hub.publishToUsers(
     members.map((m) => m.user_id),
     { type: "plan.updated", entityId, payload },

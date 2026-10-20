@@ -294,7 +294,7 @@ export function gameRoutes(ctx: AppContext) {
         );
         await tx.query("UPDATE game_sessions SET pot_minor = pot_minor + $2, updated_at = now() WHERE id = $1", [id, stake]);
       });
-      await notifyUsers(ctx.pool, [session.host_id], "game.joined", "game_session", id, { from: user.handle });
+      await notifyUsers(ctx, [session.host_id], "game.joined", "game_session", id, { from: user.handle });
       trackSafe(ctx.pool, { name: "game_joined", userId: user.id, properties: { entityType: "game_session", entityId: id } });
       reply.code(201);
       return { session: await sessionView(ctx, (await loadSession(ctx.pool, id))!, user.id), joined: true };

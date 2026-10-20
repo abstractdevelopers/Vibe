@@ -133,7 +133,7 @@ export function walletRoutes(ctx: AppContext) {
             return id;
           });
           await notifyUsers(
-            ctx.pool,
+            ctx,
             [input.recipientId],
             "wallet.received",
             "wallet_transfer",

@@ -696,7 +696,7 @@ export function feedRoutes(ctx: AppContext) {
       recipients.delete(user.id);
       if (recipients.size > 0) {
         await notifyUsers(
-          ctx.pool,
+          ctx,
           [...recipients],
           parentId ? "comment.reply" : "comment.mention",
           "post",

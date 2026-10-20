@@ -135,7 +135,7 @@ export function eventsRoutes(ctx: AppContext) {
           "SELECT user_id FROM circle_members WHERE circle_id = $1 AND user_id <> $2",
           [e.circle_id, user.id],
         );
-        await notifyUsers(ctx.pool, members.map((m) => m.user_id), "event.published", "event", id, {});
+        await notifyUsers(ctx, members.map((m) => m.user_id), "event.published", "event", id, {});
       }
       return { id, state: "published" };
     });
