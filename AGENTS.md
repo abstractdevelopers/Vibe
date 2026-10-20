@@ -1062,5 +1062,9 @@ Gotchas the harnesses encode, in case you write new checks:
   nothing.
 - **The host is in the room from creation**, so membership is derived from the
   server's member lists rather than a client `joined` flag.
+- **Host moderation lives on `/moderate`.** `close_room` ends the room, `kick`
+  removes a member (never the host, never yourself), `mute_all` silences every
+  speaker but the host. New actions must also be added to the
+  `room_moderation_actions.action` CHECK constraint, or the audit insert fails.
 
 
