@@ -8,6 +8,7 @@ import {
   MicIcon, TicketIcon, UploadIcon, CloseIcon,
 } from "../components/Icons";
 import { uploadImageFile } from "../media";
+import { ScreenHeader } from "../components/ScreenHeader";
 import { PLATFORM_FEE_BPS } from "@vibe/shared";
 import { formatMoney, toMinorUnits } from "../money";
 
@@ -121,21 +122,31 @@ export function LiveScreen({ onBack }: { onBack: () => void }) {
     if (event.type === "rooms.changed") reload();
   });
 
+  const live = rooms?.filter((r) => r.state === "live" || r.state === "starting_soon") ?? [];
+  const later = rooms?.filter((r) => r.state === "scheduled") ?? [];
+  const ended = rooms?.filter((r) => r.state === "ended" || r.state === "cancelled") ?? [];
+  const groups = [
+    { key: "live", title: "Happening now", rooms: live },
+    { key: "later", title: "Coming up", rooms: later },
+    { key: "ended", title: "Finished", rooms: ended },
+  ].filter((g) => g.rooms.length > 0);
+
   return (
-    <div>
-      <button className="btn ghost" onClick={onBack} style={{ paddingLeft: 0, marginBottom: "var(--space-3)" }}>
+    <div className="live-flow">
+      <button className="btn ghost live-back" onClick={onBack}>
         <ArrowLeftIcon width={18} height={18} /> Back
       </button>
-      <div className="row spread" style={{ alignItems: "center" }}>
-        <h1 className="screen-title" style={{ margin: 0 }}>Live Now</h1>
-        <button className="btn primary" onClick={() => setCreating(true)}>
-          <RadioIcon width={16} height={16} /> Go live
-        </button>
-      </div>
-      <p className="meta">
-        Voice rooms, listening parties, sports rooms and film clubs. Go live any day — daily, weekly, or once.
-        States are exact: nothing is shown as live unless it is.
-      </p>
+
+      <ScreenHeader
+        eyebrow="Activities"
+        title="Live Now"
+        subtitle="Voice rooms, listening parties, sports rooms and film clubs. States are exact: nothing shows as live unless it is."
+        action={
+          <button className="btn primary" onClick={() => setCreating(true)}>
+            <RadioIcon width={16} height={16} /> Go live
+          </button>
+        }
+      />
 
       {creating && (
         <GoLiveSheet
@@ -147,43 +158,57 @@ export function LiveScreen({ onBack }: { onBack: () => void }) {
       {error && <div className="notice danger">{error}</div>}
       {rooms === null && !error && <div className="skeleton" aria-busy="true" />}
 
-      <div className="stack">
-        {rooms?.map((room) => (
-          <button key={room.id} className="card room-card" onClick={() => nav.push({ name: "room", roomId: room.id })}>
-            <div className="row spread">
-              <span className="row" style={{ gap: 6 }}>
-                <KindIcon kind={room.kind} />
-                <strong>{room.title}</strong>
-              </span>
-              <StateBadge state={room.state} />
-            </div>
-            <div className="meta row" style={{ gap: "var(--space-3)", flexWrap: "wrap" }}>
-              <span className="row" style={{ gap: 4 }}><ClockIcon width={13} height={13} /> {when(room.startsAt)}</span>
-              <span className="row" style={{ gap: 4 }}><UsersIcon width={13} height={13} /> {room.memberCount}</span>
-              {room.city && <span className="row" style={{ gap: 4 }}><GlobeIcon width={13} height={13} /> {room.city}</span>}
-              {room.visibility === "private" && <span className="row" style={{ gap: 4 }}><LockIcon width={13} height={13} /> Private</span>}
-            </div>
-            <div className="row" style={{ gap: "var(--space-2)", flexWrap: "wrap", marginTop: 6 }}>
-              <span className="meta">{room.host.displayName}</span>
-              <HostLabel host={room.host} />
-              {room.isSponsored && <span className="sponsored-tag">{room.sponsorLabel ?? "Sponsored"}</span>}
-              {KIND_LABEL[room.kind] && <span className="chip tiny">{KIND_LABEL[room.kind]}</span>}
-              {room.isTicketed ? (
-                <span className="chip tiny"><TicketIcon width={11} height={11} /> {formatMoney(room.ticketPriceMinor, "NGN")}</span>
-              ) : (
-                <span className="chip tiny">Free</span>
-              )}
-              {room.recurrence && <span className="pill muted">{room.recurrence}</span>}
-            </div>
-          </button>
-        ))}
-        {rooms?.length === 0 && (
-          <div className="empty">
-            <RadioIcon width={22} height={22} />
-            <p>No public activities are scheduled right now.</p>
+      {groups.map((group) => (
+        <section className="shelf" key={group.key}>
+          <div className="shelf-head">
+            <h2 className="section-title">
+              {group.key === "live" && <span className="live-dot playing" aria-hidden />}
+              {group.title}
+            </h2>
+            <span className="meta">{group.rooms.length}</span>
           </div>
-        )}
-      </div>
+          <div className="room-list">
+            {group.rooms.map((room) => (
+              <button key={room.id} className="room-card" onClick={() => nav.push({ name: "room", roomId: room.id })}>
+                <div className="room-card-head">
+                  <span className="room-card-icon" aria-hidden="true">
+                    <KindIcon kind={room.kind} />
+                  </span>
+                  <span className="grow">
+                    <span className="room-card-title">{room.title}</span>
+                    <span className="meta">{room.host.displayName}</span>
+                  </span>
+                  <StateBadge state={room.state} />
+                </div>
+                <div className="room-card-meta">
+                  <span className="room-card-fact"><ClockIcon width={13} height={13} /> {when(room.startsAt)}</span>
+                  <span className="room-card-fact"><UsersIcon width={13} height={13} /> {room.memberCount}</span>
+                  {room.city && <span className="room-card-fact"><GlobeIcon width={13} height={13} /> {room.city}</span>}
+                  {room.visibility === "private" && <span className="room-card-fact"><LockIcon width={13} height={13} /> Private</span>}
+                </div>
+                <div className="room-card-tags">
+                  <HostLabel host={room.host} />
+                  {room.isSponsored && <span className="sponsored-tag">{room.sponsorLabel ?? "Sponsored"}</span>}
+                  {KIND_LABEL[room.kind] && <span className="chip tiny">{KIND_LABEL[room.kind]}</span>}
+                  {room.isTicketed ? (
+                    <span className="chip tiny"><TicketIcon width={11} height={11} /> {formatMoney(room.ticketPriceMinor, "NGN")}</span>
+                  ) : (
+                    <span className="chip tiny">Free</span>
+                  )}
+                  {room.recurrence && <span className="pill muted">{room.recurrence}</span>}
+                </div>
+              </button>
+            ))}
+          </div>
+        </section>
+      ))}
+
+      {rooms?.length === 0 && (
+        <div className="empty">
+          <RadioIcon width={22} height={22} />
+          <p>No public activities are scheduled right now.</p>
+        </div>
+      )}
     </div>
   );
 }

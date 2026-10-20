@@ -2309,16 +2309,62 @@ select {
   align-items: flex-start;
 }
 
-/* ---- Live activities (addendum) ---- */
+/* ---- Live activities (addendum) ----
+   The list is a shelf per state group: what is happening now, what is coming
+   up, what finished. `.room-card` is the whole card here - it no longer leans
+   on `.card` - so the icon, the title/host stack and the state badge each own a
+   slot, and the facts and tags sit on their own lines instead of one crowded
+   flex row. */
+.live-flow { display: flex; flex-direction: column; }
+.live-flow > * + * { margin-top: var(--space-4); }
+.live-flow > .shelf + .shelf { margin-top: var(--space-8); }
+.live-back { align-self: flex-start; padding-left: 0; }
+
+.room-list { display: flex; flex-direction: column; gap: var(--space-3); }
 
 .room-card {
-  display: block;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
   width: 100%;
   text-align: left;
+  padding: var(--space-4);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-card);
+  background: linear-gradient(165deg, color-mix(in srgb, var(--surface-1) 94%, transparent), var(--surface-0));
+  color: inherit;
   cursor: pointer;
   font: inherit;
-  color: inherit;
+  transition: transform var(--motion-fast) var(--ease-out), border-color var(--motion-fast) var(--ease-out),
+    box-shadow var(--motion-base) var(--ease-out);
 }
+.room-card:hover {
+  transform: translateY(-2px);
+  border-color: var(--border-strong);
+  box-shadow: var(--shadow-md);
+}
+.room-card-head { display: flex; align-items: center; gap: var(--space-3); }
+.room-card-icon {
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  flex: none;
+  border-radius: 12px;
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 13%, transparent);
+  border: 1px solid color-mix(in srgb, var(--accent) 26%, transparent);
+}
+.room-card-title { display: block; font-weight: 700; line-height: var(--leading-snug); }
+.room-card-meta { display: flex; flex-wrap: wrap; gap: var(--space-2) var(--space-3); }
+.room-card-fact {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: var(--text-meta);
+  color: var(--text-muted);
+}
+.room-card-tags { display: flex; align-items: center; flex-wrap: wrap; gap: var(--space-2); }
 
 .state-badge {
   display: inline-flex;
