@@ -51,7 +51,7 @@ export function CirclesScreen({ refreshKey, onChanged }: Props) {
 
 
   return (
-    <div>
+    <div className="circles-flow">
       <ScreenHeader
         eyebrow="Your people"
         title="Circles"
@@ -71,10 +71,8 @@ export function CirclesScreen({ refreshKey, onChanged }: Props) {
       {error && <div className="notice danger">{error}</div>}
 
       {showCreate && (
-        <div className="card" style={{ marginBottom: "var(--space-4)" }}>
-          <h3 className="section-title" style={{ marginBottom: "var(--space-3)" }}>
-            New Circle
-          </h3>
+        <div className="circle-create">
+          <h3 className="section-title">New Circle</h3>
           <label htmlFor="circleName">Name</label>
           <input
             id="circleName"
@@ -82,7 +80,7 @@ export function CirclesScreen({ refreshKey, onChanged }: Props) {
             onChange={(e) => setName(e.target.value)}
             placeholder="Weekend crew, Housemates, Book club…"
           />
-          <p className="meta" style={{ marginBottom: "var(--space-3)" }}>
+          <p className="meta">
             <LockIcon width={13} height={13} style={{ verticalAlign: "-2px" }} /> Private by default. Invite people after.
           </p>
           <button className="btn primary block" onClick={() => void createCircle()} disabled={!name.trim()}>
@@ -106,37 +104,42 @@ export function CirclesScreen({ refreshKey, onChanged }: Props) {
         />
       )}
 
-      {circles?.map((circle) => {
-        return (
-          <button
-            key={circle.id}
-            className="card interactive"
-            style={{ display: "block", width: "100%", textAlign: "left", marginBottom: "var(--space-3)" }}
-            onClick={() => nav.push({ name: "circle", circleId: circle.id })}
-          >
-            <div className="row spread">
-              <div className="row" style={{ gap: "var(--space-3)" }}>
-                <span className="avatar violet" aria-hidden="true">
-                  {circle.name.slice(0, 1).toUpperCase()}
-                </span>
-                <div>
-                  <div className="feed-author">{circle.name}</div>
-                  <div className="meta">
-                    {circle.member_count} {circle.member_count === 1 ? "member" : "members"}
-                  </div>
-                </div>
-              </div>
-              <span className="audience-tag">
-                {circle.privacy === "private" ? (
-                  <LockIcon width={12} height={12} />
-                ) : null}
-                {circle.privacy.replace("_", " ")}
-              </span>
-            </div>
-          </button>
-        );
-      })}
-
+      {circles && circles.length > 0 && (
+        <section className="shelf">
+          <div className="shelf-head">
+            <h2 className="section-title">Your Circles</h2>
+            <span className="meta">{circles.length}</span>
+          </div>
+          <div className="result-list">
+            {circles.map((circle) => {
+              const isLead = circle.role === "owner" || circle.role === "admin";
+              return (
+                <button
+                  key={circle.id}
+                  className="result-row"
+                  onClick={() => nav.push({ name: "circle", circleId: circle.id })}
+                >
+                  <span className="avatar violet" aria-hidden="true">
+                    {circle.name.slice(0, 1).toUpperCase()}
+                  </span>
+                  <span className="grow">
+                    <span className="result-row-title">{circle.name}</span>
+                    <span className="meta">
+                      {circle.member_count} {circle.member_count === 1 ? "member" : "members"}
+                      {circle.description ? ` · ${circle.description}` : ""}
+                    </span>
+                  </span>
+                  {isLead && <span className="circle-role">{circle.role}</span>}
+                  <span className="audience-tag">
+                    {circle.privacy === "private" ? <LockIcon width={12} height={12} /> : null}
+                    {circle.privacy.replace("_", " ")}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        </section>
+      )}
     </div>
   );
 }

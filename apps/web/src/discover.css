@@ -117,3 +117,35 @@
 @media (prefers-reduced-motion: reduce) {
   .result-row:hover { transform: none; }
 }
+
+/* ---- Circles --------------------------------------------------------------
+   The same shelf + row language as Discover, so the three list screens read as
+   one product. `circles-flow` only owns the vertical rhythm; the rows are the
+   shared `.result-row` from this file. */
+.circles-flow { display: flex; flex-direction: column; }
+.circles-flow > * + * { margin-top: var(--space-4); }
+.circles-flow > .shelf { margin-top: var(--space-6); }
+.circles-flow > .shelf + .shelf { margin-top: var(--space-8); }
+
+.circle-create {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: var(--space-5);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-card);
+  background: var(--surface-1);
+}
+.circle-create .section-title { margin: 0; }
+
+/* "owner" / "admin" on the circles you lead. It is a fact about your standing,
+   not a second privacy chip, so it is a quiet uppercase label. */
+.circle-role {
+  flex: none;
+  font-size: var(--text-meta);
+  font-weight: 700;
+  letter-spacing: var(--tracking-wide);
+  text-transform: uppercase;
+  color: var(--accent);
+}
+
