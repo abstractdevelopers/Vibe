@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { api, ApiError, idempotencyKey } from "../api";
 import { CloseIcon } from "./Icons";
+import { formatMoney } from "../money";
 import { GiftBurst, type GiftBurstSpec } from "./GiftBurst";
 import { GiftArt } from "./GiftArt";
 
@@ -26,13 +27,6 @@ interface PurchaseResult {
 }
 
 /** ₦ formatting without doing money arithmetic in the client. */
-function formatMinor(amountMinor: number, currency: string): string {
-  const symbol = currency === "NGN" ? "₦" : `${currency} `;
-  const whole = Math.floor(amountMinor / 100);
-  const minor = Math.abs(amountMinor % 100);
-  const withThousands = whole.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",");
-  return minor === 0 ? `${symbol}${withThousands}` : `${symbol}${withThousands}.${minor.toString().padStart(2, "0")}`;
-}
 
 /**
  * The recipient's share, as the API actually computes it.
@@ -151,11 +145,11 @@ export function PaidGiftSheet({
             <div className="card">
               <div className="row spread">
                 <span className="meta">Amount</span>
-                <strong>{formatMinor(result.amountMinor, result.currency)}</strong>
+                <strong>{formatMoney(result.amountMinor, result.currency)}</strong>
               </div>
               <div className="row spread">
                 <span className="meta">{recipientName} earns</span>
-                <strong>{formatMinor(result.recipientMinor, result.currency)}</strong>
+                <strong>{formatMoney(result.recipientMinor, result.currency)}</strong>
               </div>
               <div className="row spread">
                 <span className="meta">Status</span>
@@ -186,7 +180,7 @@ export function PaidGiftSheet({
                   <span className="paid-gift-emoji" aria-hidden="true"><GiftArt id={g.id} size={g.tier === 3 ? 46 : g.tier === 2 ? 38 : 32} tier={g.tier} /></span>
                   <span className="paid-gift-name">{g.label}</span>
                   <span className={`paid-gift-rarity r${g.tier}`}>{RARITY[g.tier]}</span>
-                  <span className="paid-gift-price">{formatMinor(g.priceMinor, g.currency)}</span>
+                  <span className="paid-gift-price">{formatMoney(g.priceMinor, g.currency)}</span>
                 </button>
               ))}
             </div>
@@ -204,11 +198,11 @@ export function PaidGiftSheet({
                 <div className="card">
                   <div className="row spread">
                     <span className="meta">You pay</span>
-                    <strong>{formatMinor(total, chosen.currency)}</strong>
+                    <strong>{formatMoney(total, chosen.currency)}</strong>
                   </div>
                   <div className="row spread">
                     <span className="meta">{recipientName} earns ({recipientShare(chosen)}%)</span>
-                    <strong>{formatMinor(chosen.recipientMinor * quantity, chosen.currency)}</strong>
+                    <strong>{formatMoney(chosen.recipientMinor * quantity, chosen.currency)}</strong>
                   </div>
                   <p className="meta" style={{ margin: "var(--space-2) 0 0" }}>
                     Vibe keeps {100 - recipientShare(chosen)}%. The creator can withdraw their share to a bank
@@ -216,7 +210,7 @@ export function PaidGiftSheet({
                   </p>
                 </div>
                 <button className="btn primary" disabled={busy} onClick={() => void buy()}>
-                  {busy ? "Starting checkout…" : `Pay ${formatMinor(total, chosen.currency)}`}
+                  {busy ? "Starting checkout…" : `Pay ${formatMoney(total, chosen.currency)}`}
                 </button>
               </div>
             )}

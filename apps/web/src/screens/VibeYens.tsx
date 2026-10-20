@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { api, ApiError, idempotencyKey } from "../api";
 import { ArrowLeftIcon, MoneyIcon, PlusIcon, SendIcon } from "../components/Icons";
 import { ScreenHeader } from "../components/ScreenHeader";
+import { formatMoney } from "../money";
 
 /**
  * Vibe Yens — the optional prepaid balance.
@@ -26,12 +27,6 @@ interface Activity {
 
 const TOPUP_AMOUNTS = [1000_00, 2500_00, 5000_00, 10000_00];
 
-function formatMinor(amountMinor: number, currency: string): string {
-  const symbol = currency === "NGN" ? "₦" : `${currency} `;
-  const whole = Math.floor(amountMinor / 100);
-  const withThousands = whole.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",");
-  return `${symbol}${withThousands}`;
-}
 
 export function VibeYens({ onBack }: { onBack: () => void }) {
   const [view, setView] = useState<WalletView | null>(null);
@@ -99,7 +94,7 @@ export function VibeYens({ onBack }: { onBack: () => void }) {
       });
       setSend({ handle: "", amount: "", note: "" });
       setSendOpen(false);
-      setNotice(`Sent ${formatMinor(amountMinor, "NGN")} to @${match.handle}.`);
+      setNotice(`Sent ${formatMoney(amountMinor, "NGN")} to @${match.handle}.`);
       await load();
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Could not send");
@@ -130,7 +125,7 @@ export function VibeYens({ onBack }: { onBack: () => void }) {
           <div className="card" style={{ marginBottom: "var(--space-3)" }}>
             <div className="eyebrow">Balance</div>
             <div style={{ fontSize: 34, fontWeight: 700, letterSpacing: "-0.02em" }}>
-              {formatMinor(view.balanceMinor, view.currency)}
+              {formatMoney(view.balanceMinor, view.currency)}
             </div>
             <p className="meta" style={{ marginBottom: 0 }}>{view.policy}</p>
           </div>
@@ -138,7 +133,7 @@ export function VibeYens({ onBack }: { onBack: () => void }) {
           <div className="row" style={{ gap: "var(--space-2)", flexWrap: "wrap", marginBottom: "var(--space-3)" }}>
             {TOPUP_AMOUNTS.map((amount) => (
               <button key={amount} className="btn small" onClick={() => void topUp(amount)} disabled={busy}>
-                <PlusIcon width={15} height={15} /> {formatMinor(amount, view.currency)}
+                <PlusIcon width={15} height={15} /> {formatMoney(amount, view.currency)}
               </button>
             ))}
             <button className="btn small primary" onClick={() => setSendOpen((v) => !v)} disabled={busy}>
@@ -194,7 +189,7 @@ export function VibeYens({ onBack }: { onBack: () => void }) {
                     <MoneyIcon width={16} height={16} /> Top-up
                   </span>
                   <span className="meta">
-                    {formatMinor(t.amount_minor, view.currency)} · {t.status}
+                    {formatMoney(t.amount_minor, view.currency)} · {t.status}
                   </span>
                 </div>
               ))}
@@ -203,7 +198,7 @@ export function VibeYens({ onBack }: { onBack: () => void }) {
                   <span className="row" style={{ gap: "var(--space-2)" }}>
                     <MoneyIcon width={16} height={16} /> From @{t.other_handle}
                   </span>
-                  <span className="meta">+{formatMinor(t.amount_minor, view.currency)}</span>
+                  <span className="meta">+{formatMoney(t.amount_minor, view.currency)}</span>
                 </div>
               ))}
               {activity.sent.map((t) => (
@@ -211,7 +206,7 @@ export function VibeYens({ onBack }: { onBack: () => void }) {
                   <span className="row" style={{ gap: "var(--space-2)" }}>
                     <SendIcon width={16} height={16} /> To @{t.other_handle}
                   </span>
-                  <span className="meta">−{formatMinor(t.amount_minor, view.currency)}</span>
+                  <span className="meta">−{formatMoney(t.amount_minor, view.currency)}</span>
                 </div>
               ))}
             </div>

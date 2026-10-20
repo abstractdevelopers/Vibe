@@ -2743,6 +2743,12 @@ select {
 .studio-controls .btn { flex: 0 0 auto; }
 .studio-controls .mic-btn { flex: 0 1 auto; min-width: 0; }
 .studio-controls .mic-meter { flex: 0 1 54px; }
+/* Below ~340px there is not room for the mic label and its meter together; the
+   icon and meter still say the state, and the button keeps its aria-label. */
+@media (max-width: 340px) {
+  .studio-controls .mic-btn-label { display: none; }
+  .studio-controls .mic-btn .mic-meter { flex: 0 1 40px; }
+}
 .btn.icon-only { padding: 0; width: 46px; justify-content: center; }
 .sheet-actions { display: flex; flex-direction: column; gap: 2px; margin-top: var(--space-2); }
 .sheet-actions .menu-item.danger { color: var(--danger); }

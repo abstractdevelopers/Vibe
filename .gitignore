@@ -14,3 +14,7 @@ coverage/
 apps/api/.data/
 
 .audit/
+
+# The deep audit writes one full-page screenshot per sub-page; they are
+# regenerable and large, so only the shallow set stays in the repo.
+artifacts/visual-audit/deep/

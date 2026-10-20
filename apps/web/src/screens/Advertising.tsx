@@ -3,6 +3,7 @@ import { api, ApiError } from "../api";
 import { ArrowLeftIcon, BarChartIcon, MegaphoneIcon, EyeIcon, ClickIcon } from "../components/Icons";
 import { EmptyState } from "../components/EmptyState";
 import { ScreenHeader } from "../components/ScreenHeader";
+import { formatMoney } from "../money";
 
 interface Campaign {
   id: string;
@@ -129,7 +130,7 @@ export function AdvertisingScreen({ onBack }: { onBack: () => void }) {
               <span className="audience-tag">{c.status.replace(/_/g, " ")}</span>
             </div>
             <div className="meta">
-              {c.objective} · {c.category} · {c.budgetMinor.toLocaleString()} {c.currency}
+              {c.objective} · {c.category} · {formatMoney(c.budgetMinor, c.currency)} budget
             </div>
             <button className="btn small" style={{ marginTop: "var(--space-2)" }} onClick={() => void showMetrics(c.id)}>
               <BarChartIcon width={14} height={14} /> Metrics

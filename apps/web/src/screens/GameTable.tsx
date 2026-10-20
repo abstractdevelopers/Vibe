@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { api, ApiError } from "../api";
 import { ScreenHeader } from "../components/ScreenHeader";
+import { formatMoney } from "../money";
 import { SpinnerIcon, ArrowLeftIcon } from "../components/Icons";
 import { ShapeMark, SuitMark, Piece, WHOT_SHAPES, SHAPE_NAME } from "../components/CardFaces";
 import { useActivityTheme } from "../components/useActivityTheme";
@@ -29,9 +30,6 @@ interface Session {
 const SUIT_NAME: Record<string, string> = { S: "spades", H: "hearts", D: "diamonds", C: "clubs" };
 const RANK_LABEL: Record<number, string> = { 1: "A", 11: "J", 12: "Q", 13: "K" };
 
-function money(minor: number, currency: string): string {
-  return `${(minor / 100).toLocaleString(undefined, { maximumFractionDigits: 0 })} ${currency}`;
-}
 const rankText = (r: number) => RANK_LABEL[r] ?? String(r);
 
 export function GameTableScreen({ sessionId, viewerId, onBack }: { sessionId: string; viewerId: string; onBack: () => void }) {
@@ -136,7 +134,7 @@ export function GameTableScreen({ sessionId, viewerId, onBack }: { sessionId: st
             ? `Waiting for players · ${session.players.length}/${session.maxPlayers}`
             : session.status === "finished"
               ? `Game over${session.winnerId ? ` · ${session.players.find((p) => p.id === session.winnerId)?.displayName ?? "winner"} won` : " · draw"}`
-              : session.potMinor > 0 ? `Pot ${money(session.potMinor, session.currency)}` : "In play"
+              : session.potMinor > 0 ? `Pot ${formatMoney(session.potMinor, session.currency)}` : "In play"
         }
       />
       {error && <div className="notice danger" role="alert">{error}</div>}
@@ -151,7 +149,7 @@ export function GameTableScreen({ sessionId, viewerId, onBack }: { sessionId: st
                 <span className={`chip ${turn ? "chip-live" : ""}`}>{turn ? "Turn" : `#${p.seat + 1}`}</span>
                 <strong>{p.displayName}{p.id === viewerId ? " (you)" : ""}</strong>
               </div>
-              {p.stakedMinor > 0 && <span className="chip">{money(p.stakedMinor, session.currency)}</span>}
+              {p.stakedMinor > 0 && <span className="chip">{formatMoney(p.stakedMinor, session.currency)}</span>}
             </div>
           );
         })}
@@ -161,7 +159,7 @@ export function GameTableScreen({ sessionId, viewerId, onBack }: { sessionId: st
         <section className="stack">
           {!me && (
             <button className="btn primary block" disabled={busy} onClick={() => void act("/join")}>
-              {session.stakeMinor > 0 ? `Join · stake ${money(session.stakeMinor, session.currency)}` : "Join game"}
+              {session.stakeMinor > 0 ? `Join · stake ${formatMoney(session.stakeMinor, session.currency)}` : "Join game"}
             </button>
           )}
           {isHost && (

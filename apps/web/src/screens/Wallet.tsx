@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { api, ApiError, idempotencyKey } from "../api";
 import { CloseIcon } from "../components/Icons";
+import { formatMoney } from "../money";
 
 interface Balance {
   currency: string;
@@ -34,13 +35,6 @@ interface Payout {
   account_last4: string | null;
 }
 
-function formatMinor(amountMinor: number, currency: string): string {
-  const symbol = currency === "NGN" ? "₦" : `${currency} `;
-  const whole = Math.floor(amountMinor / 100);
-  const minor = Math.abs(amountMinor % 100);
-  const withThousands = whole.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",");
-  return minor === 0 ? `${symbol}${withThousands}` : `${symbol}${withThousands}.${minor.toString().padStart(2, "0")}`;
-}
 
 /**
  * Wallet: what a creator has earned, and how they get it out.
@@ -133,10 +127,10 @@ export function Wallet({ onClose }: { onClose: () => void }) {
           <div className="stack">
             <div className="wallet-balance">
               <span className="meta">Available to withdraw</span>
-              <span className="wallet-amount">{formatMinor(balance.availableMinor, balance.currency)}</span>
+              <span className="wallet-amount">{formatMoney(balance.availableMinor, balance.currency)}</span>
               {balance.pendingMinor > 0 && (
                 <span className="meta">
-                  {formatMinor(balance.pendingMinor, balance.currency)} is still clearing. New earnings can be withdrawn
+                  {formatMoney(balance.pendingMinor, balance.currency)} is still clearing. New earnings can be withdrawn
                   after 7 days.
                 </span>
               )}
@@ -145,16 +139,16 @@ export function Wallet({ onClose }: { onClose: () => void }) {
             <div className="card">
               <div className="wallet-row">
                 <span className="meta">Earned all time</span>
-                <strong>{formatMinor(balance.lifetimeEarnedMinor, balance.currency)}</strong>
+                <strong>{formatMoney(balance.lifetimeEarnedMinor, balance.currency)}</strong>
               </div>
               <div className="wallet-row">
                 <span className="meta">Paid out</span>
-                <strong>{formatMinor(balance.paidOutMinor, balance.currency)}</strong>
+                <strong>{formatMoney(balance.paidOutMinor, balance.currency)}</strong>
               </div>
               {balance.inFlightMinor > 0 && (
                 <div className="wallet-row">
                   <span className="meta">In progress</span>
-                  <strong>{formatMinor(balance.inFlightMinor, balance.currency)}</strong>
+                  <strong>{formatMoney(balance.inFlightMinor, balance.currency)}</strong>
                 </div>
               )}
             </div>
@@ -232,8 +226,8 @@ export function Wallet({ onClose }: { onClose: () => void }) {
               {!payoutsEnabled
                 ? "Withdrawals are not switched on yet"
                 : balance.availableMinor < balance.minPayoutMinor
-                  ? `Minimum withdrawal is ${formatMinor(balance.minPayoutMinor, balance.currency)}`
-                  : `Withdraw ${formatMinor(balance.availableMinor, balance.currency)}`}
+                  ? `Minimum withdrawal is ${formatMoney(balance.minPayoutMinor, balance.currency)}`
+                  : `Withdraw ${formatMoney(balance.availableMinor, balance.currency)}`}
             </button>
 
             {payouts.length > 0 && (
@@ -242,7 +236,7 @@ export function Wallet({ onClose }: { onClose: () => void }) {
                 {payouts.map((p) => (
                   <div key={p.id} className="wallet-row">
                     <div>
-                      <div>{formatMinor(p.amount_minor, p.currency)}</div>
+                      <div>{formatMoney(p.amount_minor, p.currency)}</div>
                       <span className="meta">
                         {p.bank_name ?? "Bank"} •••• {p.account_last4 ?? "----"}
                         {p.failure_reason ? ` — ${p.failure_reason}` : ""}

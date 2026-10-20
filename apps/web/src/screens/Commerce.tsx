@@ -4,6 +4,7 @@ import { useNav } from "../nav";
 import { ArrowLeftIcon, CheckIcon, MoneyIcon, ReceiptIcon, StoreIcon } from "../components/Icons";
 import { EmptyState } from "../components/EmptyState";
 import { ScreenHeader } from "../components/ScreenHeader";
+import { formatMoney } from "../money";
 
 interface Product {
   id: string;
@@ -30,9 +31,6 @@ const ORDER_STATES = [
   "fulfilling", "completed", "cancelled", "failed", "refund_pending", "refunded", "disputed",
 ];
 
-function money(minor: number, currency: string): string {
-  return `${(minor / 100).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${currency}`;
-}
 
 export function StorefrontScreen({ merchantId, onBack }: { merchantId: string; onBack: () => void }) {
   const nav = useNav();
@@ -94,7 +92,7 @@ export function StorefrontScreen({ merchantId, onBack }: { merchantId: string; o
                   <strong>{p.name}</strong>
                   <div className="meta">{p.availability.replace(/_/g, " ")}</div>
                 </span>
-                <span className="price">{money(p.priceMinor, p.currency)}</span>
+                <span className="price">{formatMoney(p.priceMinor, p.currency)}</span>
               </button>
             ))}
           </div>
@@ -182,7 +180,7 @@ export function ProductScreen({ productId, onBack }: { productId: string; onBack
               <span className="row" style={{ gap: "var(--space-2)" }}>
                 <MoneyIcon width={16} height={16} /> Price
               </span>
-              <strong className="price">{money(product.priceMinor, product.currency)}</strong>
+              <strong className="price">{formatMoney(product.priceMinor, product.currency)}</strong>
             </div>
             {product.fulfillment && <p className="meta">Fulfilment: {product.fulfillment}</p>}
             {product.refundPolicy && <p className="meta">Refunds: {product.refundPolicy}</p>}
@@ -335,12 +333,12 @@ export function OrderScreen({ orderId, onBack }: { orderId: string; onBack: () =
             {order.items.map((it) => (
               <div className="row spread" key={it.id}>
                 <span>{it.name} × {it.quantity}</span>
-                <span>{money(it.unitAmountMinor * it.quantity, it.currency)}</span>
+                <span>{formatMoney(it.unitAmountMinor * it.quantity, it.currency)}</span>
               </div>
             ))}
             <div className="row spread" style={{ marginTop: "var(--space-2)", fontWeight: 600 }}>
               <span>Total</span>
-              <span className="price">{money(order.amountMinor, order.currency)}</span>
+              <span className="price">{formatMoney(order.amountMinor, order.currency)}</span>
             </div>
           </div>
 
@@ -437,7 +435,7 @@ export function OrdersScreen({ onBack }: { onBack: () => void }) {
               <strong>{o.status.replace(/_/g, " ")}</strong>
               <div className="meta">{new Date(o.createdAt).toLocaleDateString()}</div>
             </span>
-            <span className="price">{money(o.amountMinor, o.currency)}</span>
+            <span className="price">{formatMoney(o.amountMinor, o.currency)}</span>
           </button>
         ))}
       </div>
@@ -512,7 +510,7 @@ export function SellerOrdersScreen({ onBack }: { onBack: () => void }) {
                 {o.merchantName} · @{o.buyerHandle} · {new Date(o.createdAt).toLocaleDateString()}
               </div>
             </span>
-            <span className="price">{money(o.amountMinor, o.currency)}</span>
+            <span className="price">{formatMoney(o.amountMinor, o.currency)}</span>
           </button>
         ))}
       </div>

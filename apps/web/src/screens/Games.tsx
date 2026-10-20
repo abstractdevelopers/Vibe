@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { api, ApiError, idempotencyKey } from "../api";
 import { useNav } from "../nav";
 import { ScreenHeader } from "../components/ScreenHeader";
+import { formatMoney } from "../money";
 import { EmptyState } from "../components/EmptyState";
 import { GameArt, GameCover, WORLD_ORDER, worldFor } from "../components/GameArt";
 import { SpinnerIcon, UsersIcon, PlayIcon, RadioIcon, TrophyIcon, SplitIcon, ChevronRightIcon, SearchIcon, CloseIcon } from "../components/Icons";
@@ -61,9 +62,6 @@ interface Session {
   players: SessionPlayer[];
 }
 
-function money(minor: number, currency: string): string {
-  return `${(minor / 100).toLocaleString(undefined, { maximumFractionDigits: 0 })} ${currency}`;
-}
 
 const STAKES = [0, 5_000, 10_000, 20_000, 50_000];
 
@@ -248,7 +246,7 @@ export function GamesScreen({ onBack, viewerId }: { onBack?: () => void; viewerI
                   {s.players.find((p) => p.id === s.hostId)?.displayName ?? "someone"}'s table
                 </span>
                 <span className={s.stakeMinor > 0 ? "chip chip-gold" : "chip"}>
-                  {s.stakeMinor > 0 ? money(s.potMinor, s.currency) : "Free"}
+                  {s.stakeMinor > 0 ? formatMoney(s.potMinor, s.currency) : "Free"}
                 </span>
               </button>
             ))}
@@ -425,7 +423,7 @@ function CreateGameSheet({
                 </div>
                 {stake > 0 && (
                   <p className="meta">
-                    Each player stakes {money(stake, "NGN")}. Vibe takes {GAME_RAKE_BPS / 100}% of the pot; the winner takes the rest.
+                    Each player stakes {formatMoney(stake, "NGN")}. Vibe takes {GAME_RAKE_BPS / 100}% of the pot; the winner takes the rest.
                   </p>
                 )}
               </div>

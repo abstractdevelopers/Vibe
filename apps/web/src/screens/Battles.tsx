@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { api, ApiError, idempotencyKey } from "../api";
 import { ScreenHeader } from "../components/ScreenHeader";
+import { formatMoney } from "../money";
 import { Avatar } from "../components/Avatar";
 import { EmptyState } from "../components/EmptyState";
 import { useNav } from "../nav";
@@ -44,11 +45,6 @@ interface Battle {
   backers: Array<{ side: "a" | "b"; staked: boolean; user: { id: string; handle: string; displayName: string; avatarUrl: string | null } }>;
 }
 
-function formatMinor(amountMinor: number, currency: string): string {
-  const symbol = currency === "NGN" ? "₦" : `${currency} `;
-  const whole = Math.floor(amountMinor / 100);
-  return `${symbol}${whole.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",")}`;
-}
 
 function timeLeft(endsAt: string | null): string | null {
   if (!endsAt) return null;
@@ -92,7 +88,7 @@ function BattleCard({ battle, onOpen }: { battle: Battle; onOpen: () => void }) 
       <div className="battle-card-foot">
         <span className="muted">{battle.tally.a + battle.tally.b} votes</span>
         {battle.stakeMinor > 0 && (
-          <span className="chip chip-gold">Pot {formatMinor(battle.potMinor, battle.currency)}</span>
+          <span className="chip chip-gold">Pot {formatMoney(battle.potMinor, battle.currency)}</span>
         )}
       </div>
     </button>
@@ -314,18 +310,18 @@ export function BattleScreen({ battleId, onBack }: { battleId: string; viewerId:
         {battle.stakeMinor > 0 && (
           <div className="battle-pot">
             <TrophyIcon width={16} height={16} />
-            <span>Pot {formatMinor(battle.potMinor, battle.currency)}</span>
-            <span className="muted">· {formatMinor(battle.stakeMinor, battle.currency)} per backer · no platform cut</span>
+            <span>Pot {formatMoney(battle.potMinor, battle.currency)}</span>
+            <span className="muted">· {formatMoney(battle.stakeMinor, battle.currency)} per backer · no platform cut</span>
           </div>
         )}
 
         {battle.myStakeMinor > 0 && (
           <p className="meta">
-            You backed {battle.mySide === "a" ? battle.sides.a : battle.sides.b} with {formatMinor(battle.myStakeMinor, battle.currency)}.
+            You backed {battle.mySide === "a" ? battle.sides.a : battle.sides.b} with {formatMoney(battle.myStakeMinor, battle.currency)}.
             {battle.status === "open" && battle.myProjectedMinor > 0 && (
-              <> If your side wins as the pot stands, you take {formatMinor(battle.myProjectedMinor, battle.currency)}.</>
+              <> If your side wins as the pot stands, you take {formatMoney(battle.myProjectedMinor, battle.currency)}.</>
             )}
-            {battle.myPayoutMinor > 0 && ` You won ${formatMinor(battle.myPayoutMinor, battle.currency)}.`}
+            {battle.myPayoutMinor > 0 && ` You won ${formatMoney(battle.myPayoutMinor, battle.currency)}.`}
           </p>
         )}
 
@@ -345,11 +341,11 @@ export function BattleScreen({ battleId, onBack }: { battleId: string; viewerId:
         <div className="battle-backing">
           <div className="battle-backing-col">
             <span className="battle-backing-label">{battle.sides.a}</span>
-            <span className="muted">{battle.backing.a.backers} backers · {formatMinor(battle.backing.a.stakedMinor, battle.currency)}</span>
+            <span className="muted">{battle.backing.a.backers} backers · {formatMoney(battle.backing.a.stakedMinor, battle.currency)}</span>
           </div>
           <div className="battle-backing-col">
             <span className="battle-backing-label">{battle.sides.b}</span>
-            <span className="muted">{battle.backing.b.backers} backers · {formatMinor(battle.backing.b.stakedMinor, battle.currency)}</span>
+            <span className="muted">{battle.backing.b.backers} backers · {formatMoney(battle.backing.b.stakedMinor, battle.currency)}</span>
           </div>
         </div>
         {battle.backers.length > 0 && (
