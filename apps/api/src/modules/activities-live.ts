@@ -449,6 +449,11 @@ export function activityRoutes(ctx: AppContext) {
       const user = await requireUser(ctx, req);
       const { id } = req.params as { id: string };
       await ctx.pool.query(`DELETE FROM room_members WHERE room_id = $1 AND user_id = $2`, [id, user.id]);
+      // Tell the room someone left, so the people still inside see the count and
+      // the stage drop at once instead of waiting for their next poll. The
+      // directory reads member counts, so it is told too.
+      ctx.hub.publishToRoom(id, { type: "room.left", entityId: id, payload: { userId: user.id } });
+      ctx.hub.publishBroadcast({ type: "rooms.changed", entityId: id, payload: { roomId: id, change: "left" } });
       return { left: true };
     });
 
@@ -686,7 +691,14 @@ export function activityRoutes(ctx: AppContext) {
       } else if (input.action === "slow_mode") {
         await ctx.pool.query(`UPDATE activity_rooms SET slow_mode_seconds = $2 WHERE id = $1`, [id, input.slowModeSeconds ?? 0]);
       } else if (input.action === "close_room") {
+        // Ending a room is a lifecycle event, not just a flag: the people in it
+        // need to be told, the room must stop showing as live in the directory,
+        // and the member list is cleared so a later visit does not report a
+        // crowd that is no longer there.
         await ctx.pool.query(`UPDATE activity_rooms SET state_override = 'ended' WHERE id = $1`, [id]);
+        await ctx.pool.query(`DELETE FROM room_members WHERE room_id = $1`, [id]);
+        ctx.hub.publishToRoom(id, { type: "room.ended", entityId: id, payload: {} });
+        ctx.hub.publishBroadcast({ type: "rooms.changed", entityId: id, payload: { roomId: id, change: "ended" } });
       } else if (input.action === "reopen_room") {
         await ctx.pool.query(`UPDATE activity_rooms SET state_override = NULL WHERE id = $1`, [id]);
       }

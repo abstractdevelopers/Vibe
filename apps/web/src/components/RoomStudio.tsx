@@ -13,7 +13,7 @@ import { themeForRoom } from "../themes";
 import {
   ArrowLeftIcon, BellIcon, CheckIcon, CheerIcon, CloseIcon, EditIcon, FlameIcon, GiftIcon,
   HandIcon, HeadphonesIcon, LinkIcon, MicIcon, MicOffIcon, MicOnIcon, MusicIcon,
-  ShareIcon, ShieldIcon, TicketIcon, TrashIcon, UploadIcon, UsersIcon,
+  LogOutIcon, ShareIcon, ShieldIcon, TicketIcon, TrashIcon, UploadIcon, UsersIcon,
 } from "./Icons";
 import { GiftArt } from "./GiftArt";
 
@@ -308,7 +308,15 @@ export function RoomStudio({ roomId, viewerId, viewerName, onBack, onLeft }: Pro
       setRoom((prev) => (prev ? { ...prev, audioQueue: (p.queue as Room["audioQueue"]) ?? [] } : prev));
       return;
     }
+    if (event.type === "room.left") {
+      void load();
+      return;
+    }
     if (event.type === "room.deleted" || event.type === "room.ended") {
+      // The room is over: drop every peer so the mic is not left publishing into
+      // nothing, and say so plainly instead of showing a room that is gone.
+      peerConns.current.forEach((pc) => pc.close());
+      peerConns.current.clear();
       setError("This room has ended.");
       return;
     }
@@ -413,13 +421,20 @@ export function RoomStudio({ roomId, viewerId, viewerName, onBack, onLeft }: Pro
     } catch { /* meter is best-effort */ }
   }, []);
 
-  // Tear down audio on unmount.
+  // Tear down audio on unmount, and tell the server we are gone. The leave is
+  // keepalive so it survives the navigation, and it is guarded by a ref because
+  // the effect must not re-run when membership changes.
+  const joinedRef = useRef(false);
+  joinedRef.current = joined;
   useEffect(() => () => {
     localStream.current?.getTracks().forEach((t) => t.stop());
     peerConns.current.forEach((pc) => pc.close());
     analysers.current.forEach((a) => { cancelAnimationFrame(a.raf); void a.ctx.close(); });
     if (localAnalyser.current) { cancelAnimationFrame(localAnalyser.current.raf); void localAnalyser.current.ctx.close(); }
-  }, []);
+    if (joinedRef.current) {
+      void api(`/v1/activities/rooms/${roomId}/leave`, { body: {}, keepalive: true }).catch(() => {});
+    }
+  }, [roomId]);
 
   async function join() {
     setBusy(true); setError(null);
@@ -497,6 +512,32 @@ export function RoomStudio({ roomId, viewerId, viewerName, onBack, onLeft }: Pro
       await api(`/v1/activities/rooms/${roomId}`, { method: "DELETE" });
       onLeft();
     } catch (e) { setError(e instanceof ApiError ? e.message : "Could not delete the room"); }
+  }
+
+  /** Leave the room: tell the server, then go back. A no-op if never joined. */
+  async function leaveRoom() {
+    try {
+      if (joined) await api(`/v1/activities/rooms/${roomId}/leave`, { body: {} });
+    } catch { /* leaving is best-effort; navigation must not be blocked */ }
+    onBack();
+  }
+
+  /**
+   * End the room (host). This is the "meeting is over" control a live room needs:
+   * it stops the room showing as live, clears the stage, and tells everyone
+   * inside so their screens close rather than sit in a room that no longer
+   * exists.
+   */
+  async function endRoom() {
+    if (!window.confirm("End this room for everyone?")) return;
+    setBusy(true);
+    try {
+      await api(`/v1/activities/rooms/${roomId}/moderate`, { body: { action: "close_room" } });
+      onLeft();
+    } catch (e) {
+      setError(e instanceof ApiError ? e.message : "Could not end the room");
+      setBusy(false);
+    }
   }
 
   const stageOthers = useMemo(() => stage.filter((m) => m.id !== viewerId), [stage, viewerId]);
@@ -657,8 +698,12 @@ export function RoomStudio({ roomId, viewerId, viewerName, onBack, onLeft }: Pro
           )}
           <button className="btn ghost" onClick={share}><ShareIcon width={15} height={15} /> Share</button>
           {isHost && <button className="btn ghost" onClick={() => setEditing(true)}><EditIcon width={15} height={15} /> Edit</button>}
+          {isHost && room.state === "live" && (
+            <button className="btn ghost danger" onClick={() => void endRoom()} disabled={busy}>End room</button>
+          )}
           {isHost && <button className="btn ghost danger" onClick={() => void removeRoom()}><TrashIcon width={15} height={15} /> Delete</button>}
           {!joined && <button className="btn" onClick={() => void join()} disabled={busy}>Join</button>}
+          {joined && <button className="btn" onClick={() => void leaveRoom()}><LogOutIcon width={15} height={15} /> Leave</button>}
         </div>
         {micError && <div className="notice">{micError}</div>}
       </div>

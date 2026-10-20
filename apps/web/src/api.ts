@@ -65,6 +65,9 @@ interface RequestOptions {
   method?: string;
   body?: unknown;
   idempotencyKey?: string;
+  /** Let the request outlive the page/component that started it. Used when the
+   *  only chance to tell the server something is while we are being torn down. */
+  keepalive?: boolean;
 }
 
 export async function api<T>(path: string, options: RequestOptions = {}): Promise<T> {
@@ -78,6 +81,7 @@ export async function api<T>(path: string, options: RequestOptions = {}): Promis
     method: options.method ?? (options.body !== undefined ? "POST" : "GET"),
     headers,
     body: options.body !== undefined ? JSON.stringify(options.body) : undefined,
+    keepalive: options.keepalive,
   });
 
   if (res.status === 204) return undefined as T;

@@ -157,6 +157,65 @@ describe("voice room stage", () => {
   });
 });
 
+// Leaving a room used to be invisible: the client navigated away and the member
+// row stayed behind, so the room reported a crowd that was not there. The client
+// now calls leave, and these pin the server side of that.
+describe("leaving a room", () => {
+  const membersOf = async (roomId: string, token: string) => {
+    const res = await h.app.inject({ method: "GET", url: `/v1/activities/rooms/${roomId}/members`, headers: auth(token) });
+    return res.json() as { stage: Array<{ id: string }>; audience: Array<{ id: string }> };
+  };
+
+  it("removes the leaver from the stage and from the member count", async () => {
+    const room = await makeRoom({ kind: "voice", title: "Leave test", layout: "stage" });
+    const id = room.json().room.id as string;
+    await h.app.inject({ method: "POST", url: `/v1/activities/rooms/${id}/join`, headers: auth(fan.token), payload: {} });
+    expect((await membersOf(id, host.token)).stage.some((m) => m.id === fan.id)).toBe(true);
+
+    const leave = await h.app.inject({ method: "POST", url: `/v1/activities/rooms/${id}/leave`, headers: auth(fan.token), payload: {} });
+    expect(leave.statusCode).toBe(200);
+
+    const after = await membersOf(id, host.token);
+    expect(after.stage.some((m) => m.id === fan.id)).toBe(false);
+    expect(after.audience.some((m) => m.id === fan.id)).toBe(false);
+    const room2 = await h.app.inject({ method: "GET", url: `/v1/activities/rooms/${id}`, headers: auth(host.token) });
+    expect(room2.json().room.memberCount).toBe(1);
+  });
+});
+
+// Ending a room is the "meeting is over" control. Before this it only set a flag,
+// so a room could still look live and a later visit still reported everyone who
+// had been in it.
+describe("ending a room", () => {
+  it("closes the room and clears its members for the host", async () => {
+    const room = await makeRoom({ kind: "voice", title: "End test", startsAt: past().toISOString(), durationMinutes: 120 });
+    const id = room.json().room.id as string;
+    await h.app.inject({ method: "POST", url: `/v1/activities/rooms/${id}/join`, headers: auth(fan.token), payload: {} });
+
+    const res = await h.app.inject({
+      method: "POST", url: `/v1/activities/rooms/${id}/moderate`,
+      headers: auth(host.token), payload: { action: "close_room" },
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.json().room.state).toBe("ended");
+
+    const members = await h.app.inject({ method: "GET", url: `/v1/activities/rooms/${id}/members`, headers: auth(host.token) });
+    const body = members.json() as { stage: unknown[]; audience: unknown[] };
+    expect(body.stage.length).toBe(0);
+    expect(body.audience.length).toBe(0);
+  });
+
+  it("refuses to end a room you do not host", async () => {
+    const room = await makeRoom({ kind: "voice", title: "Not yours" });
+    const id = room.json().room.id as string;
+    const res = await h.app.inject({
+      method: "POST", url: `/v1/activities/rooms/${id}/moderate`,
+      headers: auth(fan.token), payload: { action: "close_room" },
+    });
+    expect(res.statusCode).toBe(403);
+  });
+});
+
 
 describe("viral loop", () => {
   it("previews a link without a session, then returns the member to the room", async () => {
