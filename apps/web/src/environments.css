@@ -475,10 +475,10 @@
 .studio.kind-music .studio-top {
   border-bottom: 1px solid color-mix(in srgb, var(--accent) 22%, var(--border));
 }
-.studio.kind-sports .stage-seat { border-radius: var(--radius-sm); }
+.studio.kind-sports .stage-tile { border-radius: var(--radius-sm); }
 .studio.kind-sports .energy-flame { color: var(--accent); }
-.studio.kind-other .stage-seat { border-radius: var(--radius-card); }
+.studio.kind-other .stage-tile { border-radius: var(--radius-card); }
 
-.studio.kind-voice .stage-seat.speaking { border-color: color-mix(in srgb, var(--accent) 75%, transparent); }
-.studio.kind-listen .stage-seat { border-radius: var(--radius-pill); }
+.studio.kind-voice .stage-tile.speaking { border-color: color-mix(in srgb, var(--accent) 75%, transparent); }
+.studio.kind-listen .stage-tile { border-radius: var(--radius-pill); }
 .studio.kind-movie .room-banner { filter: brightness(0.82) contrast(1.05); }

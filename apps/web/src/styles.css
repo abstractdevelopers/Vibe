@@ -2618,42 +2618,61 @@ select {
 }
 .energy-value { font-variant-numeric: tabular-nums; font-weight: 700; }
 
-/* The stage. */
+/* The stage, as a Zoom-like gallery: a spotlight tile for the active speaker
+   over a wrapping row of the rest. Tiles are the same shape as a video call, so
+   a room reads as people in a call rather than a list of names. */
 .stage { margin: 0 var(--space-4) var(--space-3); }
 .stage-head { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); margin-bottom: var(--space-2); }
-.stage-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(84px, 1fr));
-  gap: var(--space-3);
-}
-.stage-seat {
+.stage-gallery { display: flex; flex-direction: column; gap: var(--space-3); }
+
+.stage-tile {
   position: relative;
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 4px;
+  justify-content: center;
+  gap: var(--space-2);
+  min-width: 0;
   padding: var(--space-3) var(--space-2);
   border-radius: var(--radius-card);
-  background: color-mix(in srgb, var(--surface-2) 60%, transparent);
+  background: var(--surface-1);
   border: 1px solid var(--hairline);
-  transition: box-shadow var(--motion-fast) var(--ease-out), transform var(--motion-fast) var(--ease-out);
+  transition: box-shadow var(--motion-fast) var(--ease-out), transform var(--motion-fast) var(--ease-out), border-color var(--motion-fast) var(--ease-out);
 }
-/* A speaking seat glows and lifts, so the room reads as alive. */
-.stage-seat.speaking {
+/* The spotlight is the big tile: the active speaker, or the host when quiet. */
+.stage-tile.spotlight {
+  min-height: 208px;
+  padding: var(--space-5) var(--space-4);
+  background: var(--surface-2);
+}
+.stage-tile.spotlight .stage-tile-face { --tile-face: 96px; }
+.stage-tile-face { --tile-face: 56px; width: var(--tile-face); height: var(--tile-face); }
+.stage-tile.spotlight .stage-role { margin-top: var(--space-1); }
+
+/* A talking tile is ringed in the accent, so the room reads as alive without
+   animation doing the work. */
+.stage-tile.speaking {
   border-color: color-mix(in srgb, var(--interactive) 60%, transparent);
-  box-shadow: 0 0 0 2px color-mix(in srgb, var(--interactive) 45%, transparent), 0 8px 24px -12px var(--interactive);
-  transform: translateY(-2px);
-  animation: seat-pulse 1.4s ease-in-out infinite;
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--interactive) 45%, transparent);
 }
-.stage-seat.muted { opacity: 0.6; }
-@keyframes seat-pulse {
-  0%, 100% { box-shadow: 0 0 0 2px color-mix(in srgb, var(--interactive) 40%, transparent), 0 8px 24px -12px var(--interactive); }
-  50% { box-shadow: 0 0 0 4px color-mix(in srgb, var(--interactive) 55%, transparent), 0 10px 30px -10px var(--interactive); }
+.stage-tile.spotlight.speaking {
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--interactive) 55%, transparent), 0 12px 32px -18px var(--interactive);
 }
-.stage-name { font-size: var(--text-meta); font-weight: 600; max-width: 80px; }
+.stage-tile.muted { opacity: 0.62; }
+
+/* The rest of the stage wraps like a gallery row. */
+.stage-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(88px, 1fr));
+  gap: var(--space-2);
+}
+.stage-row .stage-tile { padding: var(--space-2); }
+
+.stage-tile-bar { display: flex; align-items: center; gap: 4px; max-width: 100%; }
+.stage-name { font-size: var(--text-meta); font-weight: 600; max-width: 110px; }
 .stage-role { font-size: 10px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--text-muted); }
-.stage-mute { position: absolute; top: 6px; right: 6px; color: var(--danger); }
-.stage-controls { position: absolute; bottom: -8px; display: flex; gap: 4px; }
+.stage-mute { color: var(--danger); display: inline-flex; }
+.stage-controls { position: absolute; bottom: 6px; right: 6px; display: flex; gap: 4px; }
 .mini {
   width: 24px; height: 24px; border-radius: 50%;
   display: grid; place-items: center;
@@ -2764,7 +2783,7 @@ select {
 
 /* Respect a reduced-motion preference: keep the layout, drop the movement. */
 @media (prefers-reduced-motion: reduce) {
-  .stage-seat.speaking, .burst, .energy-fill, .live-dot { animation: none !important; transition: none !important; }
+  .stage-tile.speaking, .burst, .energy-fill, .live-dot { animation: none !important; transition: none !important; }
 }
 
 /* ---- Games ---- */

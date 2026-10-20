@@ -572,6 +572,11 @@ export function RoomStudio({ roomId, viewerId, viewerName, onBack, onLeft }: Pro
 
   const energy = Math.min(100, Math.round((room.hype / 60) * 100));
   const kindMeta = ROOM_KINDS[room.kind];
+  // Zoom-style spotlight: the person actually talking is the big tile; with
+  // nobody talking it falls back to the host, so the tile is never empty and the
+  // room always has a face.
+  const spotlight = stage.find((m) => speaking.has(m.id)) ?? stage.find((m) => m.role === "host") ?? stage[0];
+  const othersOnStage = stage.filter((m) => m.id !== spotlight?.id);
   const canBroadcast = room.layout === "broadcast" && (room.kind === "voice" || room.kind === "listen" || room.kind === "other");
 
   return (
@@ -608,7 +613,10 @@ export function RoomStudio({ roomId, viewerId, viewerName, onBack, onLeft }: Pro
       )}
       {room.kind === "movie" && <WatchPanel room={room} />}
 
-      {/* The stage. */}
+      {/* The stage, as a Zoom-like gallery: one big tile for whoever is speaking,
+          and everyone else in a grid beneath it. The grid used to be a row of
+          small squares with the role as a label, so a busy room read as a list
+          rather than as people in a call. */}
       {canSpeak && (
         <section className="stage" aria-label="Stage">
           <div className="stage-head">
@@ -620,27 +628,56 @@ export function RoomStudio({ roomId, viewerId, viewerName, onBack, onLeft }: Pro
               <span className="meta">P2P mesh — best with {MESH_SPEAKER_LIMIT} or fewer speakers</span>
             )}
           </div>
-          <div className="stage-grid">
-            {stage.map((m) => (
-              <div key={m.id} className={`stage-seat${speaking.has(m.id) ? " speaking" : ""}${m.muted ? " muted" : ""}`}>
-                <Avatar name={m.displayName} url={m.avatarUrl} seed={m.id} />
-                <span className="stage-name truncate">{m.id === viewerId ? "You" : m.displayName}</span>
-                <span className="stage-role">{m.role === "host" ? "Host" : "Speaker"}</span>
-                {m.muted && <span className="stage-mute" title="Muted"><MicIcon width={12} height={12} /></span>}
-                {isHost && m.id !== viewerId && (
+
+          {!spotlight ? (
+            <p className="meta">The stage is open. Join it to speak.</p>
+          ) : (
+            <div className="stage-gallery">
+              <div className={`stage-tile spotlight${speaking.has(spotlight.id) ? " speaking" : ""}${spotlight.muted ? " muted" : ""}`}>
+                <Avatar name={spotlight.displayName} url={spotlight.avatarUrl} seed={spotlight.id} className="stage-tile-face" />
+                <span className="stage-tile-bar">
+                  <span className="stage-name truncate">{spotlight.id === viewerId ? "You" : spotlight.displayName}</span>
+                  {spotlight.muted && <span className="stage-mute" title="Muted"><MicIcon width={12} height={12} /></span>}
+                </span>
+                <span className="stage-role">{spotlight.role === "host" ? "Host" : "Speaker"}</span>
+                {isHost && spotlight.id !== viewerId && (
                   <div className="stage-controls">
-                    {m.role === "speaker" && (
-                      <button className="mini" onClick={() => void stageAction(m.id, "demote")} title="Send to audience">↓</button>
+                    {spotlight.role === "speaker" && (
+                      <button className="mini" onClick={() => void stageAction(spotlight.id, "demote")} title="Send to audience">↓</button>
                     )}
-                    <button className="mini" onClick={() => void stageAction(m.id, m.muted ? "unmute" : "mute")} title={m.muted ? "Unmute" : "Mute"}>
-                      {m.muted ? <MicOffIcon width={13} height={13} /> : <MicOnIcon width={13} height={13} />}
+                    <button className="mini" onClick={() => void stageAction(spotlight.id, spotlight.muted ? "unmute" : "mute")} title={spotlight.muted ? "Unmute" : "Mute"}>
+                      {spotlight.muted ? <MicOffIcon width={13} height={13} /> : <MicOnIcon width={13} height={13} />}
                     </button>
                   </div>
                 )}
               </div>
-            ))}
-            {stage.length === 0 && <p className="meta">The stage is open. Join it to speak.</p>}
-          </div>
+
+              {othersOnStage.length > 0 && (
+                <div className="stage-row">
+                  {othersOnStage.map((m) => (
+                    <div key={m.id} className={`stage-tile${speaking.has(m.id) ? " speaking" : ""}${m.muted ? " muted" : ""}`}>
+                      <Avatar name={m.displayName} url={m.avatarUrl} seed={m.id} className="stage-tile-face" />
+                      <span className="stage-tile-bar">
+                        <span className="stage-name truncate">{m.id === viewerId ? "You" : m.displayName}</span>
+                        {m.muted && <span className="stage-mute" title="Muted"><MicIcon width={12} height={12} /></span>}
+                      </span>
+                      {isHost && m.id !== viewerId && (
+                        <div className="stage-controls">
+                          {m.role === "speaker" && (
+                            <button className="mini" onClick={() => void stageAction(m.id, "demote")} title="Send to audience">↓</button>
+                          )}
+                          <button className="mini" onClick={() => void stageAction(m.id, m.muted ? "unmute" : "mute")} title={m.muted ? "Unmute" : "Mute"}>
+                            {m.muted ? <MicOffIcon width={13} height={13} /> : <MicOnIcon width={13} height={13} />}
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
           {/* Broadcast mode: a listener can still ask to speak and be brought up. */}
           {canBroadcast && !isOnStage && (
             <p className="meta">You are in the audience. Raise a hand and the host can bring you up.</p>
