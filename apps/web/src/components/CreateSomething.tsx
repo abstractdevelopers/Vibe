@@ -1,3 +1,4 @@
+import { toMinorUnits } from "../money";
 import { useEffect, useState } from "react";
 import { api, ApiError, mediaSrc } from "../api";
 import { uploadImageFile } from "../media";
@@ -379,7 +380,7 @@ function ProductForm({ setError, onDone, onBack }: FormProps) {
       await api(`/v1/merchants/${merchantId}/products`, {
         body: {
           name, description: description || undefined,
-          priceMinor: Math.round(Number(price) * 100),
+          priceMinor: toMinorUnits(price, currency) ?? 0,
           currency,
           availability,
           status: "active",
@@ -455,7 +456,7 @@ function CampaignForm({ setError, onDone, onBack }: FormProps) {
       const created = await api<{ id: string }>("/v1/campaigns", {
         body: {
           merchantId, name, destinationUrl,
-          budgetMinor: Math.round(Number(budget) * 100),
+          budgetMinor: toMinorUnits(budget, currency) ?? 0,
           currency,
           objective,
           creative,

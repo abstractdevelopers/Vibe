@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { api, ApiError, idempotencyKey } from "../api";
 import { ArrowLeftIcon, MoneyIcon, PlusIcon, SendIcon } from "../components/Icons";
 import { ScreenHeader } from "../components/ScreenHeader";
-import { formatMoney } from "../money";
+import { formatMoney, toMinorUnits } from "../money";
 
 /**
  * Vibe Yens — the optional prepaid balance.
@@ -81,7 +81,7 @@ export function VibeYens({ onBack }: { onBack: () => void }) {
     setBusy(true);
     setError(null);
     try {
-      const amountMinor = Math.round(Number(send.amount) * 100);
+      const amountMinor = toMinorUnits(send.amount, "NGN") ?? NaN;
       if (!Number.isFinite(amountMinor) || amountMinor <= 0) throw new ApiError(400, "invalid_amount", "Enter an amount");
       const users = await api<{ users: Array<{ id: string; handle: string }> }>(
         `/v1/search/users?q=${encodeURIComponent(send.handle.replace(/^@/, ""))}`,

@@ -1,4 +1,4 @@
-import { currencyExponent, formatMinorUnits } from "@vibe/shared";
+import { currencyExponent, formatMinorUnits, parseToMinorUnits } from "@vibe/shared";
 
 const SYMBOLS: Record<string, string> = { NGN: "₦", USD: "$", GBP: "£", EUR: "€" };
 
@@ -20,4 +20,21 @@ export function formatMoney(amountMinor: number, currency: string): string {
   // A trailing zero fraction is noise; a real fraction keeps its places.
   const shown = frac && Number(frac) !== 0 ? `${grouped}.${frac.padEnd(decimals, "0")}` : grouped;
   return `${negative ? "-" : ""}${symbol}${shown}`;
+}
+
+/**
+ * Turn what someone typed into minor units, using the currency's own exponent.
+ *
+ * Forms used `Math.round(Number(x) * 100)`, which is right for naira and wrong
+ * for a zero-decimal currency: a ¥500 budget would have been stored as 50000
+ * minor units and shown as ¥50,000. Going through the shared parser keeps the
+ * one place that knows how many decimals a currency has. Returns null when the
+ * text is not a valid amount for that currency.
+ */
+export function toMinorUnits(input: string, currency: string): number | null {
+  try {
+    return parseToMinorUnits(input, currency);
+  } catch {
+    return null;
+  }
 }

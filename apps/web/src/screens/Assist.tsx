@@ -1,3 +1,4 @@
+import { toMinorUnits } from "../money";
 import { useState } from "react";
 import { api, ApiError } from "../api";
 import { ArrowLeftIcon, SparklesIcon, CheckIcon, CloseIcon } from "../components/Icons";
@@ -43,7 +44,7 @@ export function AssistScreen({ onBack }: { onBack: () => void }) {
     try {
       const body: Record<string, unknown> = { kind, prompt: prompt || undefined };
       if (kind === "propose_budget") {
-        body.totalMinor = Math.round(Number(total || "0") * 100);
+        body.totalMinor = toMinorUnits(total || "0", "NGN") ?? 0;
         body.people = Math.max(1, Number(people || "1"));
       }
       setResult(await api<Suggestion>("/v1/assist/propose", { body }));

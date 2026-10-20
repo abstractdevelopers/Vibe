@@ -3,7 +3,7 @@ import { api, ApiError } from "../api";
 import { ArrowLeftIcon, BarChartIcon, MegaphoneIcon, EyeIcon, ClickIcon } from "../components/Icons";
 import { EmptyState } from "../components/EmptyState";
 import { ScreenHeader } from "../components/ScreenHeader";
-import { formatMoney } from "../money";
+import { formatMoney, toMinorUnits } from "../money";
 
 interface Campaign {
   id: string;
@@ -77,7 +77,7 @@ export function AdvertisingScreen({ onBack }: { onBack: () => void }) {
           creativeTitle: form.creativeTitle || undefined,
           creativeBody: form.creativeBody || undefined,
           destinationUrl: form.destinationUrl,
-          budgetMinor: Math.round(Number(form.budget || "0") * 100),
+          budgetMinor: toMinorUnits(form.budget || "0", form.currency) ?? 0,
           currency: form.currency,
           category: form.category,
           frequencyCap: form.frequencyCap,

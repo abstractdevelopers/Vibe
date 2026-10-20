@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { api, ApiError, idempotencyKey } from "../api";
 import { ScreenHeader } from "../components/ScreenHeader";
-import { formatMoney } from "../money";
+import { formatMoney, toMinorUnits } from "../money";
 import { Avatar } from "../components/Avatar";
 import { EmptyState } from "../components/EmptyState";
 import { useNav } from "../nav";
@@ -182,7 +182,7 @@ function CreateBattle({ onCreated }: { onCreated: () => void }) {
     setBusy(true);
     setError(null);
     try {
-      const stakeMinor = stake ? Math.round(Number(stake) * 100) : 0;
+      const stakeMinor = stake ? toMinorUnits(stake, "NGN") ?? 0 : 0;
       await api("/v1/battles", {
         body: { title, sideA, sideB, topic: topic || undefined, stakeMinor },
         idempotencyKey: idempotencyKey("battle"),
