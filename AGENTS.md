@@ -1048,4 +1048,19 @@ Gotchas the harnesses encode, in case you write new checks:
   and keeps the table. If you touch this route, keep both branches refunding
   through the ledger — a dead session holding a pot is real money stranded.
 
+## Live rooms
+
+- **Leaving a room is a server fact, not just navigation.** `POST
+  /v1/activities/rooms/:id/leave` deletes the `room_members` row; the client must
+  call it (and again on unmount, with `keepalive: true`) or the room keeps
+  reporting a crowd that has gone. The `keepalive` option on `api()` exists for
+  exactly this teardown case.
+- **Ending a room is a lifecycle event.** `moderate { action: "close_room" }`
+  sets `state_override='ended'`, clears `room_members`, and publishes
+  `room.ended` + a `rooms.changed` broadcast. A client inside closes its peer
+  connections when it sees `room.ended`, so no mic is left publishing into
+  nothing.
+- **The host is in the room from creation**, so membership is derived from the
+  server's member lists rather than a client `joined` flag.
+
 
