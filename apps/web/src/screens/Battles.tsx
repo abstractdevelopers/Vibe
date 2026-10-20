@@ -70,11 +70,20 @@ function SideBar({ battle }: { battle: Battle }) {
 
 function BattleCard({ battle, onOpen }: { battle: Battle; onOpen: () => void }) {
   const left = timeLeft(battle.endsAt);
+  const total = battle.tally.a + battle.tally.b;
   return (
-    <button className="battle-card" onClick={onOpen}>
+    <button className={`battle-card${battle.status === "open" ? " is-open" : ""}`} onClick={onOpen}>
       <div className="battle-card-head">
-        <span className="battle-vs">{battle.sides.a} <em>vs</em> {battle.sides.b}</span>
-        {battle.status === "open" && left && <span className="chip">{left}</span>}
+        <span className="battle-card-vs">
+          <span className="battle-card-side">{battle.sides.a}</span>
+          <em>vs</em>
+          <span className="battle-card-side">{battle.sides.b}</span>
+        </span>
+        {battle.status === "open" && (
+          <span className="battle-card-status">
+            <span className="live-dot playing" aria-hidden /> {left ?? "open"}
+          </span>
+        )}
         {battle.status === "closed" && battle.winner && (
           <span className="chip chip-gold">
             {battle.winner === "tie" ? "Tie" : `${battle.winner === "a" ? battle.sides.a : battle.sides.b} won`}
@@ -83,10 +92,10 @@ function BattleCard({ battle, onOpen }: { battle: Battle; onOpen: () => void }) 
         {battle.status === "cancelled" && <span className="chip">Cancelled</span>}
       </div>
       <h3 className="battle-card-title">{battle.title}</h3>
-      {battle.topic && <p className="muted battle-card-topic">{battle.topic}</p>}
+      {battle.topic && <p className="battle-card-topic">{battle.topic}</p>}
       <SideBar battle={battle} />
       <div className="battle-card-foot">
-        <span className="muted">{battle.tally.a + battle.tally.b} votes</span>
+        <span className="meta">{total} {total === 1 ? "vote" : "votes"}</span>
         {battle.stakeMinor > 0 && (
           <span className="chip chip-gold">Pot {formatMoney(battle.potMinor, battle.currency)}</span>
         )}
@@ -122,7 +131,7 @@ export function BattlesScreen({ onBack }: { onBack?: () => void }) {
   const past = battles.filter((b) => b.status !== "open");
 
   return (
-    <>
+    <div className="battles-flow">
       <ScreenHeader
         eyebrow="Play"
         title="Battles"
@@ -145,27 +154,37 @@ export function BattlesScreen({ onBack }: { onBack?: () => void }) {
       {creating && <CreateBattle onCreated={() => { setCreating(false); void load(); }} />}
 
       {loading ? (
-        <div className="skeleton" aria-busy="true" style={{ height: 120, marginTop: "var(--space-5)" }} />
+        <div className="skeleton" aria-busy="true" style={{ height: 120 }} />
       ) : (
         <>
-          <section className="stack" style={{ marginTop: "var(--space-6)" }}>
-            <h2 className="section-title"><TrophyIcon width={16} height={16} /> Open now</h2>
+          <section className="shelf">
+            <div className="shelf-head">
+              <h2 className="section-title"><TrophyIcon width={16} height={16} /> Open now</h2>
+              {open.length > 0 && <span className="meta">{open.length}</span>}
+            </div>
             {open.length === 0 ? (
               <EmptyState icon={<SplitIcon />} title="No battles yet" text="Start one above and let people pick a side." />
             ) : (
-              open.map((b) => <BattleCard key={b.id} battle={b} onOpen={() => nav.push({ name: "battle", battleId: b.id })} />)
+              <div className="battle-list">
+                {open.map((b) => <BattleCard key={b.id} battle={b} onOpen={() => nav.push({ name: "battle", battleId: b.id })} />)}
+              </div>
             )}
           </section>
 
           {past.length > 0 && (
-            <section className="stack" style={{ marginTop: "var(--space-6)" }}>
-              <h2 className="section-title">Finished</h2>
-              {past.map((b) => <BattleCard key={b.id} battle={b} onOpen={() => nav.push({ name: "battle", battleId: b.id })} />)}
+            <section className="shelf">
+              <div className="shelf-head">
+                <h2 className="section-title">Finished</h2>
+                <span className="meta">{past.length}</span>
+              </div>
+              <div className="battle-list">
+                {past.map((b) => <BattleCard key={b.id} battle={b} onOpen={() => nav.push({ name: "battle", battleId: b.id })} />)}
+              </div>
             </section>
           )}
         </>
       )}
-    </>
+    </div>
   );
 }
 
@@ -274,7 +293,7 @@ export function BattleScreen({ battleId, onBack }: { battleId: string; viewerId:
   const isOpen = battle.status === "open";
 
   return (
-    <>
+    <div className="battles-flow">
       <ScreenHeader
         eyebrow="Battle"
         title={battle.title}
@@ -336,16 +355,18 @@ export function BattleScreen({ battleId, onBack }: { battleId: string; viewerId:
         </div>
       </section>
 
-      <section className="stack" style={{ marginTop: "var(--space-6)" }}>
-        <h2 className="section-title"><UsersIcon width={16} height={16} /> Backing</h2>
+      <section className="shelf">
+        <div className="shelf-head">
+          <h2 className="section-title"><UsersIcon width={16} height={16} /> Backing</h2>
+        </div>
         <div className="battle-backing">
           <div className="battle-backing-col">
             <span className="battle-backing-label">{battle.sides.a}</span>
-            <span className="muted">{battle.backing.a.backers} backers · {formatMoney(battle.backing.a.stakedMinor, battle.currency)}</span>
+            <span className="meta">{battle.backing.a.backers} backers · {formatMoney(battle.backing.a.stakedMinor, battle.currency)}</span>
           </div>
           <div className="battle-backing-col">
             <span className="battle-backing-label">{battle.sides.b}</span>
-            <span className="muted">{battle.backing.b.backers} backers · {formatMoney(battle.backing.b.stakedMinor, battle.currency)}</span>
+            <span className="meta">{battle.backing.b.backers} backers · {formatMoney(battle.backing.b.stakedMinor, battle.currency)}</span>
           </div>
         </div>
         {battle.backers.length > 0 && (
@@ -356,11 +377,11 @@ export function BattleScreen({ battleId, onBack }: { battleId: string; viewerId:
               </span>
             ))}
             {battle.backing.a.backers + battle.backing.b.backers > battle.backers.length && (
-              <span className="muted battle-faces-more">+{battle.backing.a.backers + battle.backing.b.backers - battle.backers.length} more</span>
+              <span className="meta battle-faces-more">+{battle.backing.a.backers + battle.backing.b.backers - battle.backers.length} more</span>
             )}
           </div>
         )}
       </section>
-    </>
+    </div>
   );
 }

@@ -846,6 +846,15 @@ Gotchas the harnesses encode, in case you write new checks:
   kinds back: proximity is the whole point. The empty state only claims "nothing
   matches" when *every* kind is empty, so a query that found a person is not told
   it found nothing.
+- **Battles is two shelves, and its cards were transparent for a while.** The
+  list is `.battles-flow` with an "Open now" and a "Finished" `.shelf` (24px
+  apart); an open battle carries a live dot, a settled one the winner. The three
+  surfaces here once used `var(--surface)`, `var(--muted)` and `var(--text-lg)`,
+  none of which are tokens - the declarations were dropped and `.battle-card`,
+  `.battle-create` and `.battle-stage` rendered with **no background at all**.
+  When adding CSS, use the real ramp (`--surface-0/1/2/3`, `--text-muted`,
+  `--text-section`); an undefined custom property fails silently, so a card can
+  look "plain" rather than "broken". The overflow probe will not catch it either.
 - **Themes are authored, not random.** `apps/web/src/themes.ts` holds 34 base
   palettes × 4 styles, plus 4 named environments = 140 themes; each computes its accent ink by luminance so
   text stays legible. The atmosphere glows read `--theme-glow-a/--theme-glow-b`,

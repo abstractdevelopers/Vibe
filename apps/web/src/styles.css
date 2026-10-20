@@ -2961,34 +2961,37 @@ select {
 /* ---- Battles -------------------------------------------------------------
    A battle is a head-to-head, so the layout is a split: two sides with a
    single "vs" between them. The side you backed is the only one that lights
-   up, which makes your position readable at a glance without a legend. */
+   up, which makes your position readable at a glance without a legend.
 
-.battles-banner {
+   The list is a shelf, like Play and Explore: an "Open now" group and a
+   "Finished" group, each with its own head, 24px apart. An open battle carries
+   a live dot because it is happening now; a settled one carries the winner.
+
+   NOTE: the three surfaces here previously used `var(--surface)`, which is not
+   a token — the declaration was dropped and every card rendered transparent.
+   They now use the real ramp (`--surface-1`/`--surface-0`). Same for
+   `var(--muted)` and `var(--text-lg)`. */
+
+.battles-flow { display: flex; flex-direction: column; }
+.battles-flow > * + * { margin-top: var(--space-4); }
+.battles-flow > .shelf + .shelf { margin-top: var(--space-8); }
+
+.battles-flow .shelf { display: flex; flex-direction: column; }
+.battles-flow .shelf-head {
   display: flex;
   align-items: center;
-  gap: var(--space-4);
-  width: 100%;
-  text-align: left;
-  padding: var(--space-4);
-  margin-top: var(--space-5);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-card);
-  background: var(--surface-2);
-  color: inherit;
-  cursor: pointer;
+  justify-content: space-between;
+  gap: var(--space-3);
+  margin-bottom: var(--space-4);
 }
-.battles-banner-icon {
-  display: grid;
-  place-items: center;
-  width: 44px;
-  height: 44px;
-  border-radius: var(--radius-sm);
-  background: var(--brand-gradient);
-  color: var(--accent-ink);
-  flex: none;
+.battles-flow .shelf-head .section-title {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin: 0;
 }
-.battles-banner-body { display: flex; flex-direction: column; gap: 2px; flex: 1; min-width: 0; }
-.battles-banner-title { font-weight: 700; }
+
+.battle-list { display: flex; flex-direction: column; gap: var(--space-3); }
 
 .battle-card {
   display: flex;
@@ -2996,19 +2999,45 @@ select {
   gap: var(--space-3);
   width: 100%;
   text-align: left;
-  padding: var(--space-4);
+  padding: var(--space-5);
   border: 1px solid var(--border);
   border-radius: var(--radius-card);
-  background: var(--surface);
+  background: linear-gradient(165deg, color-mix(in srgb, var(--surface-1) 94%, transparent), var(--surface-0));
   color: inherit;
   cursor: pointer;
+  transition: transform var(--motion-fast) var(--ease-out), border-color var(--motion-fast) var(--ease-out),
+    box-shadow var(--motion-base) var(--ease-out);
 }
+.battle-card:hover {
+  transform: translateY(-3px);
+  border-color: var(--border-strong);
+  box-shadow: var(--shadow-md);
+}
+.battle-card.is-open { border-color: color-mix(in srgb, var(--accent) 30%, var(--border)); }
+
 .battle-card-head { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); }
-.battle-vs { font-weight: 700; letter-spacing: 0.01em; }
-.battle-vs em { font-style: normal; color: var(--muted); font-weight: 500; }
-.battle-card-title { margin: 0; font-size: var(--text-lg, 1.05rem); }
-.battle-card-topic { margin: 0; font-size: 0.9rem; }
-.battle-card-foot { display: flex; align-items: center; justify-content: space-between; }
+.battle-card-vs { display: inline-flex; align-items: center; gap: var(--space-2); min-width: 0; }
+.battle-card-side { font-weight: 700; letter-spacing: -0.01em; }
+.battle-card-vs em {
+  font-style: normal;
+  color: var(--text-muted);
+  font-weight: 600;
+  font-size: var(--text-meta);
+  text-transform: uppercase;
+  letter-spacing: var(--tracking-wide);
+}
+.battle-card-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex: none;
+  font-size: var(--text-meta);
+  font-weight: 700;
+  color: var(--text-secondary);
+}
+.battle-card-title { margin: 0; font-size: var(--text-section); font-weight: 700; line-height: var(--leading-snug); }
+.battle-card-topic { margin: 0; font-size: var(--text-supporting); color: var(--text-muted); line-height: var(--leading-body); }
+.battle-card-foot { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); }
 
 .battle-bar {
   display: flex;
@@ -3017,18 +3046,17 @@ select {
   overflow: hidden;
   background: var(--surface-2);
 }
-.battle-bar-a { background: var(--accent); }
-.battle-bar-b { background: var(--accent-soft); }
+.battle-bar-a { background: var(--accent); transition: width var(--motion-base) var(--ease-out); }
+.battle-bar-b { background: var(--accent-soft); transition: width var(--motion-base) var(--ease-out); }
 
 .battle-create {
   display: flex;
   flex-direction: column;
   gap: var(--space-3);
-  padding: var(--space-4);
-  margin-top: var(--space-4);
+  padding: var(--space-5);
   border: 1px solid var(--border);
   border-radius: var(--radius-card);
-  background: var(--surface);
+  background: var(--surface-1);
 }
 .battle-create-sides { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-3); }
 .battle-create-sides > div { display: flex; flex-direction: column; gap: 6px; }
@@ -3039,47 +3067,64 @@ select {
   gap: var(--space-4);
   padding: var(--space-5);
   border: 1px solid var(--border);
-  border-radius: var(--radius-card);
-  background: var(--surface);
+  border-radius: var(--radius-lg);
+  background: var(--surface-1);
 }
-.battle-stage-sides { display: flex; align-items: center; gap: var(--space-3); }
-.battle-stage-vs { color: var(--muted); font-size: 0.85rem; flex: none; }
+.battle-stage-sides { display: flex; align-items: stretch; gap: var(--space-3); }
+.battle-stage-vs {
+  display: grid;
+  place-items: center;
+  flex: none;
+  color: var(--text-muted);
+  font-size: var(--text-meta);
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: var(--tracking-wide);
+}
 .battle-side {
   flex: 1;
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 4px;
+  gap: var(--space-1);
   padding: var(--space-4);
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
   background: var(--surface-2);
   color: inherit;
   cursor: pointer;
+  transition: border-color var(--motion-fast) var(--ease-out), transform var(--motion-fast) var(--ease-out);
 }
+.battle-side:hover:not(:disabled) { transform: translateY(-2px); border-color: var(--border-strong); }
 .battle-side:disabled { cursor: default; opacity: 0.85; }
-.battle-side.mine { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent) inset; }
+.battle-side.mine { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
 .battle-side.won { background: var(--brand-gradient); color: var(--accent-ink); }
-.battle-side-name { font-weight: 600; }
-.battle-side-votes { font-size: 1.6rem; font-weight: 800; }
-.battle-side-pct { font-size: 0.8rem; color: var(--muted); }
+.battle-side-name { font-weight: 700; text-align: center; }
+.battle-side-votes { font-size: 1.7rem; font-weight: 800; letter-spacing: -0.02em; }
+.battle-side-pct { font-size: var(--text-meta); color: var(--text-muted); }
 .battle-side.won .battle-side-pct { color: var(--accent-ink); }
 
 .battle-pot {
   display: flex;
   align-items: center;
   gap: var(--space-2);
+  flex-wrap: wrap;
   padding: var(--space-3) var(--space-4);
   border-radius: var(--radius-sm);
-  background: var(--surface-2);
+  background: color-mix(in srgb, var(--warning) 12%, var(--surface-2));
+  border: 1px solid color-mix(in srgb, var(--warning) 26%, var(--border));
   font-weight: 600;
 }
 .battle-pot .muted { font-weight: 400; }
 
-.battle-backing { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-3); }
-.battle-backing-col { display: flex; flex-direction: column; gap: 2px; }
-.battle-backing-label { font-weight: 600; }
+.battle-backing { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-4); }
+.battle-backing-col { display: flex; flex-direction: column; gap: var(--space-1); }
+.battle-backing-label { font-weight: 700; }
 
+@media (prefers-reduced-motion: reduce) {
+  .battle-card:hover,
+  .battle-side:hover:not(:disabled) { transform: none; }
+}
 /* ---- Auth imprint --------------------------------------------------------
    The drawn scene sits behind the sign-up hero and fades toward the edges, so
    the eye lands on the words and the buttons first and only then notices the
