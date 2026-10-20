@@ -855,6 +855,12 @@ Gotchas the harnesses encode, in case you write new checks:
   When adding CSS, use the real ramp (`--surface-0/1/2/3`, `--text-muted`,
   `--text-section`); an undefined custom property fails silently, so a card can
   look "plain" rather than "broken". The overflow probe will not catch it either.
+  The same class of bug is name reuse: `DiscoveryRail`'s mini battle card used to
+  borrow `.battle-card` / `.battle-side` / `.battle-bar` from the full Battles
+  screen, and because that stylesheet loads later its rules won - the 210px rail
+  card stretched to full width and its sides grew into boxes. Two components, two
+  namespaces: the rail's are now `.rail-battle-*`. A shared name across screens is
+  a hidden coupling; rename rather than "fix it with more specificity".
 - **Themes are authored, not random.** `apps/web/src/themes.ts` holds 34 base
   palettes × 4 styles, plus 4 named environments = 140 themes; each computes its accent ink by luminance so
   text stays legible. The atmosphere glows read `--theme-glow-a/--theme-glow-b`,

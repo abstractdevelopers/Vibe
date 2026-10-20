@@ -980,8 +980,13 @@ select {
   text-overflow: ellipsis;
 }
 
-/* A battle: the two sides and a split bar that is the actual tally, not decor. */
-.battle-card {
+/* A battle in the rail: the two sides and a split bar that is the actual tally,
+   not decor. These are the rail's own names on purpose. They used to be
+   `.battle-card` / `.battle-side` / `.battle-bar` — the same names the full-size
+   Battles screen uses — and because that stylesheet loads later its rules won:
+   the 210px rail card stretched to full width and its sides grew into boxes.
+   Two components, two names. Do not merge them back. */
+.rail-battle-card {
   width: 210px;
   padding: var(--space-3);
   border-radius: var(--radius-card);
@@ -994,7 +999,7 @@ select {
   cursor: pointer;
 }
 
-.battle-card-title {
+.rail-battle-title {
   font-size: var(--text-supporting);
   font-weight: 700;
   color: var(--text);
@@ -1005,7 +1010,7 @@ select {
   min-height: 2.6em;
 }
 
-.battle-split {
+.rail-battle-split {
   display: flex;
   align-items: center;
   gap: var(--space-2);
@@ -1013,19 +1018,19 @@ select {
   font-weight: 700;
 }
 
-.battle-side {
+.rail-battle-side {
   color: var(--text);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.battle-vs {
+.rail-battle-vs {
   color: var(--text-muted);
   font-weight: 500;
 }
 
-.battle-bar {
+.rail-battle-bar {
   display: flex;
   height: 6px;
   border-radius: 999px;
@@ -1033,11 +1038,11 @@ select {
   background: var(--surface-3);
 }
 
-.battle-bar-a {
+.rail-battle-bar-a {
   background: var(--accent);
 }
 
-.battle-card-meta {
+.rail-battle-meta {
   font-size: var(--text-caption);
   color: var(--text-muted);
 }
@@ -1778,6 +1783,10 @@ select {
 .stream {
   display: flex;
   flex-direction: column;
+  /* The discovery rail above is a set of cards too, so without a clear break
+     the first post reads as one more rail item. A wider gap than the rail's own
+     12px is the whole separation: no rule, no heading, just air. */
+  margin-top: var(--space-5);
 }
 
 /* A post is a row of the stream: no box, no shadow, no nested card. */

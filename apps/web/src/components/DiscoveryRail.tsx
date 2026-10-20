@@ -132,17 +132,17 @@ export function DiscoveryRail({
               const total = b.tally.a + b.tally.b;
               const pctA = total > 0 ? Math.round((b.tally.a / total) * 100) : 50;
               return (
-                <button key={b.id} className="battle-card" onClick={() => onOpenBattle(b.id)}>
-                  <span className="battle-card-title">{b.title}</span>
-                  <span className="battle-split">
-                    <span className="battle-side">{b.sides.a}</span>
-                    <span className="battle-vs">vs</span>
-                    <span className="battle-side">{b.sides.b}</span>
+                <button key={b.id} className="rail-battle-card" onClick={() => onOpenBattle(b.id)}>
+                  <span className="rail-battle-title">{b.title}</span>
+                  <span className="rail-battle-split">
+                    <span className="rail-battle-side">{b.sides.a}</span>
+                    <span className="rail-battle-vs">vs</span>
+                    <span className="rail-battle-side">{b.sides.b}</span>
                   </span>
-                  <span className="battle-bar" aria-hidden="true">
-                    <span className="battle-bar-a" style={{ width: `${pctA}%` }} />
+                  <span className="rail-battle-bar" aria-hidden="true">
+                    <span className="rail-battle-bar-a" style={{ width: `${pctA}%` }} />
                   </span>
-                  <span className="battle-card-meta">
+                  <span className="rail-battle-meta">
                     {total > 0 ? `${pctA}% ${b.sides.a} · ${total} votes` : "No votes yet"}
                   </span>
                 </button>
