@@ -360,3 +360,126 @@ describe("battles", () => {
     expect(await balance(wallet, host.token)).toBe(1_000_00);
   });
 });
+
+// Battles as characters: artwork, an attack feed, and a score the crowd moves.
+describe("battle characters and crowd score", () => {
+  it("stores cover art and a character per side", async () => {
+    const host = await registerUser(h.app, "chost");
+    const created = await h.app.inject({
+      method: "POST",
+      url: "/v1/battles",
+      headers: auth(host.token),
+      payload: {
+        title: "Jollof vs Fried Rice",
+        sideA: "Jollof", sideB: "Fried Rice",
+        imageUrl: "/v1/media/cover-1",
+        characterAUrl: "/v1/media/char-a",
+        characterBUrl: "https://cdn.example.com/char-b.png",
+      },
+    });
+    expect(created.statusCode).toBe(201);
+    const b = created.json().battle;
+    expect(b.imageUrl).toBe("/v1/media/cover-1");
+    expect(b.characters).toEqual({ a: "/v1/media/char-a", b: "https://cdn.example.com/char-b.png" });
+  });
+
+  it("rejects artwork that is not an http(s) URL or a media path", async () => {
+    const host = await registerUser(h.app, "chost2");
+    const res = await h.app.inject({
+      method: "POST",
+      url: "/v1/battles",
+      headers: auth(host.token),
+      payload: { title: "A vs B", sideA: "A", sideB: "B", imageUrl: "javascript:alert(1)" },
+    });
+    expect(res.statusCode).toBeGreaterThanOrEqual(400);
+  });
+
+  it("counts comments and reactions toward the score, and closes on the score", async () => {
+    const host = await registerUser(h.app, "shost");
+    const fan = await registerUser(h.app, "sfan");
+
+    const created = await h.app.inject({
+      method: "POST",
+      url: "/v1/battles",
+      headers: auth(host.token),
+      payload: { title: "Tea vs Coffee", sideA: "Tea", sideB: "Coffee" },
+    });
+    const id = created.json().battle.id as string;
+
+    // A vote is one point for B.
+    await h.app.inject({ method: "POST", url: `/v1/battles/${id}/vote`, headers: auth(fan.token), payload: { side: "b" } });
+    // An attack comment is another point for B.
+    const commented = await h.app.inject({
+      method: "POST", url: `/v1/battles/${id}/comments`,
+      headers: auth(fan.token), payload: { side: "b", body: "Coffee is the only answer" },
+    });
+    expect(commented.statusCode).toBe(201);
+    expect(commented.json().battle.score).toEqual({ a: 0, b: 2 });
+    expect(commented.json().battle.comments[0].body).toBe("Coffee is the only answer");
+    expect(commented.json().battle.comments[0].side).toBe("b");
+
+    // A reaction is two points for A, so A pulls ahead without a single vote.
+    const gifted = await h.app.inject({
+      method: "POST", url: `/v1/battles/${id}/gifts`,
+      headers: auth(host.token), payload: { side: "a", kind: "fire" },
+    });
+    expect(gifted.statusCode).toBe(201);
+    expect(gifted.json().battle.score).toEqual({ a: 2, b: 2 });
+    expect(gifted.json().battle.myGifts).toEqual(["fire"]);
+
+    // Throwing the same reaction again is a no-op, so it cannot be ground.
+    const again = await h.app.inject({
+      method: "POST", url: `/v1/battles/${id}/gifts`,
+      headers: auth(host.token), payload: { side: "a", kind: "fire" },
+    });
+    expect(again.statusCode).toBe(200);
+    expect(again.json().battle.score).toEqual({ a: 2, b: 2 });
+
+    // A different reaction is another two points.
+    const crown = await h.app.inject({
+      method: "POST", url: `/v1/battles/${id}/gifts`,
+      headers: auth(host.token), payload: { side: "a", kind: "crown" },
+    });
+    expect(crown.json().battle.score).toEqual({ a: 4, b: 2 });
+
+    // A wins on the crowd score (4-2) even though the vote is B's (0-1).
+    const closed = await h.app.inject({ method: "POST", url: `/v1/battles/${id}/close`, headers: auth(host.token) });
+    expect(closed.json().battle.status).toBe("closed");
+    expect(closed.json().battle.winner).toBe("a");
+  });
+
+  it("refuses comments and reactions once a battle is closed", async () => {
+    const host = await registerUser(h.app, "closedhost");
+    const created = await h.app.inject({
+      method: "POST", url: "/v1/battles", headers: auth(host.token),
+      payload: { title: "Now vs Then", sideA: "Now", sideB: "Then" },
+    });
+    const id = created.json().battle.id as string;
+    await h.app.inject({ method: "POST", url: `/v1/battles/${id}/close`, headers: auth(host.token) });
+
+    const comment = await h.app.inject({
+      method: "POST", url: `/v1/battles/${id}/comments`,
+      headers: auth(host.token), payload: { side: "a", body: "too late" },
+    });
+    expect(comment.statusCode).toBeGreaterThanOrEqual(400);
+    const gift = await h.app.inject({
+      method: "POST", url: `/v1/battles/${id}/gifts`,
+      headers: auth(host.token), payload: { side: "a", kind: "fire" },
+    });
+    expect(gift.statusCode).toBeGreaterThanOrEqual(400);
+  });
+
+  it("rejects an unknown reaction kind", async () => {
+    const host = await registerUser(h.app, "kindhost");
+    const created = await h.app.inject({
+      method: "POST", url: "/v1/battles", headers: auth(host.token),
+      payload: { title: "X vs Y", sideA: "X", sideB: "Y" },
+    });
+    const id = created.json().battle.id as string;
+    const res = await h.app.inject({
+      method: "POST", url: `/v1/battles/${id}/gifts`,
+      headers: auth(host.token), payload: { side: "a", kind: "diamond" },
+    });
+    expect(res.statusCode).toBeGreaterThanOrEqual(400);
+  });
+});

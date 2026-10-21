@@ -28,6 +28,23 @@ const createSchema = z.object({
   topic: z.string().trim().max(400).optional(),
   sideA: z.string().trim().min(1).max(40),
   sideB: z.string().trim().min(1).max(40),
+  // Artwork. Same rule as an event image: an absolute http(s) URL or one of our
+  // own media paths, so the upload endpoint's validation is the only gate.
+  imageUrl: z
+    .string()
+    .max(500)
+    .regex(/^(https?:\/\/|\/v1\/media\/[A-Za-z0-9._-]+$)/, "imageUrl must be an http(s) URL or a media path")
+    .optional(),
+  characterAUrl: z
+    .string()
+    .max(500)
+    .regex(/^(https?:\/\/|\/v1\/media\/[A-Za-z0-9._-]+$)/, "characterAUrl must be an http(s) URL or a media path")
+    .optional(),
+  characterBUrl: z
+    .string()
+    .max(500)
+    .regex(/^(https?:\/\/|\/v1\/media\/[A-Za-z0-9._-]+$)/, "characterBUrl must be an http(s) URL or a media path")
+    .optional(),
   circleId: z.string().uuid().optional(),
   stakeMinor: z.number().int().min(0).max(STAKE_MAX_MINOR).default(0),
   endsAt: z.string().datetime().optional(),
@@ -51,14 +68,30 @@ interface BattleRow {
   ends_at: Date | null;
   closed_at: Date | null;
   created_at: Date;
+  image_url: string | null;
+  character_a_url: string | null;
+  character_b_url: string | null;
 }
 
 interface SideTally {
   side: "a" | "b";
   votes: number;
+  comments: number;
+  gifts: number;
+  points: number;
   backers: number;
   stakedMinor: number;
 }
+
+/** The reactions a bystander can throw at a side. Free, like a post gift. */
+export const BATTLE_GIFT_KINDS = [
+  { id: "fire", label: "Fire", points: 2 },
+  { id: "clap", label: "Clap", points: 2 },
+  { id: "shock", label: "Shock", points: 2 },
+  { id: "crown", label: "Crown", points: 2 },
+] as const;
+
+const BATTLE_GIFT_IDS = BATTLE_GIFT_KINDS.map((g) => g.id) as [string, ...string[]];
 
 interface BackerRow {
   id: string;
@@ -86,25 +119,45 @@ function projectedShare(myStake: number, sideStaked: number, pot: number): numbe
   return Math.floor((myStake / sideStaked) * pot);
 }
 
-/** The tallies for both sides, computed from the vote and stake rows. */
+/** The tallies for both sides, computed from the vote, stake, comment and gift rows. */
 async function tallies(ctx: AppContext, battleId: string): Promise<{ a: SideTally; b: SideTally }> {
-  const rows = await queryMany<{ side: string; votes: string; backers: string; staked: string }>(
+  const rows = await queryMany<{ side: string; votes: string; backers: string; staked: string; comments: string; gifts: string }>(
     ctx.pool,
     `SELECT s.side,
             COALESCE(v.votes, '0') AS votes,
             COALESCE(p.backers, '0') AS backers,
-            COALESCE(p.staked, '0') AS staked
+            COALESCE(p.staked, '0') AS staked,
+            COALESCE(c.comments, '0') AS comments,
+            COALESCE(g.gifts, '0') AS gifts
        FROM (SELECT 'a' AS side UNION SELECT 'b') s
        LEFT JOIN (SELECT side, COUNT(*)::text AS votes FROM battle_votes WHERE battle_id = $1 GROUP BY side) v ON v.side = s.side
        LEFT JOIN (SELECT side, COUNT(*)::text AS backers, COALESCE(SUM(stake_minor),0)::text AS staked
-                    FROM battle_participants WHERE battle_id = $1 AND stake_minor > 0 GROUP BY side) p ON p.side = s.side`,
+                    FROM battle_participants WHERE battle_id = $1 AND stake_minor > 0 GROUP BY side) p ON p.side = s.side
+       LEFT JOIN (SELECT side, COUNT(*)::text AS comments FROM battle_comments WHERE battle_id = $1 GROUP BY side) c ON c.side = s.side
+       LEFT JOIN (SELECT side, COUNT(*)::text AS gifts FROM battle_gifts WHERE battle_id = $1 GROUP BY side) g ON g.side = s.side`,
     [battleId],
   );
   const byside: Record<string, SideTally> = {};
   for (const r of rows) {
-    byside[r.side] = { side: r.side as "a" | "b", votes: Number(r.votes), backers: Number(r.backers), stakedMinor: Number(r.staked) };
+    const votes = Number(r.votes);
+    const comments = Number(r.comments);
+    const gifts = Number(r.gifts);
+    byside[r.side] = {
+      side: r.side as "a" | "b",
+      votes,
+      comments,
+      gifts,
+      // The score the crowd moves: a vote is one point, a comment is one, and a
+      // gift is two — a gift is the loudest thing a bystander can do.
+      points: votes + comments + gifts * 2,
+      backers: Number(r.backers),
+      stakedMinor: Number(r.staked),
+    };
   }
-  return { a: byside.a ?? { side: "a", votes: 0, backers: 0, stakedMinor: 0 }, b: byside.b ?? { side: "b", votes: 0, backers: 0, stakedMinor: 0 } };
+  return {
+    a: byside.a ?? { side: "a", votes: 0, comments: 0, gifts: 0, points: 0, backers: 0, stakedMinor: 0 },
+    b: byside.b ?? { side: "b", votes: 0, comments: 0, gifts: 0, points: 0, backers: 0, stakedMinor: 0 },
+  };
 }
 
 async function battleView(ctx: AppContext, row: BattleRow, viewerId: string) {
@@ -137,11 +190,33 @@ async function battleView(ctx: AppContext, row: BattleRow, viewerId: string) {
   const myStake = num(mine?.stake_minor ?? null);
   const mySide = (mine?.side as "a" | "b" | undefined) ?? null;
   const mySideStaked = mySide ? (mySide === "a" ? t.a.stakedMinor : t.b.stakedMinor) : 0;
+  // The comment feed, newest first. A comment is an attack: it names the side it
+  // backs and adds a point to it, so the feed is also the play-by-play.
+  const comments = await queryMany<{
+    id: string; side: "a" | "b"; body: string; created_at: Date;
+    user_id: string; handle: string; display_name: string; avatar_url: string | null;
+  }>(
+    ctx.pool,
+    `SELECT c.id, c.side, c.body, c.created_at, c.user_id, u.handle, u.display_name, u.avatar_url
+       FROM battle_comments c JOIN users u ON u.id = c.user_id
+      WHERE c.battle_id = $1
+      ORDER BY c.created_at DESC
+      LIMIT 50`,
+    [row.id],
+  );
+  const myGifts = await queryMany<{ kind: string }>(
+    ctx.pool,
+    "SELECT kind FROM battle_gifts WHERE battle_id = $1 AND user_id = $2",
+    [row.id, viewerId],
+  );
   return {
     id: row.id,
     title: row.title,
     topic: row.topic,
     sides: { a: row.side_a, b: row.side_b },
+    // Artwork, so a battle is something you look at rather than a bar you read.
+    imageUrl: row.image_url,
+    characters: { a: row.character_a_url, b: row.character_b_url },
     status: row.status,
     winner: row.winner,
     stakeMinor: num(row.stake_minor),
@@ -149,7 +224,10 @@ async function battleView(ctx: AppContext, row: BattleRow, viewerId: string) {
     potMinor: pot,
     endsAt: row.ends_at,
     createdAt: row.created_at,
+    // `tally` stays the raw vote counts so a vote never silently changes meaning;
+    // `score` is the crowd's total, which is what decides a winner.
     tally: { a: t.a.votes, b: t.b.votes },
+    score: { a: t.a.points, b: t.b.points },
     backing: { a: t.a, b: t.b },
     host: host ? publicUser(host) : null,
     // What the viewer did, so the UI can show "you backed A" rather than guess.
@@ -159,6 +237,14 @@ async function battleView(ctx: AppContext, row: BattleRow, viewerId: string) {
     // What the viewer's stake is worth if their side wins as the pot stands.
     // Zero until they stake, and labelled as an estimate on the screen.
     myProjectedMinor: row.status === "open" ? projectedShare(myStake, mySideStaked, pot) : 0,
+    myGifts: myGifts.map((g) => g.kind),
+    comments: comments.map((c) => ({
+      id: c.id,
+      side: c.side,
+      body: c.body,
+      createdAt: c.created_at,
+      author: publicUser({ id: c.user_id, handle: c.handle, display_name: c.display_name, avatar_url: c.avatar_url }),
+    })),
     backers: backers.map((b) => ({
       side: b.side,
       staked: num(b.stake_minor) > 0,
@@ -268,9 +354,10 @@ export function battleRoutes(ctx: AppContext) {
           if (balance.balanceMinor < input.stakeMinor) throw ApiError.badRequest("Not enough Vibe Yens for this stake");
         }
         await tx.query(
-          `INSERT INTO battles (id, host_id, circle_id, title, topic, side_a, side_b, stake_minor, currency, pot_minor, ends_at)
-           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,'NGN',$9,$10)`,
+          `INSERT INTO battles (id, host_id, circle_id, title, topic, side_a, side_b, image_url, character_a_url, character_b_url, stake_minor, currency, pot_minor, ends_at)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,'NGN',$12,$13)`,
           [id, user.id, input.circleId ?? null, input.title, input.topic ?? null, input.sideA, input.sideB,
+           input.imageUrl ?? null, input.characterAUrl ?? null, input.characterBUrl ?? null,
            input.stakeMinor, input.stakeMinor, input.endsAt ? new Date(input.endsAt) : null],
         );
         // The host picks a side and backs it immediately, so their stake leaves
@@ -395,8 +482,56 @@ export function battleRoutes(ctx: AppContext) {
       return { battle: await battleView(ctx, row, user.id) };
     });
 
+    // Attack: drop a comment on a side. It is a point for that side, so the
+    // comment feed is also the play-by-play. Anyone signed in can comment, and a
+    // comment does not require having voted.
+    app.post("/v1/battles/:id/comments", async (req, reply) => {
+      const user = await requireUser(ctx, req);
+      const { id } = req.params as { id: string };
+      const input = parse(z.object({ side: z.enum(["a", "b"]), body: z.string().trim().min(1).max(400) }), req.body);
+      const battle = await queryOne<BattleRow>(ctx.pool, "SELECT * FROM battles WHERE id = $1", [id]);
+      if (!battle) throw ApiError.notFound("That battle does not exist");
+      if (battle.status !== "open") throw ApiError.badRequest("This battle is closed");
+      if (battle.ends_at && new Date(battle.ends_at).getTime() < Date.now()) {
+        throw ApiError.badRequest("This battle has ended");
+      }
+      const commentId = newId();
+      await ctx.pool.query(
+        `INSERT INTO battle_comments (id, battle_id, user_id, side, body) VALUES ($1,$2,$3,$4,$5)`,
+        [commentId, id, user.id, input.side, input.body],
+      );
+      trackSafe(ctx.pool, { name: "battle_commented", userId: user.id, properties: { entityType: "battle", entityId: id } });
+      reply.code(201);
+      const row = await queryOne<BattleRow>(ctx.pool, "SELECT * FROM battles WHERE id = $1", [id]);
+      return { battle: await battleView(ctx, row!, user.id) };
+    });
+
+    // A reaction thrown at a side. One of each kind per user, so it is a gesture
+    // and not a grind. It is worth two points — the loudest thing a bystander
+    // can do without typing.
+    app.post("/v1/battles/:id/gifts", async (req, reply) => {
+      const user = await requireUser(ctx, req);
+      const { id } = req.params as { id: string };
+      const input = parse(z.object({ side: z.enum(["a", "b"]), kind: z.enum(BATTLE_GIFT_IDS) }), req.body);
+      const battle = await queryOne<BattleRow>(ctx.pool, "SELECT * FROM battles WHERE id = $1", [id]);
+      if (!battle) throw ApiError.notFound("That battle does not exist");
+      if (battle.status !== "open") throw ApiError.badRequest("This battle is closed");
+      if (battle.ends_at && new Date(battle.ends_at).getTime() < Date.now()) {
+        throw ApiError.badRequest("This battle has ended");
+      }
+      const inserted = await queryOne<{ kind: string }>(
+        ctx.pool,
+        `INSERT INTO battle_gifts (battle_id, user_id, side, kind) VALUES ($1,$2,$3,$4)
+         ON CONFLICT (battle_id, user_id, kind) DO NOTHING RETURNING kind`,
+        [id, user.id, input.side, input.kind],
+      );
+      reply.code(inserted ? 201 : 200);
+      const row = await queryOne<BattleRow>(ctx.pool, "SELECT * FROM battles WHERE id = $1", [id]);
+      return { battle: await battleView(ctx, row!, user.id), alreadySent: !inserted };
+    });
+
     // Close and settle. The host may close early; anyone may close once the end
-    // time has passed. The winner is whoever has more votes; a tie refunds.
+    // time has passed. The winner is whoever has the higher crowd score; a tie refunds.
     app.post("/v1/battles/:id/close", async (req) => {
       const user = await requireUser(ctx, req);
       const { id } = req.params as { id: string };
@@ -408,7 +543,10 @@ export function battleRoutes(ctx: AppContext) {
         throw ApiError.forbidden("Only the host can close this battle before it ends");
       }
       const t = await tallies(ctx, id);
-      const winner: "a" | "b" | "tie" = t.a.votes === t.b.votes ? "tie" : t.a.votes > t.b.votes ? "a" : "b";
+      // The crowd's score decides the winner: votes plus comments plus gifts.
+      // A silent poll and a loud fight are not the same thing, and the loud one
+      // should win. A genuine tie still refunds.
+      const winner: "a" | "b" | "tie" = t.a.points === t.b.points ? "tie" : t.a.points > t.b.points ? "a" : "b";
       await settle(ctx, row, winner);
       const settled = await queryOne<BattleRow>(ctx.pool, "SELECT * FROM battles WHERE id = $1", [id]);
       return { battle: await battleView(ctx, settled!, user.id) };

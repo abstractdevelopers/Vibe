@@ -3181,6 +3181,172 @@ select {
 .battle-side-pct { font-size: var(--text-meta); color: var(--text-muted); }
 .battle-side.won .battle-side-pct { color: var(--accent-ink); }
 
+/* The arena: cover art with a character for each side standing over it. This is
+   what makes a battle a place rather than a bar. */
+.battle-arena {
+  position: relative;
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  min-height: 190px;
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  padding: var(--space-4);
+  isolation: isolate;
+}
+.battle-arena-art {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  z-index: -2;
+}
+.battle-arena::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background: linear-gradient(180deg, rgba(0,0,0,0.05) 30%, rgba(0,0,0,0.72) 100%);
+}
+.battle-fighter {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-2);
+  animation: fighter-in var(--motion-base) var(--ease-out) both;
+}
+.battle-fighter.fighter-b { animation-delay: 90ms; }
+.battle-fighter-art {
+  width: 74px;
+  height: 74px;
+  border-radius: var(--radius-lg);
+  object-fit: cover;
+  border: 2px solid rgba(255,255,255,0.85);
+  box-shadow: var(--shadow-md);
+  background: var(--surface-2);
+}
+.battle-fighter-name {
+  font-weight: 800;
+  color: #fff;
+  text-shadow: 0 1px 6px rgba(0,0,0,0.6);
+  max-width: 42vw;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+@keyframes fighter-in {
+  from { opacity: 0; transform: translateY(14px) scale(0.94); }
+  to { opacity: 1; transform: none; }
+}
+
+.battle-score-legend { margin: 0; line-height: var(--leading-body); }
+
+/* Reactions, thrown at a side. */
+.battle-react { display: flex; flex-direction: column; gap: var(--space-3); }
+.battle-react-side { display: flex; flex-direction: column; gap: var(--space-2); min-width: 0; }
+.battle-react-row { display: flex; gap: var(--space-2); }
+.battle-react-btn {
+  width: 46px;
+  height: 46px;
+  display: grid;
+  place-items: center;
+  font-size: 1.35rem;
+  line-height: 1;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface-2);
+  cursor: pointer;
+  transition: transform var(--motion-fast) var(--ease-out), border-color var(--motion-fast) var(--ease-out);
+}
+.battle-react-btn:hover:not(:disabled) { transform: translateY(-2px) scale(1.04); border-color: var(--border-strong); }
+.battle-react-btn.sent { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 14%, var(--surface-2)); }
+
+/* Bursts fly toward the side they hit. */
+.battle-burst-layer { position: relative; height: 0; pointer-events: none; }
+.battle-burst {
+  position: absolute;
+  bottom: 0;
+  font-size: 1.6rem;
+  animation: burst-fly 900ms var(--ease-out) forwards;
+}
+.battle-burst.burst-a { left: 22%; }
+.battle-burst.burst-b { right: 22%; }
+@keyframes burst-fly {
+  0% { opacity: 0; transform: translateY(10px) scale(0.6); }
+  30% { opacity: 1; transform: translateY(-40px) scale(1.15); }
+  100% { opacity: 0; transform: translateY(-110px) scale(1); }
+}
+
+/* The floor: the attack feed and the composer that feeds it. */
+.battle-attack { display: flex; flex-direction: column; gap: var(--space-3); margin-bottom: var(--space-4); }
+.battle-attack-pick { display: flex; gap: var(--space-2); }
+.battle-attack-side {
+  padding: 6px 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+  background: var(--surface-2);
+  color: inherit;
+  font-weight: 600;
+  font-size: var(--text-meta);
+  cursor: pointer;
+}
+.battle-attack-side.active { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 14%, var(--surface-2)); }
+
+.battle-feed { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--space-3); }
+.battle-comment {
+  display: flex;
+  gap: var(--space-3);
+  padding: var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface-1);
+  border-left-width: 3px;
+}
+.battle-comment.side-a { border-left-color: var(--accent); }
+.battle-comment.side-b { border-left-color: var(--accent-soft); }
+.battle-comment p { margin: 4px 0 0; line-height: var(--leading-body); overflow-wrap: anywhere; }
+.battle-comment-tag {
+  padding: 1px 8px;
+  border-radius: var(--radius-pill);
+  font-size: 0.7rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: var(--tracking-wide);
+}
+.battle-comment-tag.tag-a { background: color-mix(in srgb, var(--accent) 18%, transparent); color: var(--accent); }
+.battle-comment-tag.tag-b { background: color-mix(in srgb, var(--accent-soft) 26%, transparent); color: var(--text-secondary); }
+
+/* Cover art on a card, with both characters standing over it. */
+.battle-card-art { position: relative; display: block; border-radius: var(--radius-md); overflow: hidden; aspect-ratio: 16 / 7; }
+.battle-card-art > img:first-child { width: 100%; height: 100%; object-fit: cover; }
+.battle-card-char {
+  position: absolute;
+  bottom: 8px;
+  width: 46px;
+  height: 46px;
+  border-radius: var(--radius-md);
+  object-fit: cover;
+  border: 2px solid rgba(255,255,255,0.9);
+  box-shadow: var(--shadow-sm);
+}
+.battle-card-char.char-a { left: 10px; }
+.battle-card-char.char-b { right: 10px; }
+
+.battle-create-art {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border: 1px dashed var(--border-strong);
+  border-radius: var(--radius-pill);
+  font-size: var(--text-meta);
+  font-weight: 600;
+  cursor: pointer;
+}
+.battle-create-preview { width: 100%; border-radius: var(--radius-md); aspect-ratio: 1; object-fit: cover; }
+.battle-create-preview.wide { aspect-ratio: 16 / 7; }
+
 .battle-pot {
   display: flex;
   align-items: center;

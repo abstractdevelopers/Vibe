@@ -1,12 +1,13 @@
 import { useCallback, useEffect, useState } from "react";
-import { api, ApiError, idempotencyKey } from "../api";
+import { api, ApiError, idempotencyKey, mediaSrc } from "../api";
+import { uploadImageFile } from "../media";
 import { ScreenHeader } from "../components/ScreenHeader";
 import { PlaySegments } from "../components/PlaySegments";
 import { formatMoney, toMinorUnits } from "../money";
 import { Avatar } from "../components/Avatar";
 import { EmptyState } from "../components/EmptyState";
 import { useNav } from "../nav";
-import { ArrowLeftIcon, SplitIcon, TrophyIcon, UsersIcon } from "../components/Icons";
+import { ArrowLeftIcon, CameraIcon, SplitIcon, TrophyIcon, UsersIcon } from "../components/Icons";
 
 /**
  * Brand Battles.
@@ -29,6 +30,8 @@ interface Battle {
   title: string;
   topic: string | null;
   sides: { a: string; b: string };
+  imageUrl: string | null;
+  characters: { a: string | null; b: string | null };
   status: "open" | "closed" | "cancelled";
   winner: "a" | "b" | "tie" | null;
   stakeMinor: number;
@@ -37,14 +40,31 @@ interface Battle {
   endsAt: string | null;
   createdAt: string;
   tally: { a: number; b: number };
+  score: { a: number; b: number };
   backing: { a: SideBacking; b: SideBacking };
   host: { id: string; handle: string; displayName: string; avatarUrl: string | null } | null;
   mySide: "a" | "b" | null;
   myStakeMinor: number;
   myPayoutMinor: number;
   myProjectedMinor: number;
+  myGifts: string[];
+  comments: Array<{
+    id: string;
+    side: "a" | "b";
+    body: string;
+    createdAt: string;
+    author: { id: string; handle: string; displayName: string; avatarUrl: string | null };
+  }>;
   backers: Array<{ side: "a" | "b"; staked: boolean; user: { id: string; handle: string; displayName: string; avatarUrl: string | null } }>;
 }
+
+/** The reactions a bystander can throw at a side. Mirrors BATTLE_GIFT_KINDS. */
+const BATTLE_REACTIONS = [
+  { id: "fire", label: "Fire", art: "🔥" },
+  { id: "clap", label: "Clap", art: "👏" },
+  { id: "shock", label: "Shock", art: "😱" },
+  { id: "crown", label: "Crown", art: "👑" },
+] as const;
 
 
 function timeLeft(endsAt: string | null): string | null {
@@ -59,10 +79,10 @@ function timeLeft(endsAt: string | null): string | null {
 }
 
 function SideBar({ battle }: { battle: Battle }) {
-  const total = battle.tally.a + battle.tally.b;
-  const aPct = total === 0 ? 50 : Math.round((battle.tally.a / total) * 100);
+  const total = battle.score.a + battle.score.b;
+  const aPct = total === 0 ? 50 : Math.round((battle.score.a / total) * 100);
   return (
-    <div className="battle-bar" role="img" aria-label={`${battle.sides.a} ${battle.tally.a}, ${battle.sides.b} ${battle.tally.b}`}>
+    <div className="battle-bar" role="img" aria-label={`${battle.sides.a} ${battle.score.a} points, ${battle.sides.b} ${battle.score.b} points`}>
       <span className="battle-bar-a" style={{ width: `${aPct}%` }} />
       <span className="battle-bar-b" style={{ width: `${100 - aPct}%` }} />
     </div>
@@ -71,9 +91,16 @@ function SideBar({ battle }: { battle: Battle }) {
 
 function BattleCard({ battle, onOpen }: { battle: Battle; onOpen: () => void }) {
   const left = timeLeft(battle.endsAt);
-  const total = battle.tally.a + battle.tally.b;
+  const total = battle.score.a + battle.score.b;
   return (
     <button className={`battle-card${battle.status === "open" ? " is-open" : ""}`} onClick={onOpen}>
+      {battle.imageUrl && (
+        <span className="battle-card-art">
+          <img src={mediaSrc(battle.imageUrl)} alt="" loading="lazy" />
+          {battle.characters.a && <img className="battle-card-char char-a" src={mediaSrc(battle.characters.a)} alt="" loading="lazy" />}
+          {battle.characters.b && <img className="battle-card-char char-b" src={mediaSrc(battle.characters.b)} alt="" loading="lazy" />}
+        </span>
+      )}
       <div className="battle-card-head">
         <span className="battle-card-vs">
           <span className="battle-card-side">{battle.sides.a}</span>
@@ -96,7 +123,10 @@ function BattleCard({ battle, onOpen }: { battle: Battle; onOpen: () => void }) 
       {battle.topic && <p className="battle-card-topic">{battle.topic}</p>}
       <SideBar battle={battle} />
       <div className="battle-card-foot">
-        <span className="meta">{total} {total === 1 ? "vote" : "votes"}</span>
+        <span className="meta">{total} points</span>
+        {battle.comments.length > 0 && (
+          <span className="meta">{battle.comments.length} {battle.comments.length === 1 ? "attack" : "attacks"}</span>
+        )}
         {battle.stakeMinor > 0 && (
           <span className="chip chip-gold">Pot {formatMoney(battle.potMinor, battle.currency)}</span>
         )}
@@ -197,8 +227,28 @@ function CreateBattle({ onCreated }: { onCreated: () => void }) {
   const [sideB, setSideB] = useState("");
   const [topic, setTopic] = useState("");
   const [stake, setStake] = useState("");
+  const [imageUrl, setImageUrl] = useState<string | null>(null);
+  const [characterAUrl, setCharacterAUrl] = useState<string | null>(null);
+  const [characterBUrl, setCharacterBUrl] = useState<string | null>(null);
+  const [uploading, setUploading] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  async function pick(which: "image" | "a" | "b", file?: File) {
+    if (!file) return;
+    setUploading(which);
+    setError(null);
+    try {
+      const url = await uploadImageFile(file, 1024);
+      if (which === "image") setImageUrl(url);
+      else if (which === "a") setCharacterAUrl(url);
+      else setCharacterBUrl(url);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not upload that image");
+    } finally {
+      setUploading(null);
+    }
+  }
 
   async function submit() {
     setBusy(true);
@@ -206,7 +256,12 @@ function CreateBattle({ onCreated }: { onCreated: () => void }) {
     try {
       const stakeMinor = stake ? toMinorUnits(stake, "NGN") ?? 0 : 0;
       await api("/v1/battles", {
-        body: { title, sideA, sideB, topic: topic || undefined, stakeMinor },
+        body: {
+          title, sideA, sideB, topic: topic || undefined, stakeMinor,
+          imageUrl: imageUrl ?? undefined,
+          characterAUrl: characterAUrl ?? undefined,
+          characterBUrl: characterBUrl ?? undefined,
+        },
         idempotencyKey: idempotencyKey("battle"),
       });
       onCreated();
@@ -226,12 +281,31 @@ function CreateBattle({ onCreated }: { onCreated: () => void }) {
         <div>
           <label htmlFor="b-a">Side A</label>
           <input id="b-a" value={sideA} onChange={(e) => setSideA(e.target.value)} placeholder="Jollof" required maxLength={40} />
+          <label className="battle-create-art">
+            <input type="file" accept="image/*" hidden onChange={(e) => void pick("a", e.target.files?.[0])} />
+            <CameraIcon width={15} height={15} />
+            <span>{characterAUrl ? "Character added" : uploading === "a" ? "Uploading…" : "Add a character"}</span>
+          </label>
+          {characterAUrl && <img className="battle-create-preview" src={mediaSrc(characterAUrl)} alt="" />}
         </div>
         <div>
           <label htmlFor="b-b">Side B</label>
           <input id="b-b" value={sideB} onChange={(e) => setSideB(e.target.value)} placeholder="Fried Rice" required maxLength={40} />
+          <label className="battle-create-art">
+            <input type="file" accept="image/*" hidden onChange={(e) => void pick("b", e.target.files?.[0])} />
+            <CameraIcon width={15} height={15} />
+            <span>{characterBUrl ? "Character added" : uploading === "b" ? "Uploading…" : "Add a character"}</span>
+          </label>
+          {characterBUrl && <img className="battle-create-preview" src={mediaSrc(characterBUrl)} alt="" />}
         </div>
       </div>
+
+      <label className="battle-create-art">
+        <input type="file" accept="image/*" hidden onChange={(e) => void pick("image", e.target.files?.[0])} />
+        <CameraIcon width={15} height={15} />
+        <span>{imageUrl ? "Cover added" : uploading === "image" ? "Uploading…" : "Add cover art (optional)"}</span>
+      </label>
+      {imageUrl && <img className="battle-create-preview wide" src={mediaSrc(imageUrl)} alt="" />}
 
       <label htmlFor="b-topic">Context (optional)</label>
       <textarea id="b-topic" value={topic} onChange={(e) => setTopic(e.target.value)} maxLength={400} rows={2} />
@@ -252,6 +326,9 @@ export function BattleScreen({ battleId, onBack }: { battleId: string; viewerId:
   const [battle, setBattle] = useState<Battle | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [draft, setDraft] = useState("");
+  const [attackSide, setAttackSide] = useState<"a" | "b">("a");
+  const [bursts, setBursts] = useState<Array<{ id: number; art: string; side: "a" | "b" }>>([]);
 
   const load = useCallback(async () => {
     try {
@@ -282,6 +359,21 @@ export function BattleScreen({ battleId, onBack }: { battleId: string; viewerId:
     }
   }
 
+  /** Throw a reaction at a side. The burst is the point: it should feel like a hit. */
+  async function throwGift(side: "a" | "b", kind: string, art: string) {
+    const id = Date.now() + Math.random();
+    setBursts((b) => [...b, { id, art, side }]);
+    setTimeout(() => setBursts((b) => b.filter((x) => x.id !== id)), 900);
+    await act("/gifts", { side, kind });
+  }
+
+  async function attack() {
+    const body = draft.trim();
+    if (!body) return;
+    setDraft("");
+    await act("/comments", { side: attackSide, body });
+  }
+
   if (!battle) {
     return (
       <>
@@ -291,8 +383,8 @@ export function BattleScreen({ battleId, onBack }: { battleId: string; viewerId:
     );
   }
 
-  const total = battle.tally.a + battle.tally.b;
-  const aPct = total === 0 ? 50 : Math.round((battle.tally.a / total) * 100);
+  const total = battle.score.a + battle.score.b;
+  const aPct = total === 0 ? 50 : Math.round((battle.score.a / total) * 100);
   const isOpen = battle.status === "open";
 
   return (
@@ -307,6 +399,18 @@ export function BattleScreen({ battleId, onBack }: { battleId: string; viewerId:
       {error && <div className="notice danger" role="alert">{error}</div>}
 
       <section className="battle-stage">
+        {battle.imageUrl && (
+          <div className="battle-arena">
+            <img className="battle-arena-art" src={mediaSrc(battle.imageUrl)} alt="" loading="lazy" />
+            {(["a", "b"] as const).map((s) => (
+              <span key={s} className={`battle-fighter fighter-${s}`}>
+                {battle.characters[s] && <img className="battle-fighter-art" src={mediaSrc(battle.characters[s]!)} alt="" loading="lazy" />}
+                <span className="battle-fighter-name">{battle.sides[s]}</span>
+              </span>
+            ))}
+          </div>
+        )}
+
         <div className="battle-stage-sides">
           <button
             className={`battle-side${battle.mySide === "a" ? " mine" : ""}${battle.winner === "a" ? " won" : ""}`}
@@ -314,7 +418,7 @@ export function BattleScreen({ battleId, onBack }: { battleId: string; viewerId:
             onClick={() => void act("/join", { side: "a" })}
           >
             <span className="battle-side-name">{battle.sides.a}</span>
-            <span className="battle-side-votes">{battle.tally.a}</span>
+            <span className="battle-side-votes">{battle.score.a}</span>
             <span className="battle-side-pct">{aPct}%</span>
           </button>
           <span className="battle-stage-vs">vs</span>
@@ -324,9 +428,45 @@ export function BattleScreen({ battleId, onBack }: { battleId: string; viewerId:
             onClick={() => void act("/join", { side: "b" })}
           >
             <span className="battle-side-name">{battle.sides.b}</span>
-            <span className="battle-side-votes">{battle.tally.b}</span>
+            <span className="battle-side-votes">{battle.score.b}</span>
             <span className="battle-side-pct">{100 - aPct}%</span>
           </button>
+        </div>
+
+        <p className="meta battle-score-legend">
+          Score = votes ({battle.tally.a}–{battle.tally.b}) + attacks + reactions. Every comment and reaction adds to the side it backs.
+        </p>
+
+        {/* Reactions, thrown at a side. Free, like a post gift. */}
+        {isOpen && (
+          <div className="battle-react" role="group" aria-label="Throw a reaction">
+            {(["a", "b"] as const).map((s) => (
+              <div key={s} className="battle-react-side">
+                <span className="meta truncate">{battle.sides[s]}</span>
+                <span className="battle-react-row">
+                  {BATTLE_REACTIONS.map((r) => (
+                    <button
+                      key={r.id}
+                      className={`battle-react-btn${battle.myGifts.includes(r.id) ? " sent" : ""}`}
+                      disabled={busy}
+                      onClick={() => void throwGift(s, r.id, r.art)}
+                      aria-label={`Throw ${r.label} at ${battle.sides[s]}`}
+                      title={battle.myGifts.includes(r.id) ? `You already threw ${r.label}` : r.label}
+                    >
+                      {r.art}
+                    </button>
+                  ))}
+                </span>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* Bursts fly toward the side they hit. */}
+        <div className="battle-burst-layer" aria-hidden="true">
+          {bursts.map((b) => (
+            <span key={b.id} className={`battle-burst burst-${b.side}`}>{b.art}</span>
+          ))}
         </div>
 
         {battle.stakeMinor > 0 && (
@@ -356,6 +496,59 @@ export function BattleScreen({ battleId, onBack }: { battleId: string; viewerId:
           {isOpen && <button className="btn" disabled={busy} onClick={() => void act("/close")}>Close and settle</button>}
           {isOpen && <button className="btn ghost" disabled={busy} onClick={() => void act("/cancel")}>Cancel</button>}
         </div>
+      </section>
+
+      {/* The comment feed. This is the audience: every comment is an attack, and
+          it lands on the side the commenter picked. */}
+      <section className="shelf">
+        <div className="shelf-head">
+          <h2 className="section-title"><SplitIcon width={16} height={16} /> The floor</h2>
+          <span className="meta">{battle.comments.length} {battle.comments.length === 1 ? "attack" : "attacks"}</span>
+        </div>
+
+        {isOpen && (
+          <div className="battle-attack">
+            <div className="battle-attack-pick" role="group" aria-label="Attack which side">
+              {(["a", "b"] as const).map((s) => (
+                <button
+                  key={s}
+                  className={`battle-attack-side${attackSide === s ? " active" : ""}`}
+                  onClick={() => setAttackSide(s)}
+                  aria-pressed={attackSide === s}
+                >
+                  {battle.sides[s]}
+                </button>
+              ))}
+            </div>
+            <div className="composer">
+              <input
+                className="input"
+                value={draft}
+                placeholder={`Attack ${battle.sides[attackSide]}`}
+                aria-label="Attack comment"
+                onChange={(e) => setDraft(e.target.value)}
+                onKeyDown={(e) => { if (e.key === "Enter") void attack(); }}
+              />
+              <button className="btn small primary" disabled={busy || !draft.trim()} onClick={() => void attack()}>Send</button>
+            </div>
+          </div>
+        )}
+
+        <ul className="battle-feed">
+          {battle.comments.map((c) => (
+            <li key={c.id} className={`battle-comment side-${c.side}`}>
+              <Avatar name={c.author.displayName} url={c.author.avatarUrl} seed={c.author.id} size="sm" />
+              <span className="grow" style={{ minWidth: 0 }}>
+                <span className="meta row" style={{ gap: 6 }}>
+                  <strong>{c.author.displayName}</strong>
+                  <span className={`battle-comment-tag tag-${c.side}`}>{battle.sides[c.side]}</span>
+                </span>
+                <p>{c.body}</p>
+              </span>
+            </li>
+          ))}
+          {battle.comments.length === 0 && <li className="empty"><p>No attacks yet. Be the first to swing.</p></li>}
+        </ul>
       </section>
 
       <section className="shelf">

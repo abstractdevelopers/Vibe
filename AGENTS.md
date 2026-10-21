@@ -1154,9 +1154,17 @@ Gotchas the harnesses encode, in case you write new checks:
   room puts you in the audience (`role = 'member'`); only a host `promote` moves
   you to the stage. The client shows a listener a "Raise hand" button and no mic
   at all. An earlier version wrote every joiner to the stage, so the mic was live
-  without the host approving it Ñ the Clubhouse/Spaces model is the rule.
+  without the host approving it - the Clubhouse/Spaces model is the rule.
 - **`npm test` truncates the tables, so the audit token dies.** `verify` runs the
   API suite against the same database; re-run `seed-audit.py` after `verify`
   before any browser audit, or every screen lands on the signed-out splash.
+- **A battle is won on the crowd score, not on the vote.** `score = votes +
+  comments + gifts * 2`; a vote is one, an attack comment is one, a reaction is
+  two. A stake still only decides what a winner takes, never who wins, and the
+  pot still pays out in full - the score change moved the *winner*, not the
+  money. `tally` stays the raw vote counts so a vote never silently changes
+  meaning. Reactions are one of each kind per user per battle, so they cannot be
+  ground; artwork follows the event-image rule (an http(s) URL or a media path),
+  validated in the zod schema and by a CHECK constraint.
 
 
