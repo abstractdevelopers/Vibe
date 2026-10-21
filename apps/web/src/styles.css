@@ -2911,6 +2911,64 @@ select {
 }
 
 /* ---- Games ---- */
+/* The table surface. Each world gets its own material, so a casino round, a
+   board game and a card game are visibly different rooms rather than the same
+   page with a new title. The felt reads from --felt-* (set per session) and the
+   material class picks the texture. */
+.table-felt {
+  position: relative;
+  border-radius: var(--radius-lg, 16px);
+  padding: var(--space-4);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  background:
+    radial-gradient(120% 80% at 50% -10%, color-mix(in srgb, var(--felt-accent, #8f9bff) 22%, transparent), transparent 60%),
+    linear-gradient(160deg, var(--felt-from, #1a1c2c), var(--felt-to, #0c0d16));
+  border: 1px solid color-mix(in srgb, var(--felt-accent, #8f9bff) 26%, transparent);
+  overflow: hidden;
+}
+/* A faint texture per material, drawn with repeating gradients so no image is
+   needed. Kept subtle: the felt is a room, not a wallpaper. */
+.table-felt::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0.5;
+}
+.table-felt.felt-baize::before {
+  background-image: repeating-linear-gradient(45deg, rgba(255,255,255,0.03) 0 2px, transparent 2px 4px);
+}
+.table-felt.felt-slate::before {
+  background-image: linear-gradient(rgba(255,255,255,0.05) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255,255,255,0.05) 1px, transparent 1px);
+  background-size: 28px 28px;
+}
+.table-felt.felt-lacquer::before {
+  background-image: repeating-linear-gradient(115deg, rgba(255,255,255,0.045) 0 1px, transparent 1px 9px);
+}
+.table-felt.felt-neon::before {
+  background-image: radial-gradient(circle at 20% 15%, color-mix(in srgb, var(--felt-accent) 30%, transparent) 0 2px, transparent 2px),
+    radial-gradient(circle at 78% 72%, color-mix(in srgb, var(--felt-accent) 24%, transparent) 0 2px, transparent 2px);
+  background-size: 90px 90px, 120px 120px;
+}
+.table-felt-head {
+  display: flex; align-items: baseline; justify-content: space-between; gap: var(--space-2);
+  position: relative; z-index: 1;
+}
+.table-felt-world {
+  font-size: var(--text-meta); font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase;
+  color: var(--felt-accent, #8f9bff);
+}
+.table-felt-tagline { font-size: var(--text-meta); color: var(--text-muted); text-align: right; }
+/* Inside the felt, cards pick up the world's edge so the whole table reads as
+   one place rather than a light panel dropped on a dark one. */
+.table-felt .card { position: relative; z-index: 1; border-color: color-mix(in srgb, var(--felt-accent, #8f9bff) 20%, var(--hairline)); }
+.table-felt .card.is-turn { border-color: var(--felt-accent, #8f9bff); box-shadow: 0 0 0 1px color-mix(in srgb, var(--felt-accent) 45%, transparent); }
+.table-felt .section-title { position: relative; z-index: 1; }
+.table-felt .stack { position: relative; z-index: 1; }
+
 .game-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(104px, 1fr));

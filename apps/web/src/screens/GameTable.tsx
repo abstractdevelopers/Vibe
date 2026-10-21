@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState, type CSSProperties } from "react";
 import { api, ApiError } from "../api";
 import { ScreenHeader } from "../components/ScreenHeader";
 import { formatMoney } from "../money";
@@ -6,6 +6,7 @@ import { SpinnerIcon, ArrowLeftIcon } from "../components/Icons";
 import { ShapeMark, SuitMark, Piece, WHOT_SHAPES, SHAPE_NAME } from "../components/CardFaces";
 import { useActivityTheme } from "../components/useActivityTheme";
 import { themeForGame } from "../themes";
+import { feltFor, worldFor, worldVars } from "../components/GameArt";
 
 /**
  * A game table.
@@ -21,7 +22,7 @@ interface Player {
   seat: number; status: string; stakedMinor: number;
 }
 interface Session {
-  id: string; gameId: string; gameName: string; status: string;
+  id: string; gameId: string; gameName: string; category: string; status: string;
   stakeMinor: number; potMinor: number; currency: string; hostId: string;
   minPlayers: number; maxPlayers: number; players: Player[]; state: any;
   winnerId: string | null;
@@ -139,44 +140,58 @@ export function GameTableScreen({ sessionId, viewerId, onBack }: { sessionId: st
       />
       {error && <div className="notice danger" role="alert">{error}</div>}
 
-      <section className="stack">
-        <h2 className="section-title">Players</h2>
-        {session.players.map((p) => {
-          const turn = session.state?.turnUserId === p.id && session.status === "active";
-          return (
-            <div key={p.id} className="card row spread">
-              <div className="row" style={{ gap: "var(--space-2)" }}>
-                <span className={`chip ${turn ? "chip-live" : ""}`}>{turn ? "Turn" : `#${p.seat + 1}`}</span>
-                <strong>{p.displayName}{p.id === viewerId ? " (you)" : ""}</strong>
-              </div>
-              {p.stakedMinor > 0 && <span className="chip">{formatMoney(p.stakedMinor, session.currency)}</span>}
-            </div>
-          );
-        })}
-      </section>
+      {/* The table wears its world. A casino round sits on gold lacquer, a board
+          game on cold slate, a card game on plum baize — so Play stops looking
+          like the same room with a different title. */}
+      <div
+        className={`table-felt felt-${feltFor(session.category)}`}
+        data-world={worldFor(session.category).label}
+        style={worldVars(session.category) as CSSProperties}
+      >
+        <div className="table-felt-head">
+          <span className="table-felt-world">{worldFor(session.category).label}</span>
+          <span className="table-felt-tagline">{worldFor(session.category).tagline}</span>
+        </div>
 
-      {session.status === "lobby" && (
         <section className="stack">
-          {!me && (
-            <button className="btn primary block" disabled={busy} onClick={() => void act("/join")}>
-              {session.stakeMinor > 0 ? `Join · stake ${formatMoney(session.stakeMinor, session.currency)}` : "Join game"}
-            </button>
-          )}
-          {isHost && (
-            <button className="btn primary block" disabled={busy || !canStart} onClick={() => void act("/start")}>
-              {canStart ? "Start game" : `Need ${session.minPlayers} players`}
-            </button>
-          )}
+          <h2 className="section-title">Players</h2>
+          {session.players.map((p) => {
+            const turn = session.state?.turnUserId === p.id && session.status === "active";
+            return (
+              <div key={p.id} className={`card row spread ${turn ? "is-turn" : ""}`}>
+                <div className="row" style={{ gap: "var(--space-2)" }}>
+                  <span className={`chip ${turn ? "chip-live" : ""}`}>{turn ? "Turn" : `#${p.seat + 1}`}</span>
+                  <strong>{p.displayName}{p.id === viewerId ? " (you)" : ""}</strong>
+                </div>
+                {p.stakedMinor > 0 && <span className="chip">{formatMoney(p.stakedMinor, session.currency)}</span>}
+              </div>
+            );
+          })}
         </section>
-      )}
 
-      {session.status === "active" && session.state && (
-        <GameBoard session={session} state={session.state} busy={busy} act={act} />
-      )}
+        {session.status === "lobby" && (
+          <section className="stack">
+            {!me && (
+              <button className="btn primary block" disabled={busy} onClick={() => void act("/join")}>
+                {session.stakeMinor > 0 ? `Join · stake ${formatMoney(session.stakeMinor, session.currency)}` : "Join game"}
+              </button>
+            )}
+            {isHost && (
+              <button className="btn primary block" disabled={busy || !canStart} onClick={() => void act("/start")}>
+                {canStart ? "Start game" : `Need ${session.minPlayers} players`}
+              </button>
+            )}
+          </section>
+        )}
 
-      {session.status === "finished" && session.state && (
-        <GameBoard session={session} state={session.state} busy act={act} readOnly />
-      )}
+        {session.status === "active" && session.state && (
+          <GameBoard session={session} state={session.state} busy={busy} act={act} />
+        )}
+
+        {session.status === "finished" && session.state && (
+          <GameBoard session={session} state={session.state} busy act={act} readOnly />
+        )}
+      </div>
 
       {busy && <div className="row" style={{ justifyContent: "center" }}><SpinnerIcon width={18} height={18} /></div>}
     </>

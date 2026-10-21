@@ -394,12 +394,46 @@ export const GAME_WORLDS: Record<string, World> = {
   party: { label: "Party", from: "#2a0f2c", to: "#160818", accent: "#e07aff", motif: "confetti", tagline: "Loud games for a group." },
 };
 
+/** The material a table's surface is made of, so Play is not one room. */
+export type WorldFelt = "baize" | "felt" | "lacquer" | "slate" | "neon";
+
+export const WORLD_FELT: Record<string, WorldFelt> = {
+  cards: "baize",
+  board: "slate",
+  casino: "lacquer",
+  mind: "neon",
+  action: "felt",
+  party: "neon",
+};
+
+export function feltFor(category?: string): WorldFelt {
+  return (category && WORLD_FELT[category]) || "felt";
+}
+
 export const DEFAULT_WORLD: World = {
   label: "Arcade", from: "#1a1c2c", to: "#0c0d16", accent: "#8f9bff", motif: "spark", tagline: "Everything in the arcade.",
 };
 
 export function worldFor(category?: string): World {
   return (category && GAME_WORLDS[category]) || DEFAULT_WORLD;
+}
+
+/**
+ * A world as CSS custom properties, so a table can wear its own environment.
+ *
+ * The game table is where "Play" should stop looking like a settings page. Each
+ * game's world already has a plate palette for the catalogue; this hands the same
+ * palette to the table surface, so a casino round sits on gold lacquer and a
+ * board game sits on cold steel. Returns a plain style object — the felt itself
+ * is CSS, keyed off these variables and `data-world`.
+ */
+export function worldVars(category?: string): Record<string, string> {
+  const w = worldFor(category);
+  return {
+    "--felt-from": w.from,
+    "--felt-to": w.to,
+    "--felt-accent": w.accent,
+  };
 }
 
 /** Every world, in the order the shelf should show them. */
