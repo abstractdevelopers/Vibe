@@ -2840,6 +2840,12 @@ select {
   color: var(--accent);
   background: color-mix(in srgb, var(--accent) 12%, var(--surface-2));
 }
+.hand-closed {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+}
 .mic-meter {
   display: inline-block;
   flex: 0 1 54px;

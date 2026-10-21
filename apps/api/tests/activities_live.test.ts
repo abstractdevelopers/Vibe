@@ -176,6 +176,69 @@ describe("voice room stage", () => {
     const { audience } = await stageOf(id, host.token);
     expect(audience.some((m) => m.id === fan.id)).toBe(true);
   });
+
+  it("lets the host decline a raised hand without moving the listener", async () => {
+    const room = await makeRoom({ kind: "voice", title: "Decline", layout: "stage" });
+    const id = room.json().room.id as string;
+    await h.app.inject({ method: "POST", url: `/v1/activities/rooms/${id}/join`, headers: auth(fan.token), payload: {} });
+    await h.app.inject({ method: "POST", url: `/v1/activities/rooms/${id}/hand`, headers: auth(fan.token), payload: { raised: true } });
+    expect((await stageOf(id, host.token)).audience.some((m) => m.id === fan.id)).toBe(true);
+
+    const res = await h.app.inject({
+      method: "POST", url: `/v1/activities/rooms/${id}/stage`,
+      headers: auth(host.token), payload: { userId: fan.id, action: "decline" },
+    });
+    expect(res.statusCode).toBeLessThan(300);
+    const members = await h.app.inject({ method: "GET", url: `/v1/activities/rooms/${id}/members`, headers: auth(host.token) });
+    const body = members.json() as { audience: Array<{ id: string; handRaised: boolean }> };
+    const row = body.audience.find((m) => m.id === fan.id);
+    expect(row?.handRaised).toBe(false);
+  });
+});
+
+// Clubhouse lets a host close the hand queue, and tells the audience. Without
+// it the only tool was to keep ignoring hands.
+describe("host-controlled hand raising", () => {
+  it("defaults to open and lets the host close and reopen it", async () => {
+    const room = await makeRoom({ kind: "voice", title: "Hands switch", layout: "stage" });
+    const id = room.json().room.id as string;
+    expect(room.json().room.allowHands).toBe(true);
+
+    const close = await h.app.inject({
+      method: "PATCH", url: `/v1/activities/rooms/${id}`,
+      headers: auth(host.token), payload: { allowHands: false },
+    });
+    expect(close.statusCode).toBeLessThan(300);
+    expect(close.json().room.allowHands).toBe(false);
+
+    await h.app.inject({ method: "POST", url: `/v1/activities/rooms/${id}/join`, headers: auth(fan.token), payload: {} });
+    const raised = await h.app.inject({
+      method: "POST", url: `/v1/activities/rooms/${id}/hand`,
+      headers: auth(fan.token), payload: { raised: true },
+    });
+    expect(raised.statusCode).toBeGreaterThanOrEqual(400);
+
+    const reopen = await h.app.inject({
+      method: "PATCH", url: `/v1/activities/rooms/${id}`,
+      headers: auth(host.token), payload: { allowHands: true },
+    });
+    expect(reopen.json().room.allowHands).toBe(true);
+    const raised2 = await h.app.inject({
+      method: "POST", url: `/v1/activities/rooms/${id}/hand`,
+      headers: auth(fan.token), payload: { raised: true },
+    });
+    expect(raised2.statusCode).toBeLessThan(300);
+  });
+
+  it("only lets the host change the setting", async () => {
+    const room = await makeRoom({ kind: "voice", title: "Hands authz", layout: "stage" });
+    const id = room.json().room.id as string;
+    const res = await h.app.inject({
+      method: "PATCH", url: `/v1/activities/rooms/${id}`,
+      headers: auth(fan.token), payload: { allowHands: false },
+    });
+    expect(res.statusCode).toBeGreaterThanOrEqual(400);
+  });
 });
 
 // Leaving a room used to be invisible: the client navigated away and the member

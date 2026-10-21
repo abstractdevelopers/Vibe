@@ -56,6 +56,7 @@ export interface Room {
   playbackMode: "coordinated" | "synchronized";
   spoilerPolicy: "open" | "spoiler_safe";
   layout: "stage" | "broadcast";
+  allowHands: boolean;
   audioTrack: { title: string; artist?: string; artworkUrl?: string } | null;
   audioQueue: Array<{ id: string; title: string; artist?: string; artworkUrl?: string }>;
   audioStartedAt: string | null;
@@ -494,9 +495,17 @@ export function RoomStudio({ roomId, viewerId, viewerName, onBack, onLeft }: Pro
     catch (e) { setError(e instanceof ApiError ? e.message : "Could not raise your hand"); }
   }
 
-  async function stageAction(userId: string, action: "promote" | "demote" | "mute" | "unmute") {
+  async function stageAction(userId: string, action: "promote" | "demote" | "mute" | "unmute" | "decline") {
     try { await api(`/v1/activities/rooms/${roomId}/stage`, { body: { userId, action } }); await load(); }
     catch (e) { setError(e instanceof ApiError ? e.message : "Could not change the stage"); }
+  }
+
+  /** Turn hand-raising on or off for the room. Clubhouse lets a host do this. */
+  async function toggleHands(next: boolean) {
+    try {
+      await api(`/v1/activities/rooms/${roomId}`, { method: "PATCH", body: { allowHands: next } });
+      await load();
+    } catch (e) { setError(e instanceof ApiError ? e.message : "Could not change hand raising"); }
   }
 
   /** Remove someone from the room (host). */
@@ -754,16 +763,21 @@ export function RoomStudio({ roomId, viewerId, viewerName, onBack, onLeft }: Pro
             </button>
           )}
           {/* A listener has no mic. They ask to speak, and the host decides —
-              the same door Clubhouse and Spaces use. */}
+              the same door Clubhouse and Spaces use. When the host has closed
+              the queue, the button is replaced by the reason. */}
           {!isOnStage && canSpeak && (
-            <button
-              className={`btn raise-hand${audience.find((a) => a.id === viewerId)?.handRaised ? " waiting" : ""}`}
-              onClick={() => void raiseHand(!audience.find((a) => a.id === viewerId)?.handRaised)}
-              title={audience.find((a) => a.id === viewerId)?.handRaised ? "Lower your hand" : "Ask to speak"}
-            >
-              <HandIcon width={16} height={16} />
-              <span>{audience.find((a) => a.id === viewerId)?.handRaised ? "Hand raised" : "Raise hand"}</span>
-            </button>
+            room.allowHands ? (
+              <button
+                className={`btn raise-hand${audience.find((a) => a.id === viewerId)?.handRaised ? " waiting" : ""}`}
+                onClick={() => void raiseHand(!audience.find((a) => a.id === viewerId)?.handRaised)}
+                title={audience.find((a) => a.id === viewerId)?.handRaised ? "Lower your hand" : "Ask to speak"}
+              >
+                <HandIcon width={16} height={16} />
+                <span>{audience.find((a) => a.id === viewerId)?.handRaised ? "Hand raised" : "Raise hand"}</span>
+              </button>
+            ) : (
+              <span className="meta hand-closed"><HandIcon width={14} height={14} /> Hand raising is off</span>
+            )
           )}
           <button
             className="btn ghost"
@@ -794,16 +808,34 @@ export function RoomStudio({ roomId, viewerId, viewerName, onBack, onLeft }: Pro
         {micError && <div className="notice">{micError}</div>}
       </div>
 
-      {/* Host: hands raised, waiting to be brought up. */}
-      {isHost && audience.some((a) => a.handRaised) && (
+      {/* Host: the hand queue, and the switch that turns it on and off. This
+          stays visible even when no hand is up, because the switch is the point:
+          Clubhouse lets a host close the queue, and the audience is told. */}
+      {isHost && canSpeak && (
         <div className="card hands">
-          <p className="eyebrow"><HandIcon width={13} height={13} /> Hands raised</p>
+          <div className="row spread">
+            <p className="eyebrow"><HandIcon width={13} height={13} /> Hands raised</p>
+            <button
+              className={`btn small${room.allowHands ? "" : " ghost"}`}
+              onClick={() => void toggleHands(!room.allowHands)}
+              aria-pressed={room.allowHands}
+            >
+              {room.allowHands ? "Open" : "Closed"}
+            </button>
+          </div>
+          {!room.allowHands && <p className="meta">Hand raising is off. The audience can see this.</p>}
           {audience.filter((a) => a.handRaised).map((a) => (
             <div key={a.id} className="row spread">
               <span>@{a.handle}</span>
-              <button className="btn small primary" onClick={() => void stageAction(a.id, "promote")}>Invite to speak</button>
+              <span className="people-actions">
+                <button className="btn small primary" onClick={() => void stageAction(a.id, "promote")}>Invite to speak</button>
+                <button className="mini" onClick={() => void stageAction(a.id, "decline")} title="Decline" aria-label={`Decline ${a.handle}`}>✕</button>
+              </span>
             </div>
           ))}
+          {room.allowHands && !audience.some((a) => a.handRaised) && (
+            <p className="meta">No hands raised yet.</p>
+          )}
         </div>
       )}
 
@@ -997,7 +1029,7 @@ function PeopleSheet({
   isHost: boolean;
   canSpeak: boolean;
   onClose: () => void;
-  onStageAction: (userId: string, action: "promote" | "demote" | "mute" | "unmute") => void;
+  onStageAction: (userId: string, action: "promote" | "demote" | "mute" | "unmute" | "decline") => void;
   onKick: (userId: string) => void;
 }) {
   const row = (m: Member) => {
@@ -1020,6 +1052,9 @@ function PeopleSheet({
             ) : (
               <button className="mini" onClick={() => onStageAction(m.id, "promote")} title="Invite to speak">↑</button>
             ))}
+            {canSpeak && m.handRaised && m.role !== "speaker" && (
+              <button className="mini" onClick={() => onStageAction(m.id, "decline")} title="Decline the raised hand" aria-label={`Decline ${m.handle}`}>✕</button>
+            )}
             {canSpeak && m.role === "speaker" && (
               <button className="mini" onClick={() => onStageAction(m.id, m.muted ? "unmute" : "mute")} title={m.muted ? "Unmute" : "Mute"}>
                 {m.muted ? <MicOffIcon width={13} height={13} /> : <MicOnIcon width={13} height={13} />}

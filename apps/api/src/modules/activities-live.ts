@@ -60,6 +60,7 @@ interface RoomRow {
   ticket_price_minor: string;
   banner_url: string | null;
   hype: number;
+  allow_hands: boolean;
   host_handle?: string;
   host_name?: string;
   host_kind?: string;
@@ -131,6 +132,9 @@ function serializeRoom(room: RoomRow, now = new Date()) {
     isTicketed: Number(room.ticket_price_minor ?? 0) > 0,
     // Energy: reactions and gifts in the last hour. Drives the live "hot" badge.
     hype: Number(room.hype ?? 0),
+    // Whether listeners may raise a hand. The host can turn it off, and the
+    // audience is told, so no one taps a button that does nothing.
+    allowHands: room.allow_hands ?? true,
   };
 }
 
@@ -745,6 +749,7 @@ export function activityRoutes(ctx: AppContext) {
           bannerUrl: z.string().max(500).nullable().optional(),
           visibility: z.enum(["public", "private"]).optional(),
           layout: z.enum(["stage", "broadcast"]).optional(),
+          allowHands: z.boolean().optional(),
           ticketPriceMinor: z.coerce.number().int().min(0).max(100_000_000).optional(),
           audioTrack: z
             .object({ title: z.string().min(1).max(200), artist: z.string().max(200).optional(), artworkUrl: z.string().max(500).optional() })
@@ -769,6 +774,7 @@ export function activityRoutes(ctx: AppContext) {
       if (input.bannerUrl !== undefined) put("banner_url", input.bannerUrl);
       if (input.visibility !== undefined) put("visibility", input.visibility);
       if (input.layout !== undefined) put("layout", input.layout);
+      if (input.allowHands !== undefined) put("allow_hands", input.allowHands);
       if (input.ticketPriceMinor !== undefined) put("ticket_price_minor", input.ticketPriceMinor);
       if (input.audioTrack !== undefined) put("audio_track", input.audioTrack ? JSON.stringify(input.audioTrack) : null);
       if (input.startsAt !== undefined) put("starts_at", input.startsAt);
@@ -848,6 +854,18 @@ export function activityRoutes(ctx: AppContext) {
       const user = await requireUser(ctx, req);
       const { id } = req.params as { id: string };
       const input = parse(z.object({ raised: z.boolean() }), req.body);
+      // The host can turn hand-raising off. Lowering your own hand is always
+      // allowed; raising one is what the setting governs.
+      if (input.raised) {
+        const room = await queryOne<{ allow_hands: boolean }>(
+          ctx.pool,
+          `SELECT allow_hands FROM activity_rooms WHERE id = $1`,
+          [id],
+        );
+        if (room && room.allow_hands === false) {
+          throw ApiError.badRequest("The host has turned off hand raising");
+        }
+      }
       await ctx.pool.query(
         `INSERT INTO room_members (room_id, user_id, hand_raised) VALUES ($1,$2,$3)
          ON CONFLICT (room_id, user_id) DO UPDATE SET hand_raised = EXCLUDED.hand_raised`,
@@ -868,7 +886,7 @@ export function activityRoutes(ctx: AppContext) {
       const input = parse(
         z.object({
           userId: z.string().uuid(),
-          action: z.enum(["promote", "demote", "mute", "unmute"]),
+          action: z.enum(["promote", "demote", "mute", "unmute", "decline"]),
         }),
         req.body,
       );
@@ -886,6 +904,14 @@ export function activityRoutes(ctx: AppContext) {
       } else if (input.action === "demote") {
         await ctx.pool.query(
           `UPDATE room_members SET role = 'member', muted_by_host = false WHERE room_id = $1 AND user_id = $2`,
+          [id, input.userId],
+        );
+      } else if (input.action === "decline") {
+        // Turn down a raised hand. The listener stays in the audience, and the
+        // host can always invite them later; this just clears the request so the
+        // queue reflects who is still waiting.
+        await ctx.pool.query(
+          `UPDATE room_members SET hand_raised = false WHERE room_id = $1 AND user_id = $2`,
           [id, input.userId],
         );
       } else if (input.action === "mute") {
