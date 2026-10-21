@@ -220,6 +220,21 @@ async function rankedPosts(
               + (CASE WHEN p.circle_id IS NOT NULL AND EXISTS (
                           SELECT 1 FROM circle_members cm WHERE cm.user_id = $1 AND cm.circle_id = p.circle_id)
                       THEN 12 ELSE 0 END)
+                -- Reach follows engagement: an author whose posts earn real
+                -- reactions, comments and cheers gets a small lift, so a
+                -- creator's standing is their work and not a follower number.
+                -- Capped, so no author can dominate a page on volume alone.
+              + LEAST(10, 6 * (ln(1 + (
+                    (SELECT count(*) FROM reactions r2 JOIN posts p2 ON p2.id = r2.post_id
+                      WHERE p2.author_id = p.author_id AND p2.status = 'published'
+                        AND r2.created_at > $6::timestamptz - interval '30 days')
+                  + 2 * (SELECT count(*) FROM comments c2 JOIN posts p3 ON p3.id = c2.post_id
+                      WHERE p3.author_id = p.author_id AND p3.status = 'published' AND c2.deleted_at IS NULL
+                        AND c2.created_at > $6::timestamptz - interval '30 days')
+                  + 3 * (SELECT count(*) FROM post_gifts g2 JOIN posts p4 ON p4.id = g2.post_id
+                      WHERE p4.author_id = p.author_id AND p4.status = 'published'
+                        AND g2.created_at > $6::timestamptz - interval '30 days')
+                  )) / ln(1 + 50)))
                 -- Topic affinity: shared interests with the author, or a post that
                 -- mentions something the viewer cares about.
               + (CASE WHEN EXISTS (SELECT 1 FROM viewer v

@@ -37,6 +37,8 @@ type Creator = {
   displayName: string;
   avatarUrl: string | null;
   followerCount?: number;
+  engagement?: number;
+  followsBack?: boolean;
 };
 
 type Rail = {
@@ -163,6 +165,13 @@ export function DiscoveryRail({
                 <Avatar name={c.displayName} url={c.avatarUrl} size="lg" />
                 <span className="creator-name">{c.displayName}</span>
                 <span className="creator-handle">@{c.handle}</span>
+                {/* Why this person is here, in their own words: a follow-back is
+                    the strongest reason, then the work that earned attention. */}
+                {c.followsBack ? (
+                  <span className="creator-why follows">Follows you</span>
+                ) : (c.engagement ?? 0) > 0 ? (
+                  <span className="creator-why">Active this week</span>
+                ) : null}
               </button>
             ))}
           </div>

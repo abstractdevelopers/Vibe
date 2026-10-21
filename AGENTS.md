@@ -205,6 +205,21 @@ npm --workspace @vibe/api run test
   test that creates several posts as one user and then looks for the newest one
   in the feed will fail. Create the post as a **fresh account** instead. This
   bit both the comment probe and the first e2e run.
+- The For You score is a plain additive sum, and **reach follows engagement**.
+  One term lifts an author whose *recent work* draws real reactions, comments
+  and cheers (capped at +10, so volume alone cannot dominate). Engagement is
+  counted as reaction = 1, comment = 2, cheer = 3 over the last 30 days; a
+  creator's standing is their work, not their follower count. This is a lift on
+  top of the per-post engagement term, not a replacement for it.
+- The discovery rail (`/v1/discover/creators`) ranks by **follow-back first,
+  then shared interests, then engagement, then follower count**. A creator with
+  more followers but no engagement ranks *below* one with real replies. The
+  response carries `engagement` and `followsBack` so the client can say *why*
+  someone is suggested ("Follows you", "Active this week").
+- Signup is rate limited to **10 per IP per hour** (`register:${ip}`). A test
+  that registers more than ten accounts from the same address gets a 429;
+  reuse accounts across the cases, or seed users with a direct `INSERT INTO
+  users`.
 
 ## Commerce, payments and advertising
 - Order lifecycle lives in `modules/commerce.ts` (`ORDER_TRANSITIONS` +

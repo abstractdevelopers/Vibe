@@ -97,6 +97,28 @@ describe("feed ranking and tabs", () => {
     expect(cleanIndex).toBeLessThan(badIndex);
   });
 
+  it("lifts a post from an author whose work draws real engagement", async () => {
+    const me = await registerUser(h.app, "mayalift");
+    const lively = await registerUser(h.app, "lively");
+    const quiet = await registerUser(h.app, "quietauthor");
+    const fans = await Promise.all([
+      registerUser(h.app, "liftfan1"),
+      registerUser(h.app, "liftfan2"),
+      registerUser(h.app, "liftfan3"),
+    ]);
+
+    // The quiet author posts later, so pure recency would put them first.
+    const livelyPost = await post(lively.token, { body: "lively work", audience: "public" });
+    for (const fan of fans) {
+      await h.app.inject({ method: "POST", url: `/v1/posts/${livelyPost}/comments`, headers: auth(fan.token), payload: { body: "great" } });
+    }
+    await new Promise((r) => setTimeout(r, 20));
+    await post(quiet.token, { body: "quiet work", audience: "public" });
+
+    const items = (await feed(me.token)).items;
+    expect(items[0].author.handle).toBe("lively");
+  });
+
   it("does not repeat one author more than three times on a page", async () => {
     const me = await registerUser(h.app, "maya");
     const prolific = await registerUser(h.app, "prolific");

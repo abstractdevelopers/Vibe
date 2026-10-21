@@ -114,17 +114,34 @@ export function socialRoutes(ctx: AppContext) {
 
     // People worth following, for the feed's discovery rail. This is deliberately
     // people the viewer does NOT already follow — a "people to follow" rail that
-    // shows people you follow is noise. Ranked by real signal only: how many
-    // people follow them, and whether they share an interest with the viewer.
+    // shows people you follow is noise. Ranked by real signal only: whether they
+    // follow the viewer back, shared interests, and how much genuine engagement
+    // their recent posts earned. Reach follows engagement: a creator whose posts
+    // actually draw reactions, comments and cheers outranks one who merely has a
+    // large follower count, so following someone is not a shortcut to reach.
     // Someone who is private, blocked, muted or already followed is excluded.
     app.get("/v1/discover/creators", async (req) => {
       const user = await requireUser(ctx, req);
       const limit = Math.min(Number((req.query as { limit?: string }).limit ?? 12) || 12, 30);
-      const rows = await queryMany<UserLike & { follower_count: string }>(
+      const rows = await queryMany<UserLike & { follower_count: string; engagement: string; follows_back: boolean }>(
         ctx.pool,
         `SELECT u.id, u.handle, u.display_name, u.bio, u.avatar_url,
                 (SELECT count(*) FROM follows f2
-                  WHERE f2.followee_id = u.id AND f2.state = 'accepted') AS follower_count
+                  WHERE f2.followee_id = u.id AND f2.state = 'accepted') AS follower_count,
+                -- Genuine engagement the creator earned in the last 30 days: a
+                -- reaction is one, a comment is two (it takes more effort), a
+                -- cheer is three. Deliberately not raw views, and not time spent.
+                ((SELECT count(*) FROM reactions r JOIN posts rp ON rp.id = r.post_id
+                   WHERE rp.author_id = u.id AND rp.status = 'published'
+                     AND r.created_at > now() - interval '30 days')
+               + 2 * (SELECT count(*) FROM comments c JOIN posts cp ON cp.id = c.post_id
+                   WHERE cp.author_id = u.id AND cp.status = 'published' AND c.deleted_at IS NULL
+                     AND c.created_at > now() - interval '30 days')
+               + 3 * (SELECT count(*) FROM post_gifts g JOIN posts gp ON gp.id = g.post_id
+                   WHERE gp.author_id = u.id AND gp.status = 'published'
+                     AND g.created_at > now() - interval '30 days')) AS engagement,
+                EXISTS (SELECT 1 FROM follows bf
+                         WHERE bf.follower_id = u.id AND bf.followee_id = $1 AND bf.state = 'accepted') AS follows_back
            FROM users u
            LEFT JOIN follows f
              ON f.followee_id = u.id AND f.follower_id = $1
@@ -138,19 +155,29 @@ export function socialRoutes(ctx: AppContext) {
                                 OR (b.blocker_id = u.id AND b.blocked_id = $1))
             AND NOT EXISTS (SELECT 1 FROM mutes m WHERE m.muter_id = $1 AND m.muted_id = u.id)
           ORDER BY
-            -- Shared interests first, then reach. Both are real signals; neither
-            -- is a paid placement.
+            -- Someone who already follows you is the strongest reason to look.
+            follows_back DESC,
+            -- Shared interests next, then reach earned by engagement, not by a
+            -- follower number. Both are real signals; neither is paid placement.
             (CASE WHEN EXISTS (SELECT 1 FROM users me
                                 WHERE me.id = $1
                                   AND me.interests && u.interests
                                   AND array_length(u.interests, 1) > 0)
                   THEN 0 ELSE 1 END),
+            engagement DESC,
             follower_count DESC,
             u.created_at DESC
           LIMIT $2`,
         [user.id, limit],
       );
-      return { users: rows.map((r) => ({ ...publicUser(r), followerCount: Number(r.follower_count) })) };
+      return {
+        users: rows.map((r) => ({
+          ...publicUser(r),
+          followerCount: Number(r.follower_count),
+          engagement: Number(r.engagement),
+          followsBack: r.follows_back,
+        })),
+      };
     });
   };
 }

@@ -1080,6 +1080,27 @@ select {
   white-space: nowrap;
 }
 
+/* The reason a person appears in the rail. Muted by default so it is a note,
+   not a badge; a follow-back is the one case worth a tint. */
+.creator-why {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  color: var(--text-muted);
+  padding: 1px var(--space-2);
+  border-radius: 999px;
+  background: var(--surface-2);
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.creator-why.follows {
+  color: var(--accent-contrast, #fff);
+  background: var(--accent);
+}
+
 
 /* The host options inside the Create sheet. Two columns of small, equal tiles,
    so "what am I making" reads as one set of choices rather than a list. */
