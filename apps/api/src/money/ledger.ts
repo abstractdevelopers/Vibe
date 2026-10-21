@@ -46,7 +46,8 @@ export type JournalKind =
   | "wallet_spend"
   | "game_stake"
   | "game_payout"
-  | "game_refund";
+  | "game_refund"
+  | "cosmetic_purchase";
 
 interface Entry {
   accountId: string;
@@ -507,6 +508,36 @@ export async function postWalletSpend(
     currency: input.currency,
     reference: input.reference,
     memo: "Gift paid from Vibe Yens",
+    entries,
+  });
+}
+
+/**
+ * Buy a cosmetic with wallet Yens. The user's wallet liability falls and Vibe's
+ * revenue rises by the full price, because the catalogue is the platform's own.
+ * When the catalogue gains creator-made items, this takes a `creatorMinor` split
+ * exactly as a gift does. The user receives a frame or an outfit, never a
+ * balance, so nothing here is a cashable entitlement.
+ */
+export async function postCosmeticPurchase(
+  tx: pg.PoolClient,
+  input: { reference: string; userId: string; amountMinor: number; currency: string; creatorMinor?: number; creatorId?: string | null },
+): Promise<string> {
+  const wallet = await accountId(tx, "user_wallet", input.currency, input.userId);
+  const revenue = await accountId(tx, "platform_revenue", input.currency, null);
+  const creatorMinor = input.creatorMinor ?? 0;
+  const platformMinor = input.amountMinor - creatorMinor;
+  const entries: Entry[] = [{ accountId: wallet, direction: "debit", amountMinor: input.amountMinor }];
+  if (platformMinor > 0) entries.push({ accountId: revenue, direction: "credit", amountMinor: platformMinor });
+  if (creatorMinor > 0 && input.creatorId) {
+    const earnings = await accountId(tx, "creator_earnings", input.currency, input.creatorId);
+    entries.push({ accountId: earnings, direction: "credit", amountMinor: creatorMinor });
+  }
+  return writeJournal(tx, {
+    kind: "cosmetic_purchase",
+    currency: input.currency,
+    reference: input.reference,
+    memo: "Cosmetic bought with Vibe Yens",
     entries,
   });
 }

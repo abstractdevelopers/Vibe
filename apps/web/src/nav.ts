@@ -37,7 +37,8 @@ export type Route =
   | { name: "games" }
   | { name: "battles" }
   | { name: "battle"; battleId: string }
-  | { name: "game"; sessionId: string };
+  | { name: "game"; sessionId: string }
+  | { name: "status" };
 
 export interface Navigation {
   route: Route;

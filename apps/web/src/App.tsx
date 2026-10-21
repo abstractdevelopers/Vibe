@@ -55,6 +55,7 @@ const GamesScreen = lazy(() => import("./screens/Games").then((m) => ({ default:
 const BattlesScreen = lazy(() => import("./screens/Battles").then((m) => ({ default: m.BattlesScreen })));
 const BattleScreen = lazy(() => import("./screens/Battles").then((m) => ({ default: m.BattleScreen })));
 const GameTableScreen = lazy(() => import("./screens/GameTable").then((m) => ({ default: m.GameTableScreen })));
+const StatusScreen = lazy(() => import("./screens/Status").then((m) => ({ default: m.StatusScreen })));
 // Settings carries the whole environment catalogue; Room Studio carries the
 // per-kind panels and the game art. Both are split out so the launch bundle
 // stays lean.
@@ -354,6 +355,11 @@ export function App() {
             {route.name === "game" && me && (
               <Suspense fallback={<div className="skeleton" aria-busy="true" />}>
                 <GameTableScreen sessionId={route.sessionId} viewerId={me.id} onBack={back} />
+              </Suspense>
+            )}
+            {route.name === "status" && (
+              <Suspense fallback={<div className="skeleton" aria-busy="true" />}>
+                <StatusScreen onBack={back} />
               </Suspense>
             )}
             {route.name === "room" && me && (

@@ -9,6 +9,7 @@ import {
   MapPinIcon,
   MoonIcon,
   ShieldIcon,
+  TrophyIcon,
   WalletIcon,
 } from "../components/Icons";
 import { useNav } from "../nav";
@@ -27,6 +28,16 @@ export function YouScreen({ me, onMeChanged }: Props) {
   const [blocked, setBlocked] = useState<PublicUser[]>([]);
   const [city, setCity] = useState("");
   const [area, setArea] = useState("");
+  const [standing, setStanding] = useState<{ title: string | null; reason: string } | null>(null);
+
+  const loadStanding = useCallback(async () => {
+    try {
+      const res = await api<{ standing: { title: string | null; reason: string } }>("/v1/me/standing");
+      setStanding(res.standing);
+    } catch {
+      /* the standing is a flourish; leave it off on failure */
+    }
+  }, []);
 
   const loadBlocked = useCallback(async () => {
     try {
@@ -40,6 +51,10 @@ export function YouScreen({ me, onMeChanged }: Props) {
   useEffect(() => {
     void loadBlocked();
   }, [loadBlocked]);
+
+  useEffect(() => {
+    void loadStanding();
+  }, [loadStanding]);
 
   async function unblock(userId: string) {
     await api(`/v1/users/${userId}/block`, { method: "DELETE" });
@@ -92,6 +107,15 @@ export function YouScreen({ me, onMeChanged }: Props) {
           <EditIcon width={16} height={16} /> Edit
         </button>
       </div>
+
+      <button className="you-standing" aria-label="Standing" onClick={() => nav.push({ name: "status" })}>
+        <TrophyIcon width={18} height={18} />
+        <span className="grow" style={{ minWidth: 0, textAlign: "left" }}>
+          <span className="you-standing-title">{standing?.title ?? "Earn a title"}</span>
+          <span className="meta truncate" style={{ display: "block" }}>{standing?.reason ?? "Show up this week to claim your standing"}</span>
+        </span>
+        <span className="meta">Wardrobe ›</span>
+      </button>
 
       <div className="you-panel">
         <div className="you-panel-head">

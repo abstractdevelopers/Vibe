@@ -55,6 +55,14 @@
     },
     "findings": []
   },
+  "status": {
+    "url": "http://localhost:12001/",
+    "viewport": {
+      "w": 390,
+      "h": 844
+    },
+    "findings": []
+  },
   "menu": {
     "url": "http://localhost:12001/",
     "viewport": {
@@ -97,16 +105,6 @@
       },
       {
         "kind": "text-overlap",
-        "el": "span.rail-battle-title <> label.",
-        "detail": "130x10"
-      },
-      {
-        "kind": "text-overlap",
-        "el": "span.rail-battle-meta <> button.btn primary block",
-        "detail": "130x24"
-      },
-      {
-        "kind": "text-overlap",
         "el": "h2.rail-title <> p.eyebrow",
         "detail": "131x8"
       },
@@ -118,7 +116,12 @@
       {
         "kind": "text-overlap",
         "el": "span.creator-name <> span.meta",
-        "detail": "13x4"
+        "detail": "7x4"
+      },
+      {
+        "kind": "text-overlap",
+        "el": "span.creator-name <> span.meta",
+        "detail": "7x4"
       },
       {
         "kind": "text-overlap",

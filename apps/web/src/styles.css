@@ -3494,3 +3494,99 @@ select {
 .avatar-studio .avatar { width: 64px; height: 64px; }
 .avatar-studio-switch { display: flex; gap: 4px; }
 .avatar-studio-switch .pill { padding: 3px 12px; font-size: 0.78rem; }
+
+/* --- Identity and status ---------------------------------------------------
+   The standing is earned and the look is bought, and both should read at a
+   glance: the title sits over the face, and a worn frame rings it. */
+.status-flow { display: flex; flex-direction: column; gap: var(--space-5); }
+
+.you-standing {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  width: 100%;
+  padding: var(--space-4);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-card);
+  background: linear-gradient(135deg, color-mix(in srgb, var(--accent) 12%, var(--surface-1)), var(--surface-1));
+  color: inherit;
+  cursor: pointer;
+  text-align: left;
+}
+.you-standing-title { display: block; font-weight: 700; }
+
+.status-hero {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  padding: var(--space-5);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: linear-gradient(160deg, var(--surface-1), var(--surface-0));
+}
+.status-hero-face { position: relative; flex: none; display: grid; place-items: center; }
+.status-hero-text { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.status-title { font-size: var(--text-section); font-weight: 800; letter-spacing: -0.01em; }
+
+/* A worn frame is a ring around the face, coloured by its style. */
+.status-frame {
+  position: absolute;
+  inset: -4px;
+  border-radius: inherit;
+  border: 3px solid var(--accent);
+  pointer-events: none;
+}
+.status-frame.style-ember { border-color: #ff7a45; box-shadow: 0 0 0 3px color-mix(in srgb, #ff7a45 30%, transparent); }
+.status-frame.style-tide { border-color: #38bdf8; box-shadow: 0 0 0 3px color-mix(in srgb, #38bdf8 30%, transparent); }
+.status-frame.style-gold { border-color: #f5c518; box-shadow: 0 0 0 3px color-mix(in srgb, #f5c518 34%, transparent); }
+.status-frame.style-crown { border-color: #a855f7; box-shadow: 0 0 0 3px color-mix(in srgb, #a855f7 34%, transparent); }
+
+/* A rank tints the hero, so a King and a Warrior do not look alike. */
+.status-hero.rank-king { border-color: #f5c518; background: linear-gradient(160deg, color-mix(in srgb, #f5c518 16%, var(--surface-1)), var(--surface-0)); }
+.status-hero.rank-queen { border-color: #ec4899; background: linear-gradient(160deg, color-mix(in srgb, #ec4899 14%, var(--surface-1)), var(--surface-0)); }
+.status-hero.rank-first_family { border-color: #a855f7; }
+.status-hero.rank-class { border-color: #38bdf8; }
+
+.status-board { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--space-2); }
+.status-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface-1);
+}
+.status-row.king { border-color: #f5c518; background: color-mix(in srgb, #f5c518 10%, var(--surface-1)); }
+.status-row.queen { border-color: #ec4899; background: color-mix(in srgb, #ec4899 9%, var(--surface-1)); }
+.status-rank { width: 22px; flex: none; text-align: center; font-weight: 800; color: var(--text-muted); }
+
+.cosmetic-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: var(--space-3); }
+.cosmetic-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-4);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface-1);
+  color: inherit;
+  cursor: pointer;
+  text-align: center;
+}
+.cosmetic-card.owned { border-color: color-mix(in srgb, var(--accent) 40%, var(--border)); }
+.cosmetic-card.worn { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
+.cosmetic-swatch {
+  position: relative;
+  width: 48px;
+  height: 48px;
+  border-radius: var(--radius-md);
+  background: var(--surface-2);
+}
+.cosmetic-swatch.status-frame { position: relative; inset: auto; border-radius: var(--radius-md); }
+.cosmetic-swatch.outfit.style-lagos { background: linear-gradient(135deg, #ec4899, #8b5cf6); }
+.cosmetic-swatch.outfit.style-ankara { background: linear-gradient(135deg, #f59e0b, #ef4444); }
+.cosmetic-swatch.outfit.style-midnight { background: linear-gradient(135deg, #1e293b, #0f172a); }
+.cosmetic-swatch.outfit.style-royal { background: linear-gradient(135deg, #a855f7, #f5c518); }
+.cosmetic-label { font-weight: 700; }

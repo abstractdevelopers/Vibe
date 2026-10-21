@@ -31,6 +31,8 @@ const PAGES = [
   // through the Play segment control.
   ["battles", "Battles", "Play"],
   ["you", "You"],
+  // The standing and wardrobe, reached from the card on You.
+  ["status", "Standing", "You"],
   // The header menu, where "Start something" and Settings live.
   ["menu", "Menu"],
   // The composer hub, reached from the centre create button.

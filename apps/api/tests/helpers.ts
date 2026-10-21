@@ -85,6 +85,7 @@ export async function resetDb(pool: pg.Pool): Promise<void> {
              paid_gifts, gift_purchases, payouts, payout_events, payout_destinations,
              wallet_topups, wallet_transfers,
              game_sessions, game_players, game_moves,
+             cosmetic_purchases, cosmetic_worn,
              money_audit, ledger_entries, ledger_journals, ledger_accounts
     RESTART IDENTITY CASCADE
   `);

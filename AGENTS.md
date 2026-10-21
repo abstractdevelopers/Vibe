@@ -4,7 +4,7 @@ Repository-specific guidance for AI agents working in this repo.
 
 ## What this is
 
-Vibe — an interactive social network built to the VIBE product & engineering
+Vibe â€” an interactive social network built to the VIBE product & engineering
 specification. The first engineering sprint is implemented: a vertical slice of
 Circles, polls, plans and shared expenses. Read
 `docs/first-sprint-design-note.md` before changing behaviour; it is the source
@@ -12,10 +12,10 @@ of truth for schemas, state machines and permissions.
 
 ## Stack
 
-- `apps/api` — Fastify 5 + PostgreSQL (`pg`), TypeScript ESM, run with `tsx`.
+- `apps/api` â€” Fastify 5 + PostgreSQL (`pg`), TypeScript ESM, run with `tsx`.
   Validation with `zod`. Tests with `vitest`.
-- `apps/web` — React 18 + Vite, plain CSS with design tokens.
-- `packages/shared` — money math and domain vocabulary, imported by both.
+- `apps/web` â€” React 18 + Vite, plain CSS with design tokens.
+- `packages/shared` â€” money math and domain vocabulary, imported by both.
 
 ## Commands
 
@@ -37,7 +37,7 @@ Docker in this environment needs `sudo`. Postgres/Redis containers are named
 - **Money.** Always integer minor units. Never floats. Use the helpers in
   `packages/shared/src/money.ts`; splits must sum to the total exactly.
 - **Migrations.** Add a new file `apps/api/src/migrations/NNNN_name.sql`. Never
-  edit an applied migration — the runner checksums them and will refuse.
+  edit an applied migration â€” the runner checksums them and will refuse.
 - **Identifiers.** UUID. Timestamps `timestamptz` in UTC; store the IANA zone
   when a user-facing time needs it.
 - **Errors.** Throw `ApiError` with a machine-readable code. The app's error
@@ -61,7 +61,7 @@ The web workspace has its own runner: `npm --workspace @vibe/web test`
 which is pure and needs no browser. Use it for any change to `themes.ts` /
 `theme-runtime.ts`.
 
-Running the API suite locally needs Postgres **and the migrations applied** —
+Running the API suite locally needs Postgres **and the migrations applied** â€”
 without them every DB-backed test fails with `relation "users" does not exist`,
 which looks like a code failure but is only an unmigrated database:
 
@@ -76,34 +76,34 @@ npm --workspace @vibe/api run test
 
 - `apps/web/src/nav.ts` holds a tiny in-memory navigation context: five tabs
   plus a stack of detail routes (inbox, profile, plan, expense, edit-profile,
-  settings, place). It is not a router — swap it for one when deep links
+  settings, place). It is not a router â€” swap it for one when deep links
   matter. Detail screens take an id.
 - The five tabs are **Home, Circles, Create, Play, Explore**. Play is the game
   world (its own tab, so Explore no longer repeats a Games entry). The Inbox is
   a top-bar button, not a tab. Profile and settings are reached from the account
   menu (`AccountMenu`), which also has a "Your space" item that opens the You
-  tab — so the old You tab was not lost, only demoted out of the bar.
+  tab â€” so the old You tab was not lost, only demoted out of the bar.
 - Icons come from `lucide-react`, re-exported through
   `components/Icons.tsx`. Never hand-roll SVG paths or use emoji **for an
-  icon**. This is the icon rule, not an artwork rule — see the next point.
+  icon**. This is the icon rule, not an artwork rule â€” see the next point.
 - Emoji are banned outright in the client. They render differently on every
   platform and read as a toy. Two icon replacements to reuse: `CheerIcon`
   (lucide `PartyPopper`, not the decorative `SparklesIcon`) and `FlameIcon`.
 - **Artwork is a separate category from icons.** A game cover, a gift mark and a
   card face are drawn, not iconography, so they live as hand-authored SVG in
   dedicated components, on a shared grid and with a shared material treatment:
-  - `components/GameArt.tsx` — `GameArt` (the mark) and `GameCover` (the tile
+  - `components/GameArt.tsx` â€” `GameArt` (the mark) and `GameCover` (the tile
     cover, one look per category, hue agreeing with the theme family).
-  - `components/GiftArt.tsx` — every free and paid gift, plus the live-room
+  - `components/GiftArt.tsx` â€” every free and paid gift, plus the live-room
     reactions, keyed by gift id. `tier` (paid gifts) only scales the halo; it
     never encodes a price.
-  - `components/CardFaces.tsx` — `ShapeMark`/`SuitMark` (Whot shapes, standard
+  - `components/CardFaces.tsx` â€” `ShapeMark`/`SuitMark` (Whot shapes, standard
     suits), `Piece` (checkers/Reversi discs), and `WHOT_SHAPES`/`SHAPE_NAME`.
   Colour is inherited (`currentColor`) or passed in, so artwork recolours with
-  the environment. When you add a gift or a game, add its mark here — do not
+  the environment. When you add a gift or a game, add its mark here â€” do not
   fall back to an emoji.
 - Empty states use `components/EmptyState.tsx` (icon + title + one line of
-  help + an optional next action). Do not build one-off empty markup — the
+  help + an optional next action). Do not build one-off empty markup â€” the
   old `.empty` blocks rendered illegible text on the dark surfaces.
 - The feed is a flat editorial stream (`.post`), not a stack of gradient
   cards. Cards are reserved for self-contained objects (profiles, Circles,
@@ -136,7 +136,7 @@ npm --workspace @vibe/api run test
   validates the decoded magic bytes, and serves the file from `/v1/media/<id>`.
   Swap `DiskMediaStore` for object storage later; keep the same boundary.
 - Posts carry media in `posts.metadata.mediaUrls`. `createPostSchema` accepts an
-  absolute `http(s)` URL or our own `/v1/media/<id>` path — nothing else, so a
+  absolute `http(s)` URL or our own `/v1/media/<id>` path â€” nothing else, so a
   post can never smuggle in a `javascript:` URL.
 - `modules/discovery.ts` ranks places and discoverable plans with an explainable
   score (area match, interest affinity, relationship, recency, verification).
@@ -148,7 +148,7 @@ npm --workspace @vibe/api run test
 ## Navigation
 - `nav.ts` is an in-memory route plus a **stack** (`routeStack` in `App.tsx`).
   `push` grows the stack, `back` pops it. A detail view therefore returns to the
-  screen it came from — a plan returns to its Circle, not straight to the tab.
+  screen it came from â€” a plan returns to its Circle, not straight to the tab.
 - A tab tap must call `goToTabs()` (which clears the stack), **not** `back()`.
   Wiring the nav buttons to `back()` makes a tab tap pop one detail view, so
   tapping Explore from Settings lands on the previous screen instead.
@@ -163,7 +163,7 @@ npm --workspace @vibe/api run test
   mine" check (edit/delete affordances) and profile links. A regression test
   guards this (`tests/feed-author.test.ts`).
 - Entity responses are **camelCase**; only raw analytics rows are snake_case.
-  When a handler returns a DB row directly (e.g. a list), map it to camelCase —
+  When a handler returns a DB row directly (e.g. a list), map it to camelCase â€”
   `priceMinor`, `amountMinor`, `unitAmountMinor`, `createdAt`. A screen that
   reads `price_minor` from a camelCase payload renders `NaN`, which no typecheck
   catches because the client types the response by hand. The e2e asserts on a
@@ -219,7 +219,7 @@ npm --workspace @vibe/api run test
   `stub` is local-only and refused in production. Bachs webhook signature is
   HMAC-SHA256 of `"{timestamp}.{raw_body}"` over the **exact raw bytes**, so the
   JSON content-type parser in `app.ts` captures `req.rawBody`. That parser must
-  treat an empty body as `{}` — a POST with no payload (e.g. `/checkout`)
+  treat an empty body as `{}` â€” a POST with no payload (e.g. `/checkout`)
   otherwise throws `Unexpected end of JSON input` and 500s.
 - Bachs sends the event id as `id`; the normalised parser falls back to `id` when
   `eventId` is absent, or every event collapses to `"unknown"` and dedupes
@@ -228,7 +228,7 @@ npm --workspace @vibe/api run test
   verified. Verification and campaign review are operator actions
   (`requireAdmin`); the e2e run grants the actor admin directly, as an operator
   would be provisioned.
-- Campaigns: draft → submitted → operator review → approved/rejected. Only an
+- Campaigns: draft â†’ submitted â†’ operator review â†’ approved/rejected. Only an
   approved campaign for a **verified** business is eligible to run. Delivery is
   built (`modules/ads.ts` `selectAdForViewer`, wired into `feed.ts`): the
   sponsored slot is a separate response field (`sponsored`) the client renders
@@ -237,15 +237,15 @@ npm --workspace @vibe/api run test
   frequency-capped and hideable. Delivery is only chosen when the page actually
   has more than `SPONSORED_AFTER` items, so an impression is never counted for
   an ad the viewer could not see. A test that wants a delivered ad must seed a
-  page longer than 15 posts across **several authors** — the feed caps each
+  page longer than 15 posts across **several authors** â€” the feed caps each
   author at three posts per page, so one account cannot fill it. Seed those
   authors with a direct `INSERT INTO users` (the sign-up route is rate limited).
-  Metrics are reported and verified **separately** — never summed into one
+  Metrics are reported and verified **separately** â€” never summed into one
   number. Regulated categories are refused at creation.
 
-## Vibe Yens (stored balance) — gated
+## Vibe Yens (stored balance) â€” gated
 - `WALLET_ENABLED` (default **false**) gates the whole surface. When off,
-  `walletRoutes` registers nothing, so every wallet route 404s — there is no
+  `walletRoutes` registers nothing, so every wallet route 404s â€” there is no
   dead money-moving endpoint reachable. Do not weaken this default: a stored
   balance and P2P transfer are stored value and money transmission, and V1
   forbids them unless an operator has cleared it.
@@ -256,19 +256,19 @@ npm --workspace @vibe/api run test
   liability between two wallets inside one transaction that re-checks the
   balance, so two concurrent sends cannot overdraw.
 - Adding any new notification type needs a `NOTIFICATION_FAMILY` entry
-  (`wallet.received → wallet`) **and** a `NOTIFICATION_TYPES` entry in
+  (`wallet.received â†’ wallet`) **and** a `NOTIFICATION_TYPES` entry in
   `modules/account.ts`, or the opt-out silently does nothing. A new analytics
   name must be added to `ANALYTICS_EVENTS` or `trackSafe` drops it.
 
-## Phases 3–5 modules (events, pass, AI, push, search, admin)
+## Phases 3â€“5 modules (events, pass, AI, push, search, admin)
 - Events and check-in live in `modules/events.ts`. A check-in code is issued by
   the organizer, can expire and can be revoked, and is hashed (`sha256Hex`) at
   rest. Check-in is idempotent: a retry returns `alreadyCheckedIn: true` and does
   not create a second row. A booking is reported `verified` only when a provider
-  reference backs it — never inferred.
+  reference backs it â€” never inferred.
 - Vibe Pass (`modules/pass.ts`) is a revocable pointer. The token carries no
   personal data; `resolve` returns only the fields the holder has consented to
-  share. Loyalty redemption is single-use per `(merchantId, nonce)` — a replay
+  share. Loyalty redemption is single-use per `(merchantId, nonce)` â€” a replay
   returns `duplicate: true` and does not redeem again.
 - AI (`modules/ai.ts` + `ai/provider.ts`) only ever proposes. `accept` records
   intent and creates nothing. The provider is a deterministic stub behind the
@@ -276,7 +276,7 @@ npm --workspace @vibe/api run test
   path take a consequential action (send, book, buy, move money) without a human
   confirmation step.
 - Push (`modules/push.ts`) stores device tokens and hints only the last 6 chars
-  in responses — never echo a raw token. Delivery is a no-op stub
+  in responses â€” never echo a raw token. Delivery is a no-op stub
   (`deliveryProvider: "stub"`) until a real sender is configured.
 - Search (`modules/search.ts`) applies authorization **in the query**, not after
   it, so an unauthorized row is never fetched. Keep it that way.
@@ -290,11 +290,11 @@ npm --workspace @vibe/api run test
 ## Verification tooling
 - `scripts/loadtest.mjs [baseUrl] [iterations]` prints p50/p75/p95/p99 for
   representative reads. It deliberately does **not** assert the spec's latency
-  targets — this host is not the target environment. Compare runs over time.
+  targets â€” this host is not the target environment. Compare runs over time.
 - `scripts/room-loadtest.mjs [baseUrl] [listeners] [users]` measures a live
   room, not a request: how many sockets `/v1/realtime` holds, how many receive
   one broadcast, and sustained delivery. It does **not** create accounts over
-  HTTP (signup is rate limited to 10/hour/IP by design) — pre-mint tokens with
+  HTTP (signup is rate limited to 10/hour/IP by design) â€” pre-mint tokens with
   `scripts/seed-load-users.sh <count>` and pass `LOAD_TOKENS=<file>`. Local only;
   the seeder talks to the docker-compose Postgres, never production. Baseline on
   a dev box: 1000 listeners held, 999/1000 fan-out, ~99.9% sustained delivery.
@@ -320,7 +320,7 @@ npm --workspace @vibe/api run test
   build under any `NODE_ENV` other than `production`, which roughly doubles the
   JS bundle (144 kB vs 81 kB gzip) and fails the budget check. The build step
   sets `NODE_ENV=production` explicitly. A local `npm run verify` passes either
-  way because `NODE_ENV` is usually unset locally — so always confirm a budget
+  way because `NODE_ENV` is usually unset locally â€” so always confirm a budget
   change against the CI build, not just local.
 - `vite build --mode production` does **not** fix this; the `NODE_ENV`
   environment variable wins over `--mode` for the React dev/prod define.
@@ -340,7 +340,7 @@ npm --workspace @vibe/api run test
   shows the same mood. `restoreTheme()` applies it at boot and `App.tsx` re-applies
   it on an interval. Picking a tile pins it (`setThemeMode('pinned')`, which
   clears the pick when set back to auto). `useActivityTheme`/`Games.tsx` only
-  apply a screen's own environment when the mode is `follow` — otherwise walking
+  apply a screen's own environment when the mode is `follow` â€” otherwise walking
   into a room would yank the whole app to that room's colour and back, which is
   the "bleed" the theme work removed. A legacy `vibe.vibetheme` with no mode is
   treated as pinned, so nobody's stored choice is overridden by the new default.
@@ -362,11 +362,11 @@ npm --workspace @vibe/api run test
   not a base palette id (`whot`, `trivia`, `reaction`). `themeForGame` resolves
   through `BASE_ALIASES` (per game), then the base of its own name, then
   `FAMILY_BASE[category]`. Room kinds resolve through `ROOM_BASE_ALIASES`
-  (`movie` → the `watch` base, `other` → `voice`). Add an entry to the right map
+  (`movie` â†’ the `watch` base, `other` â†’ `voice`). Add an entry to the right map
   when a new game or room kind is added; the tests in `apps/web/tests/` walk the
   real ids and kinds the API serves.
 - The gift fee is `GIFT_FEE_BPS` (1500 = 15%), so the creator earns 85%. Never
-  hardcode the split in copy — derive it from `priceMinor`/`recipientMinor` in
+  hardcode the split in copy â€” derive it from `priceMinor`/`recipientMinor` in
   the catalogue response. The sheet used to say 70%/30% and was wrong.
 - There is one create surface. `CreateSheet` holds content (post, poll, plan,
   split) **and** a "Host something" section that opens `CreateSomethingSheet`
@@ -383,7 +383,7 @@ npm --workspace @vibe/api run test
 - **The realtime socket buffers frames sent before it is ready.** The client
   sends `room.join` in `onopen`, but `/v1/realtime` awaits the session and circle
   lookups first. `@fastify/websocket` does not buffer, so frames arriving in that
-  window used to be dropped — the socket stayed subscribed to nothing and
+  window used to be dropped â€” the socket stayed subscribed to nothing and
   silently received no room events (worst under load, when the lookup is slow).
   The route now installs a message handler before its first await and replays
   buffered frames once the real handler is ready. Regression test:
@@ -392,7 +392,7 @@ npm --workspace @vibe/api run test
 - **The mic is a sticky dock, not a control at the bottom of the page.** A voice
   room must always show a mic toggle with a live input-level meter, so "is my
   voice being picked up?" is answerable without asking anyone. It is `canSpeak`
-  rooms only, but it is present for everyone in them — not gated behind being on
+  rooms only, but it is present for everyone in them â€” not gated behind being on
   stage.
 - **Coordinates are rounded before storage.** `roundBand` (~1.1 km) is the only
   writer of `users.lat_band/lng_band`. Never store or return a precise point;
@@ -484,10 +484,10 @@ npm --workspace @vibe/api run test
 
   `php artisan` cannot do this: `createToken` needs a `team_id`, and a
   token with a null team breaks the ability checks. Poll the returned
-  `deployment_uuid` — a deploy queued *before* your push builds the old commit,
+  `deployment_uuid` â€” a deploy queued *before* your push builds the old commit,
   so check the commit it reports before believing it shipped.
 - **Test the image locally before pushing.** Build it, boot it against a
-  throwaway Postgres, and check `/health` plus `/` — that is what caught both
+  throwaway Postgres, and check `/health` plus `/` â€” that is what caught both
   Dockerfile bugs.
 - **`npm test` from the repo root, not `npx vitest`.** The single-fork setting
   lives in `apps/api/vitest.config.ts`; running vitest from the root skips it
@@ -499,7 +499,7 @@ npm --workspace @vibe/api run test
   `{"type":"file","mount_path":"/app/.vibe-host-authorized-keys",
   "fs_path":"/root/.ssh/authorized_keys","content":"<pubkey>\n"}`, deploy,
   then delete the storage and redeploy. The `pre_deployment_command` hook does
-  **not** help: it runs inside the app container (`docker exec … sh -c`), so it
+  **not** help: it runs inside the app container (`docker exec â€¦ sh -c`), so it
   cannot reach the host.
 - **A file mount to `/root/.ssh/authorized_keys` overwrites, it does not
   append.** There is one entry unless you write the whole file. It also lands
@@ -512,12 +512,12 @@ npm --workspace @vibe/api run test
   container (derive the public half with `ssh-keygen -y -f <key>`). Removing it
   from `/root/.ssh/authorized_keys` breaks every deploy with
   `Permission denied (publickey)`, including a redeploy that would otherwise fix
-  things — you cannot deploy your way out. Keep it in the file.
+  things â€” you cannot deploy your way out. Keep it in the file.
 - **Coolify env vars default to `is_buildtime: true`.** The bulk env endpoint
   treats an omitted field as build-time, so a deploy then passes every secret to
   the Docker build as an `ARG` and BuildKit refuses:
   `SecretsUsedInArgOrEnv`. Set `is_buildtime: false` for runtime-only values.
-  The field is `is_buildtime` on write, `is_buildtime` on read — there is no
+  The field is `is_buildtime` on write, `is_buildtime` on read â€” there is no
   `is_build_time`.
 - **The Coolify API token is not on this machine; recover it from history.**
   It was written to `/tmp/.coolifyapitoken` in an earlier session, and `/tmp` is
@@ -533,7 +533,7 @@ npm --workspace @vibe/api run test
   `npm --workspace @vibe/api run operator -- --grant <email>` (a CLI on purpose,
   not an endpoint).
 - **Nothing charges an ad budget.** `campaigns.budget_minor` is stored and
-  reported, but no code debits it — there is no spend ledger and no
+  reported, but no code debits it â€” there is no spend ledger and no
   authorization at review time. A campaign can run indefinitely at no cost. The
   order path is different and real: it goes through Bachs.
 - **Ad creatives were text-only; a banner image is now supported.**
@@ -644,7 +644,7 @@ that is confirmed with Bachs and a lawyer.
   webhook carries `withdrawal_id`. Verification must accept
   `X-Bachs-Signature-V2` (`t=...,v1=...`, any `v1` may match during a rotation)
   as well as the bare `X-Bachs-Signature` with `X-Bachs-Timestamp`. `success_url`
-  must be a public https URL — Bachs refuses localhost, so a local checkout
+  must be a public https URL â€” Bachs refuses localhost, so a local checkout
   cannot be walked end to end without a tunnel.
 - **A ticket is a purchase, not a balance.** A paid live room reuses
   `gift_purchases` (with a `room_id`) and the `TKT-` reference so it inherits the
@@ -655,7 +655,7 @@ that is confirmed with Bachs and a lawyer.
   memory (`nav.ts`), so `App.tsx` reads `/invite/<token>` (or `?invite=`) at
   boot, strips it from the address bar, and either shows `InviteLanding` above
   sign-in or auto-accepts once `me` loads. `GET /v1/invites/:token` is public
-  and previews the Circle's name only — never members or posts.
+  and previews the Circle's name only â€” never members or posts.
 - **`Live` is reached from the Explore card.** The `live` route has no tab of its
   own; if you move that entry point, the whole voice/ticketed-room surface
   becomes unreachable.
@@ -665,14 +665,14 @@ that is confirmed with Bachs and a lawyer.
   turn this into a hard delete: plans, expenses and chat history belong to the
   members, not the owner.
 - **Seller fulfilment lives at `POST /v1/orders/:id/transition`.** The seller
-  drives `seller_confirmed → fulfilling → completed`; the buyer may cancel an
+  drives `seller_confirmed â†’ fulfilling â†’ completed`; the buyer may cancel an
   unpaid order or raise a dispute. `refunded` is deliberately not an accepted
-  target — only a verified provider webhook marks money returned, so a seller
+  target â€” only a verified provider webhook marks money returned, so a seller
   can at most set `refund_pending`. The seller's inbox is `GET /v1/seller/orders`
   (optionally `?open=true`), surfaced as Sales in Settings.
 - **Every top-level screen uses `ScreenHeader`** (`eyebrow` / `title` /
   `subtitle` / `action`) so a screen never opens as a bare word. The Home
-  greeting is time-aware and the line under it rotates daily — both are pure
+  greeting is time-aware and the line under it rotates daily â€” both are pure
   presentation and carry no state.
 
 ## End-to-end testing against a live deploy
@@ -681,7 +681,7 @@ Two harnesses drive the deployed API over HTTP (no mocks). They live outside the
 repo, in the sandbox's persistent tools dir: `/workspace/.tools/e2e.py` (whole
 product surface) and `/workspace/.tools/payments_e2e.py` (the money path).
 `/root/payhook.sh` on the server signs a Bachs webhook with the real
-`BACHS_WEBHOOK_SECRET` so the payment → fulfilment chain is exercised for real.
+`BACHS_WEBHOOK_SECRET` so the payment â†’ fulfilment chain is exercised for real.
 
 Gotchas the harnesses encode, in case you write new checks:
 
@@ -696,7 +696,7 @@ Gotchas the harnesses encode, in case you write new checks:
 - **`PAYMENTS_PROVIDER=bachs` points at `sandbox-api.bachs.io`.** Checkout
   returns 202 and only creates a provider session; the order stays
   `awaiting_payment` and fulfilment is refused until a signed webhook arrives.
-  `refunded` is not even an accepted `transition` target (422) — only a webhook
+  `refunded` is not even an accepted `transition` target (422) â€” only a webhook
   moves money back.
 - **Register/login are rate-limited per IP** (10/hour, 8/15min). Repeated runs
   hit it; clear `DELETE FROM rate_limit_counters WHERE bucket LIKE 'register%'`
@@ -708,11 +708,11 @@ Gotchas the harnesses encode, in case you write new checks:
   background on `.sheet-card` the scrim shows through and the sheet's contents
   float as transparent, overlapping text over the page ("bleeding"). Both
   classes mirror `.sheet-inner` (gradient background, padding, top radius).
-  A transparent `backgroundColor` is expected — the fill is the
+  A transparent `backgroundColor` is expected â€” the fill is the
   `background-image` gradient, so check `backgroundImage`, not `backgroundColor`,
   when verifying a sheet in a browser.
 - **The account menu is capped above the bottom nav on short screens.** On a
-  320×568 phone the menu's max height keeps it clear of the nav (menu bottom
+  320Ă—568 phone the menu's max height keeps it clear of the nav (menu bottom
   ~452, nav top ~499) and it scrolls internally, so "Log out" is reachable
   rather than covered. On tall phones it is uncapped (menu bottom ~677).
 - **A cheer is stored in `post_gifts`, not `reactions`.** Free cheers and paid
@@ -728,21 +728,21 @@ Gotchas the harnesses encode, in case you write new checks:
   includes `speaker` with `hand_raised` / `muted_by_host`, and a room carries
   `audio_track` / `audio_started_at` for synced listening. The Live screen
   already has the "Watch party" / "Match room" create kinds and a
-  `playbackMode` (YouTube) path — but the room *view* has **no gift button and
+  `playbackMode` (YouTube) path â€” but the room *view* has **no gift button and
   no stage/audience UI yet**, and there is **no room-scoped gift route** (gifts
-  are post-scoped only). Those are the concrete gaps for items 5–7.
+  are post-scoped only). Those are the concrete gaps for items 5â€“7.
 - **Hard-deleting a user is blocked by RESTRICT FKs.** `users` has ~71 FKs;
   `gift_purchases`, `expenses` (payer), `circles` (creator), `ledger_accounts`,
   `payouts` and `paid_gifts` use RESTRICT, so a bare `DELETE FROM users` fails.
   The product itself only *soft*-deletes (sets `deleted_at`, keeps financial
   records). To purge synthetic accounts: delete `gift_purchases`, `expenses`
   (payer or creator), and `circles` (creator) for those users first, then
-  `DELETE FROM users` — everything else cascades. Match `%@example.com` /
+  `DELETE FROM users` â€” everything else cascades. Match `%@example.com` /
   `%@vibe.test` and exclude `host_kind = 'official'`.
 - **Seeded official content uses a `vibe` host account** (`host_kind =
   'official'`, disclosure set) that publishes events through the normal API.
   Event banners are generated locally (Pillow) and uploaded via `POST
-  /v1/media`, so they are self-hosted under `/v1/media/<id>` — no hotlinking.
+  /v1/media`, so they are self-hosted under `/v1/media/<id>` â€” no hotlinking.
   The media volume is mounted at `/app/media` with `MEDIA_DIR=/app/media`, so
   uploads survive redeploys.
 
@@ -802,7 +802,7 @@ Gotchas the harnesses encode, in case you write new checks:
   escrow account and pay the winner with a 5% rake to revenue, as ordinary
   journals, so a game can never create or destroy Yens.
 - **A game's host is seated and staked at creation.** The host does not go
-  through `/join` — they are already in the room — so the create route stakes
+  through `/join` â€” they are already in the room â€” so the create route stakes
   them and writes their `game_players` row inside the same transaction. Missing
   this leaves a host with no stake who can still win the pot.
 - **`eventView` must forward `host_kind`/`host_disclosure` to `publicUser`.**
@@ -820,13 +820,13 @@ Gotchas the harnesses encode, in case you write new checks:
   `modules/games.ts` never look at rules. Adding a game is: implement the
   interface, register it in `games/registry.ts`, and mark the catalogue row
   `playable` with its `engine` id. `tests/game-engines.test.ts` drives every
-  registered engine to a finish through its own `autoMove` — if that test fails,
+  registered engine to a finish through its own `autoMove` â€” if that test fails,
   the game is not safe to stake.
 - **A staked game must always settle.** War and Simon cap their rounds so a game
   cannot run forever; a draw refunds every stake (`settleGame` with `refund`),
   and a refund zeroes `pot_minor` so it cannot pay twice. Randomness that decides
   money (dice, spins, crash points) is drawn from a seed in the state, never from
-  the client — Snakes rolls server-side for exactly this reason.
+  the client â€” Snakes rolls server-side for exactly this reason.
 - **Party games are picks or guesses from a fixed set, not free text.** A server
   can only settle a game it can judge, and settlement is what staking depends on.
 - **The Play catalogue is an editorial shelf, not a grid dump.** `Games.tsx` is a
@@ -839,7 +839,7 @@ Gotchas the harnesses encode, in case you write new checks:
   the rhythm. Local material lives in `apps/web/src/environments.css`.
 - **Explore chunks by result kind, and shares one row language.** `Explore.tsx`
   mixes people, posts, events/places and shops, so each kind is its own `.shelf`
-  and every row reuses `.result-row` from `apps/web/src/discover.css` � a person,
+  and every row reuses `.result-row` from `apps/web/src/discover.css` — a person,
   a shop and an event read as peers of one page rather than four components. The
   search field and its two facet rows are one `.discover-tools` block, because a
   filter belongs next to the field it filters. Do not put a raw `.stack` of mixed
@@ -870,19 +870,19 @@ Gotchas the harnesses encode, in case you write new checks:
   and `--space-6` reads as 12px and 24px on a phone - always measure, do not
   assume the desktop numbers.
 - **Themes are authored, not random.** `apps/web/src/themes.ts` holds 34 base
-  palettes × 4 styles, plus 4 named environments = 140 themes; each computes its accent ink by luminance so
+  palettes Ă— 4 styles, plus 4 named environments = 140 themes; each computes its accent ink by luminance so
   text stays legible. The atmosphere glows read `--theme-glow-a/--theme-glow-b`,
   which `applyTheme` sets alongside `--accent`. "Follow activity" (Settings) tints
   the app to the current game via `useActivityTheme`; a manual pick always wins.
 - **Live/voice rooms are a WebRTC mesh.** The server relays SDP/ICE over the
   realtime socket and never carries media; `MESH_SPEAKER_LIMIT` is 8 speakers
   before an SFU is needed. Room kinds (voice/listen/movie/sports/music/other)
-  share one transport; each has its own panel in `RoomKindPanels.tsx` — a match
+  share one transport; each has its own panel in `RoomKindPanels.tsx` â€” a match
   room shows a scoreboard, a listen/music room shows a queue, a watch party
   shows its licensed-service link. Read routes for live/rooms require a session.
 - **A room has a format: `stage` (open mic) or `broadcast`.** Open mic meshes
   every speaker with every other. Broadcast has only the host publish, so
-  listeners connect to the host alone and the room carries far more of them —
+  listeners connect to the host alone and the room carries far more of them â€”
   but it is still peer-to-peer and still bounded by the host's uplink. Say so in
   the UI; never imply unlimited scale. The layout lives on `activity_rooms` and
   is chosen at creation or in the host's edit sheet.
@@ -893,7 +893,7 @@ Gotchas the harnesses encode, in case you write new checks:
 - **The realtime hub is indexed, not scanned.** `RealtimeHub` keeps `byRoom`,
   `byCircle`, `byUser` and `bySocket` maps so a fan-out costs its audience, not
   the total socket count, and join/leave are O(1). If you add a new publish
-  scope, index it the same way — a scan is O(100k) per event at scale.
+  scope, index it the same way â€” a scan is O(100k) per event at scale.
 - **`REALTIME_BUS=postgres` is required for more than one API container.** With
   `memory`, room events only reach sockets on the same instance. The
   `PostgresBus` tags every publish with an origin id and drops its own NOTIFY
@@ -921,7 +921,7 @@ Gotchas the harnesses encode, in case you write new checks:
   one by mistake. A stake decides what you win, never who wins.
 - **The main bundle is at ~93% of its budget, so new UI goes in a lazy chunk.**
   The budget is 120 kB gzipped for the main chunk (see `scripts/check-bundle.mjs`).
-  Anything sizeable — a screen, a renderer, a heavy component — must be behind
+  Anything sizeable â€” a screen, a renderer, a heavy component â€” must be behind
   `lazy(() => import(...))`, or it will fail `check-bundle` in CI.
 - **There is no 3D library, by design.** `apps/web/src/three-lite.ts` is a
   ~2 kB software renderer (rotation, perspective divide, painter's sort, flat
@@ -933,38 +933,38 @@ Gotchas the harnesses encode, in case you write new checks:
   user id) into traits, and both `Avatar2D` and `Avatar3D` render from those
   traits, so a person's 2D and 3D faces are the same character. A photo always
   wins; the drawing is only the fallback. Never seed an avatar from a display
-  name — it changes, and the face would change with it.
+  name â€” it changes, and the face would change with it.
 - **A stake decides what you win, never who is seen.** Battles order the backer
   list by join time, not by amount. Ranking by money would let a bigger stake
   buy standing, which is the dark pattern the spec rules out.
 - **`npm test` at the root runs both workspaces.** It used to run only the API
   suite, so web tests could be added and never run. If you add a workspace with
   tests, wire it into the root `test` script or it will not run in CI.
-- **Before defining a CSS class, grep for it � a redefinition silently wins.**
+- **Before defining a CSS class, grep for it — a redefinition silently wins.**
   `.chip-live` already marked whose turn it is in `GameTable` with a red fill;
   a new `.chip-live` for a live-table count stripped that fill app-wide. Two
   more: `--surface` and `--muted` are not tokens in this repo (the real ones are
   `--surface-0..3` and `--text-muted`), and an undefined token fails to nothing,
   so the element renders invisible. Grep for the class and every `var(--token)`
   you use before shipping, or the element will be there in the DOM and not on
-  the screen � the same failure the sheet fix describes.
+  the screen — the same failure the sheet fix describes.
 - **Voice needs TURN, not just STUN, and music needs its own audio profile.**
-  `coturn` runs on the host (ports 3478 tcp/udp and 49152–65535 udp). The API
+  `coturn` runs on the host (ports 3478 tcp/udp and 49152â€“65535 udp). The API
   mints short-lived credentials from `TURN_SECRET` at `/v1/rtc/ice` using
   coturn's REST scheme; the secret is never shipped to the browser. The client
   (`apps/web/src/rtc.ts`) fetches ICE servers before building a peer, and picks
-  the audio profile by room kind — `listen`/`music` get ~128 kbps stereo with
+  the audio profile by room kind â€” `listen`/`music` get ~128 kbps stereo with
   noise suppression and auto-gain off, because those are speech filters and both
   damage music. Never hardcode `iceServers` in the component again.
 - **Security headers are app-level and cannot lock out the server.** `app.ts`
   sets CSP, nosniff, X-Frame-Options and Permissions-Policy on every response,
   and HSTS only when `x-forwarded-proto` is https. None of it touches SSH, ufw,
-  or the Docker firewall — a "harden the app" request must not change host
+  or the Docker firewall â€” a "harden the app" request must not change host
   access. `/v1/openapi.json` documents every route. `connect-src` names the API
   origin (from `PUBLIC_API_URL`) so the cross-origin web client can reach it; do
   not shrink it back to `'self'`.
 - **Stored media is a path, and must be resolved against the API origin.** The
-  API returns `/v1/media/<id>` — never an absolute URL — so the same row renders
+  API returns `/v1/media/<id>` â€” never an absolute URL â€” so the same row renders
   on any host. A bare path in an `<img>` resolves against the *web* host and
   404s, so every render site goes through `mediaSrc()` (`apps/web/src/api.ts`),
   which resolves relative paths against `VITE_API_URL` and leaves absolute,
@@ -979,7 +979,7 @@ Gotchas the harnesses encode, in case you write new checks:
   `requireUser(ctx, req)` and use the value it *returns*. Reading
   `(req as any).user?.id` yields `undefined`, and `?? ""` then sends an empty
   string into a `uuid` column. Postgres raises `22P02`, and the global error
-  handler maps that code to a `not_found` 404 � so the screen shows "Not found"
+  handler maps that code to a `not_found` 404 — so the screen shows "Not found"
   for a route that works perfectly. This is what hid the whole Battles tab.
 - **A route is not tested until its list path is tested.** The battles suite
   covered create, join, vote and close but never `GET /v1/battles`, which is the
@@ -988,7 +988,7 @@ Gotchas the harnesses encode, in case you write new checks:
 - **Realtime has four scopes, and the default one is too narrow for lists.**
   `publishToRoom` only reaches sockets that joined *that* room. A list screen
   (Live, notifications) is in no room, so it hears nothing. Use
-  `publishBroadcast` for lifecycle changes to public things � it carries an id
+  `publishBroadcast` for lifecycle changes to public things — it carries an id
   and a state only, never content. Adding a scope means widening the
   `RealtimeScope` union, the `PostgresBus` handler, and the `deliverTo*` routing
   in `apps/api/src/realtime.ts` together.
@@ -1014,7 +1014,7 @@ Gotchas the harnesses encode, in case you write new checks:
 - `scripts/audit-visual.mjs` drives the live site at 390x844, sets `vibe.token`
   in `localStorage`, and clicks real nav buttons (the app has no URL routing).
   Pages: home, circles, play, explore, live, battles, you, menu, create.
-- Ignore overflow findings inside a horizontal scroller � a `.pill-row` is meant
+- Ignore overflow findings inside a horizontal scroller — a `.pill-row` is meant
   to sit past the edge. The script skips them; do not "fix" one by removing
   `overflow-x`.
 - Overlap findings inside a sheet are usually the dimmed page behind the sheet.
@@ -1026,7 +1026,7 @@ Gotchas the harnesses encode, in case you write new checks:
 - **`/tmp` is wiped between sessions; `/workspace/.tools` is not.** The Coolify
   host key lives at `/workspace/.tools/keys/coolify_host_0`, and
   `/workspace/.tools/vps.py '<cmd>'` (or `-f script.sh`) runs a command on the
-  VPS over paramiko using that key. Do not re-mint credentials in `/tmp` � use
+  VPS over paramiko using that key. Do not re-mint credentials in `/tmp` — use
   this. `ssh` itself may be missing from the image; `vps.py` does not need it.
 - **Deploy with `/workspace/.tools/deploy.sh`** (mint a short-lived token in
   `coolify-db`, then `POST /api/v1/deploy` for app
@@ -1043,7 +1043,7 @@ Gotchas the harnesses encode, in case you write new checks:
   was ever created and two people who both pressed "mic on" heard nothing.
   `join` now inserts a speaker for an open voice room, and stays audience for a
   broadcast or listen room. If voice is silent again, check the joiner's `role`
-  in `room_members` first � not the client.
+  in `room_members` first — not the client.
 - **Membership is derived, not asserted.** `joined` started false and only the
   Join button set it, so a host saw "Join" on its own room. Read it from the
   member lists in `load()`.
@@ -1092,7 +1092,7 @@ Gotchas the harnesses encode, in case you write new checks:
 - **A lobby the host abandons is deleted and everyone still waiting is
   refunded** through `postGameRefund`. A guest leaving only refunds that guest
   and keeps the table. If you touch this route, keep both branches refunding
-  through the ledger � a dead session holding a pot is real money stranded.
+  through the ledger — a dead session holding a pot is real money stranded.
 
 ## Live rooms
 
@@ -1166,5 +1166,18 @@ Gotchas the harnesses encode, in case you write new checks:
   meaning. Reactions are one of each kind per user per battle, so they cannot be
   ground; artwork follows the event-image rule (an http(s) URL or a media path),
   validated in the zod schema and by a CHECK constraint.
+- **Status is two different things and they must stay apart.** A *standing* is a
+  title derived from this week's activity (`weeklyActivity` sums posts, hosted
+  rooms, battle comments, battle gifts and post gifts) and never stored as a
+  claim, so nobody can assert a rank they have not reached. A *cosmetic* is a
+  look bought with Vibe Yens; the purchase is a `cosmetic_purchase` journal, and
+  owning it is a row in `cosmetic_purchases`. The catalogue lives in code
+  (`COSMETICS`), like the gift catalogue, so a cosmetic is never a row that can
+  drift from its price. Tiers are positional (`maxAhead`), so there is exactly
+  one King and one Queen and the lower tiers read as belonging, not winning.
+- **The dev API needs `WALLET_ENABLED=true` for the wardrobe and staked games.**
+  It defaults off, so a local buy answers "not available right now". The flag is
+  mirrored in `.env`; restart the API after changing it. A top-up is capped at
+  ₦50,000 (`MAX_TOPUP_MINOR`), so fund a wallet in several smaller top-ups.
 
 
