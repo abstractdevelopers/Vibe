@@ -40,6 +40,7 @@ import { launchRoutes } from "./modules/launch.js";
 import { moneyRoutes } from "./modules/money.js";
 import { walletRoutes } from "./modules/wallet.js";
 import { gameRoutes } from "./modules/games.js";
+import { gamesCatalogueRoutes } from "./modules/games-catalogue.js";
 import { identityStatusRoutes } from "./modules/identity-status.js";
 import { resolveSession } from "./auth.js";
 import { bearerToken } from "./auth.js";
@@ -221,6 +222,7 @@ export async function buildApp(ctx: AppContext): Promise<FastifyInstance> {
   await app.register(launchRoutes(ctx));
   await app.register(moneyRoutes(ctx));
   await app.register(walletRoutes(ctx));
+  await app.register(gamesCatalogueRoutes(ctx));
   await app.register(gameRoutes(ctx));
   await app.register(identityStatusRoutes(ctx));
 

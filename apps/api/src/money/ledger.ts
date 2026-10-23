@@ -47,7 +47,8 @@ export type JournalKind =
   | "game_stake"
   | "game_payout"
   | "game_refund"
-  | "cosmetic_purchase";
+  | "cosmetic_purchase"
+  | "battle_boost";
 
 interface Entry {
   accountId: string;
@@ -741,6 +742,30 @@ export async function postBattleRefund(
     entries: [
       { accountId: pot, direction: "debit", amountMinor: input.amountMinor },
       { accountId: wallet, direction: "credit", amountMinor: input.amountMinor },
+    ],
+  });
+}
+
+/**
+ * A paid punch in a battle. The wallet liability falls and platform revenue
+ * rises: a boost buys noise, never a cashable position, and nothing enters the
+ * battle pot. The cap on boosts lives in the route, because it is a product
+ * rule, not a ledger rule.
+ */
+export async function postBattleBoost(
+  tx: pg.PoolClient,
+  input: { reference: string; userId: string; amountMinor: number; currency: string },
+): Promise<string> {
+  const wallet = await accountId(tx, "user_wallet", input.currency, input.userId);
+  const revenue = await accountId(tx, "platform_revenue", input.currency, null);
+  return writeJournal(tx, {
+    kind: "battle_boost",
+    currency: input.currency,
+    reference: input.reference,
+    memo: "Battle boost bought with Vibe Yens",
+    entries: [
+      { accountId: wallet, direction: "debit", amountMinor: input.amountMinor },
+      { accountId: revenue, direction: "credit", amountMinor: input.amountMinor },
     ],
   });
 }

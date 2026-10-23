@@ -38,6 +38,8 @@ const NOTIFICATION_LABELS: Array<{ key: string; label: string; hint: string }> =
   { key: "poll_closed", label: "Poll results", hint: "When a poll you voted in closes" },
   { key: "expense_update", label: "Shared money", hint: "Expense and split updates" },
   { key: "comment_reply", label: "Replies and mentions", hint: "When someone replies to or mentions you" },
+  { key: "follow", label: "New followers", hint: "When someone starts following you" },
+  { key: "reaction", label: "Likes", hint: "When someone likes your post" },
   { key: "payment_reported", label: "Payment reported", hint: "When someone says they've paid" },
   { key: "payment_verified", label: "Payment verified", hint: "When a payment is confirmed" },
   { key: "message", label: "Messages", hint: "New direct messages" },

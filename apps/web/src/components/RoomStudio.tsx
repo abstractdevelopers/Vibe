@@ -11,11 +11,14 @@ import { AudioQueue, ROOM_KINDS, Scoreboard, TicketPanel, WatchPanel, type Score
 import { useActivityTheme } from "./useActivityTheme";
 import { themeForRoom } from "../themes";
 import {
-  ArrowLeftIcon, BellIcon, CheckIcon, CheerIcon, CloseIcon, EditIcon, FlameIcon, GiftIcon,
+  ArrowLeftIcon, BellIcon, ChatIcon, CheckIcon, CheerIcon, CloseIcon, EditIcon, FlameIcon, GiftIcon,
   HandIcon, HeadphonesIcon, LinkIcon, MicIcon, MicOffIcon, MicOnIcon, MusicIcon,
   LogOutIcon, MoreIcon, ShareIcon, ShieldIcon, TicketIcon, TrashIcon, UploadIcon, UsersIcon,
 } from "./Icons";
 import { GiftArt } from "./GiftArt";
+// A room is its own place with its own material; the sheet is lazy, so its CSS
+// splits with it and the launch bundle pays nothing for it.
+import "../room.css";
 
 /** How many speakers a peer-to-peer mesh can carry before it needs an SFU. */
 export const MESH_SPEAKER_LIMIT = 8;
@@ -127,6 +130,11 @@ export function RoomStudio({ roomId, viewerId, viewerName, onBack, onLeft }: Pro
   const [peers, setPeers] = useState<Record<string, MediaStream>>({});
   const [speaking, setSpeaking] = useState<Set<string>>(new Set());
   const [score, setScore] = useState<Score | null>(null);
+  // True once the browser refuses to start a remote stream without a gesture.
+  // The room then offers one explicit "Tap to hear" button rather than leaving
+  // someone staring at a silent stage and blaming the app.
+  const [audioBlocked, setAudioBlocked] = useState(false);
+  const [panel, setPanel] = useState<"stage" | "chat">("stage");
 
   const localStream = useRef<MediaStream | null>(null);
   const peerConns = useRef<Map<string, RTCPeerConnection>>(new Map());
@@ -137,6 +145,19 @@ export function RoomStudio({ roomId, viewerId, viewerName, onBack, onLeft }: Pro
   const iceLoadedRef = useRef(false);
 
   const audioEls = useRef<Map<string, HTMLAudioElement>>(new Map());
+
+  /** Try to start every remote stream. Returns true when they are all playing. */
+  const playRemoteAudio = useCallback(async (): Promise<boolean> => {
+    let ok = true;
+    for (const el of audioEls.current.values()) {
+      try {
+        await el.play();
+      } catch {
+        ok = false;
+      }
+    }
+    return ok;
+  }, []);
   const analysers = useRef<Map<string, { ctx: AudioContext; raf: number }>>(new Map());
   const localAnalyser = useRef<{ ctx: AudioContext; raf: number } | null>(null);
   const [micLevel, setMicLevel] = useState(0);
@@ -207,11 +228,19 @@ export function RoomStudio({ roomId, viewerId, viewerName, onBack, onLeft }: Pro
     setPeers((prev) => { const next = { ...prev }; delete next[id]; return next; });
   }, []);
 
+  /**
+   * Attach a remote stream.
+   *
+   * The audio element is rendered by this component rather than created here
+   * and left detached: a media element that is not in the document is allowed
+   * to play in some browsers and silently not in others, and there was no way
+   * for a listener to tell "nobody is talking" from "I cannot hear anything".
+   * The stream goes into state; the JSX mounts one `<audio>` per peer and this
+   * function tries to start it. If the browser blocks autoplay (it will unless
+   * the click that joined the room counts), `audioBlocked` is set and the room
+   * shows a single "Tap to hear" control instead of pretending to work.
+   */
   const attachAudio = useCallback((id: string, stream: MediaStream) => {
-    let el = audioEls.current.get(id);
-    if (!el) { el = document.createElement("audio"); el.autoplay = true; el.setAttribute("playsinline", "true"); audioEls.current.set(id, el); }
-    el.srcObject = stream;
-    void el.play().catch(() => { /* autoplay may need a gesture */ });
     setPeers((prev) => ({ ...prev, [id]: stream }));
     // Speaking indicator from the remote stream's level.
     try {
@@ -236,9 +265,41 @@ export function RoomStudio({ roomId, viewerId, viewerName, onBack, onLeft }: Pro
     } catch { /* analyser is best-effort */ }
   }, []);
 
+  /**
+   * Put the local microphone on an existing peer connection.
+   *
+   * A peer is often created by an *incoming* offer before this browser has ever
+   * opened its microphone — a listener answers the host, or two people join at
+   * once and the lower id offers first. At that moment there is no local track
+   * to add, and the old code never revisited the connection, so when that person
+   * later pressed "Mic on" the track was enabled but never attached to any
+   * sender: they were audible to themselves and to nobody else. Adding the
+   * track here (and renegotiating as the polite peer) closes that hole.
+   */
+  const syncLocalTracks = useCallback((peerId: string, pc: RTCPeerConnection) => {
+    const stream = localStream.current;
+    if (!stream) return;
+    for (const track of stream.getAudioTracks()) {
+      const already = pc.getSenders().some((s) => s.track === track);
+      if (!already) {
+        pc.addTrack(track, stream);
+        // Renegotiation is driven by whoever is not the offering side, so a
+        // single new track cannot start a glare between two peers.
+        void pc
+          .createOffer()
+          .then((offer) => pc.setLocalDescription(offer).then(() => offer))
+          .then((offer) => signalRef.current({ type: "rtc.offer", to: peerId, payload: offer }))
+          .catch(() => { /* the next stage change retries */ });
+      }
+    }
+  }, []);
+
   const ensurePeer = useCallback((peerId: string, initiator: boolean): RTCPeerConnection => {
     const existing = peerConns.current.get(peerId);
-    if (existing) return existing;
+    if (existing) {
+      if (initiator) syncLocalTracks(peerId, existing);
+      return existing;
+    }
     const pc = new RTCPeerConnection({ iceServers: iceServersRef.current });
     peerConns.current.set(peerId, pc);
     localStream.current?.getTracks().forEach((t) => pc.addTrack(t, localStream.current!));
@@ -279,7 +340,7 @@ export function RoomStudio({ roomId, viewerId, viewerName, onBack, onLeft }: Pro
         .catch(() => { /* negotiation retried on next stage change */ });
     }
     return pc;
-  }, [attachAudio, closePeer]);
+  }, [attachAudio, closePeer, syncLocalTracks]);
 
   // Forward-declared signalling send, filled by the room channel below.
   const signalRef = useRef<(msg: Record<string, unknown>) => void>(() => {});
@@ -607,7 +668,6 @@ export function RoomStudio({ roomId, viewerId, viewerName, onBack, onLeft }: Pro
     );
   }
 
-  const energy = Math.min(100, Math.round((room.hype / 60) * 100));
   const kindMeta = ROOM_KINDS[room.kind];
   // Zoom-style spotlight: the person actually talking is the big tile; with
   // nobody talking it falls back to the host, so the tile is never empty and the
@@ -617,110 +677,234 @@ export function RoomStudio({ roomId, viewerId, viewerName, onBack, onLeft }: Pro
   const canBroadcast = room.layout === "broadcast" && (room.kind === "voice" || room.kind === "listen" || room.kind === "other");
 
   return (
-    <div className={`studio kind-${room.kind}`}>
-      <div className="studio-top">
+    <div className={`studio kind-${room.kind} panel-${panel}`}>
+      {/* One audio element per remote peer, mounted so the browser will actually
+          play it and so a blocked autoplay can be surfaced instead of hidden. */}
+      <div className="studio-audio" aria-hidden="true">
+        {Object.entries(peers).map(([id, stream]) => (
+          <audio
+            key={id}
+            autoPlay
+            playsInline
+            ref={(el) => {
+              if (!el) {
+                audioEls.current.delete(id);
+                return;
+              }
+              audioEls.current.set(id, el);
+              if (el.srcObject !== stream) el.srcObject = stream;
+              void el.play().catch(() => setAudioBlocked(true));
+            }}
+          />
+        ))}
+      </div>
+
+      {/* The room's own atmosphere: the banner, dimmed, is the backdrop. Rooms
+          used to be a stack of cards on the app background, which made a live
+          room look like a settings page. */}
+      <div className="studio-backdrop" aria-hidden="true">
+        {room.bannerUrl && <img src={mediaSrc(room.bannerUrl)} alt="" />}
+      </div>
+
+      <header className="studio-top">
         <button className="icon-button" onClick={onBack} aria-label="Back"><ArrowLeftIcon width={18} height={18} /></button>
         <div className="grow" style={{ minWidth: 0 }}>
           <div className="studio-title truncate">{room.title}</div>
-          <div className="meta">
-            <kindMeta.Icon width={12} height={12} /> {kindMeta.label} · {room.host.displayName} · {room.memberCount} here
+          <div className="studio-sub">
+            <span className="studio-kind"><kindMeta.Icon width={12} height={12} /> {kindMeta.label}</span>
+            <span className="studio-dot" aria-hidden>·</span>
+            <span className="truncate">{room.host.displayName}</span>
+            <span className="studio-dot" aria-hidden>·</span>
+            <span className="studio-people"><UsersIcon width={12} height={12} /> {room.memberCount}</span>
             {channelStatus !== "open" && <span className="live-dot connecting" title="Reconnecting" />}
           </div>
         </div>
         {room.state === "live" && <span className="live-badge"><span className="live-dot" /> LIVE</span>}
+      </header>
+
+      {audioBlocked && (
+        <button
+          className="studio-unmute"
+          onClick={() => { void playRemoteAudio().then((ok) => setAudioBlocked(!ok)); }}
+        >
+          <HeadphonesIcon width={16} height={16} /> Tap to hear the room
+        </button>
+      )}
+
+      {/* Two panels, one dock. A room shows either who is talking or what is
+          being said — never a stage, a chat list, a roster and a control bar
+          stacked down the page, which is what made the old room collide with
+          itself on a phone. */}
+      <div className="studio-tabs" role="tablist" aria-label="Room panel">
+        <button role="tab" aria-selected={panel === "stage"} className={`studio-tab${panel === "stage" ? " active" : ""}`} onClick={() => setPanel("stage")}>
+          <MicIcon width={14} height={14} /> Stage
+          {stage.length > 0 && <span className="studio-tab-count">{stage.length}</span>}
+        </button>
+        <button role="tab" aria-selected={panel === "chat"} className={`studio-tab${panel === "chat" ? " active" : ""}`} onClick={() => setPanel("chat")}>
+          <ChatIcon width={14} height={14} /> Chat
+          {posts.length > 0 && <span className="studio-tab-count">{posts.length}</span>}
+        </button>
       </div>
 
-      <p className="kind-tagline meta">{kindMeta.tagline}</p>
+      {panel === "stage" ? (
+        <div className="studio-stage-scroll">
+          {room.kind === "sports" && (
+            <Scoreboard roomId={room.id} score={score} isHost={isHost} onChanged={load} />
+          )}
+          {(room.kind === "listen" || room.kind === "music") && (
+            <AudioQueue roomId={room.id} queue={room.audioQueue ?? []} isHost={isHost} onChanged={load} />
+          )}
+          {room.kind === "movie" && <WatchPanel room={room} />}
 
-      {/* Energy meter: reactions and gifts in the last hour. */}
-      <div className="energy" aria-label={`Room energy ${energy}%`}>
-        <FlameIcon className="energy-flame" width={16} height={16} />
-        <span className="energy-track"><span className="energy-fill" style={{ width: `${energy}%` }} /></span>
-        <span className="energy-value">{room.hype}</span>
-      </div>
-
-      {room.bannerUrl && <img className="room-banner" src={mediaSrc(room.bannerUrl)} alt="" loading="lazy" />}
-
-      {/* The one panel this kind exists for. */}
-      {room.kind === "sports" && (
-        <Scoreboard roomId={room.id} score={score} isHost={isHost} onChanged={load} />
-      )}
-      {(room.kind === "listen" || room.kind === "music") && (
-        <AudioQueue roomId={room.id} queue={room.audioQueue ?? []} isHost={isHost} onChanged={load} />
-      )}
-      {room.kind === "movie" && <WatchPanel room={room} />}
-
-      {/* The stage, as a Zoom-like gallery: one big tile for whoever is speaking,
-          and everyone else in a grid beneath it. The grid used to be a row of
-          small squares with the role as a label, so a busy room read as a list
-          rather than as people in a call. */}
-      {canSpeak && (
-        <section className="stage" aria-label="Stage">
-          <div className="stage-head">
-            <span className="eyebrow"><MicIcon width={13} height={13} /> Stage · {stage.length}</span>
-            {room.layout === "broadcast" && (
-              <span className="meta">Broadcast — the host speaks, everyone listens</span>
-            )}
-            {room.layout === "stage" && stage.length > MESH_SPEAKER_LIMIT && (
-              <span className="meta">P2P mesh — best with {MESH_SPEAKER_LIMIT} or fewer speakers</span>
-            )}
-          </div>
-
-          {!spotlight ? (
-            <p className="meta">The stage is open. Join it to speak.</p>
-          ) : (
-            <div className="stage-gallery">
-              <div className={`stage-tile spotlight${speaking.has(spotlight.id) ? " speaking" : ""}${spotlight.muted ? " muted" : ""}`}>
-                <Avatar name={spotlight.displayName} url={spotlight.avatarUrl} seed={spotlight.id} className="stage-tile-face" />
-                <span className="stage-tile-bar">
-                  <span className="stage-name truncate">{spotlight.id === viewerId ? "You" : spotlight.displayName}</span>
-                  {spotlight.muted && <span className="stage-mute" title="Muted"><MicIcon width={12} height={12} /></span>}
+          {canSpeak && (
+            <section className="stage" aria-label="Stage">
+              <div className="stage-head">
+                <span className="eyebrow"><MicIcon width={13} height={13} /> On stage · {stage.length}</span>
+                <span className="stage-mode">
+                  {room.layout === "broadcast" ? "Broadcast" : `Open mic${stage.length > MESH_SPEAKER_LIMIT ? ` · ${MESH_SPEAKER_LIMIT} max` : ""}`}
                 </span>
-                <span className="stage-role">{spotlight.role === "host" ? "Host" : "Speaker"}</span>
-                {isHost && spotlight.id !== viewerId && (
-                  <div className="stage-controls">
-                    {spotlight.role === "speaker" && (
-                      <button className="mini" onClick={() => void stageAction(spotlight.id, "demote")} title="Send to audience">↓</button>
-                    )}
-                    <button className="mini" onClick={() => void stageAction(spotlight.id, spotlight.muted ? "unmute" : "mute")} title={spotlight.muted ? "Unmute" : "Mute"}>
-                      {spotlight.muted ? <MicOffIcon width={13} height={13} /> : <MicOnIcon width={13} height={13} />}
-                    </button>
-                  </div>
-                )}
               </div>
 
-              {othersOnStage.length > 0 && (
-                <div className="stage-row">
-                  {othersOnStage.map((m) => (
-                    <div key={m.id} className={`stage-tile${speaking.has(m.id) ? " speaking" : ""}${m.muted ? " muted" : ""}`}>
-                      <Avatar name={m.displayName} url={m.avatarUrl} seed={m.id} className="stage-tile-face" />
-                      <span className="stage-tile-bar">
-                        <span className="stage-name truncate">{m.id === viewerId ? "You" : m.displayName}</span>
-                        {m.muted && <span className="stage-mute" title="Muted"><MicIcon width={12} height={12} /></span>}
+              {stage.length === 0 ? (
+                <div className="stage-empty">
+                  <MicIcon width={22} height={22} />
+                  <p>The stage is open.</p>
+                  <span className="meta">Join and the host can bring you up.</span>
+                </div>
+              ) : (
+                <>
+                  {spotlight && (
+                    <div
+                      className={`stage-spot${speaking.has(spotlight.id) ? " speaking" : ""}${spotlight.muted ? " muted" : ""}`}
+                      aria-label={`${spotlight.displayName}${speaking.has(spotlight.id) ? " is speaking" : ""}`}
+                    >
+                      <span className="stage-spot-ring" aria-hidden />
+                      <Avatar name={spotlight.displayName} url={spotlight.avatarUrl} seed={spotlight.id} className="stage-spot-face" />
+                      <span className="stage-spot-bar">
+                        <span className="stage-spot-name truncate">{spotlight.id === viewerId ? "You" : spotlight.displayName}</span>
+                        <span className="stage-spot-role">{spotlight.role === "host" ? "Host" : spotlight.muted ? "Muted" : speaking.has(spotlight.id) ? "Speaking" : "Speaker"}</span>
                       </span>
-                      {isHost && m.id !== viewerId && (
-                        <div className="stage-controls">
-                          {m.role === "speaker" && (
-                            <button className="mini" onClick={() => void stageAction(m.id, "demote")} title="Send to audience">↓</button>
+                      {isHost && spotlight.id !== viewerId && (
+                        <span className="stage-spot-controls">
+                          {spotlight.role === "speaker" && (
+                            <button className="mini" onClick={() => void stageAction(spotlight.id, "demote")} title="Send to audience">↓</button>
                           )}
-                          <button className="mini" onClick={() => void stageAction(m.id, m.muted ? "unmute" : "mute")} title={m.muted ? "Unmute" : "Mute"}>
-                            {m.muted ? <MicOffIcon width={13} height={13} /> : <MicOnIcon width={13} height={13} />}
+                          <button className="mini" onClick={() => void stageAction(spotlight.id, spotlight.muted ? "unmute" : "mute")} title={spotlight.muted ? "Unmute" : "Mute"}>
+                            {spotlight.muted ? <MicOffIcon width={13} height={13} /> : <MicOnIcon width={13} height={13} />}
                           </button>
-                        </div>
+                        </span>
                       )}
                     </div>
+                  )}
+
+                  {othersOnStage.length > 0 && (
+                    <div className="stage-row">
+                      {othersOnStage.map((m) => (
+                        <div key={m.id} className={`stage-tile${speaking.has(m.id) ? " speaking" : ""}${m.muted ? " muted" : ""}`}>
+                          <Avatar name={m.displayName} url={m.avatarUrl} seed={m.id} className="stage-tile-face" />
+                          <span className="stage-tile-bar">
+                            <span className="stage-name truncate">{m.id === viewerId ? "You" : m.displayName}</span>
+                            {m.muted
+                              ? <span className="stage-mute" title="Muted"><MicOffIcon width={11} height={11} /></span>
+                              : speaking.has(m.id) && <span className="stage-live-dot" aria-hidden />}
+                          </span>
+                          {isHost && m.id !== viewerId && (
+                            <div className="stage-controls">
+                              {m.role === "speaker" && (
+                                <button className="mini" onClick={() => void stageAction(m.id, "demote")} title="Send to audience">↓</button>
+                              )}
+                              <button className="mini" onClick={() => void stageAction(m.id, m.muted ? "unmute" : "mute")} title={m.muted ? "Unmute" : "Mute"}>
+                                {m.muted ? <MicOffIcon width={12} height={12} /> : <MicOnIcon width={12} height={12} />}
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </>
+              )}
+
+              {canBroadcast && !isOnStage && (
+                <p className="meta">You are in the audience. Raise a hand and the host can bring you up.</p>
+              )}
+            </section>
+          )}
+
+          {/* Audience: faces, not a strip of names. A room with forty listeners
+              should look like forty people, not like a list of forty strings. */}
+          {canSpeak && (
+            <section className="audience" aria-label="Audience">
+              <div className="stage-head">
+                <span className="eyebrow"><UsersIcon width={13} height={13} /> Listening · {audience.length}</span>
+              </div>
+              {audience.length === 0 ? (
+                <p className="meta">No one is listening yet. Share the room to fill it.</p>
+              ) : (
+                <div className="audience-grid">
+                  {audience.map((a) => (
+                    <span key={a.id} className={`audience-face${a.handRaised ? " hand" : ""}`} title={`${a.id === viewerId ? "You" : a.displayName}${a.handRaised ? " · hand raised" : ""}`}>
+                      <Avatar name={a.displayName} url={a.avatarUrl} seed={a.id} size="sm" />
+                      {a.handRaised && <span className="audience-hand" aria-hidden><HandIcon width={10} height={10} /></span>}
+                    </span>
                   ))}
                 </div>
               )}
+            </section>
+          )}
+
+          {room.audioTrack && (
+            <div className="now-playing">
+              <span className="eq" aria-hidden="true"><i /><i /><i /></span>
+              <span className="grow" style={{ minWidth: 0 }}>
+                <span style={{ display: "block", fontWeight: 600 }} className="truncate">{room.audioTrack.title}</span>
+                {room.audioTrack.artist && <span className="meta">{room.audioTrack.artist}</span>}
+              </span>
+              <span className="meta">{room.state === "live" ? "Live" : "Queued"}</span>
             </div>
           )}
 
-          {/* Broadcast mode: a listener can still ask to speak and be brought up. */}
-          {canBroadcast && !isOnStage && (
-            <p className="meta">You are in the audience. Raise a hand and the host can bring you up.</p>
+          {room.externalUrl && (
+            <p className="meta row" style={{ gap: 4 }}>
+              <LinkIcon width={13} height={13} />
+              {room.playbackMode === "synchronized" ? "Synchronized playback through the licensed service" : "Coordinated — open on the licensed service"}
+              {" "}· <a href={room.externalUrl} target="_blank" rel="noreferrer">open</a>
+            </p>
           )}
-        </section>
+
+          {room.rules && (
+            <details className="studio-rules">
+              <summary>House rules</summary>
+              <p>{room.rules}</p>
+            </details>
+          )}
+        </div>
+      ) : (
+        <div className="studio-chat">
+          <ul className="room-posts">
+            {posts.map((p) => (
+              <li key={p.id} className="room-post">
+                <div className="meta row" style={{ gap: 6 }}>
+                  <strong>{p.author.displayName}</strong>
+                  {p.author.kind !== "person" && <span className="host-tag"><ShieldIcon width={11} height={11} /> Official host</span>}
+                  <span className="muted">{new Date(p.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</span>
+                </div>
+                {p.hidden && !revealed.has(p.id) ? (
+                  <button className="spoiler" onClick={() => setRevealed((s) => new Set(s).add(p.id))}>Spoiler — tap to reveal</button>
+                ) : (<p>{p.body}</p>)}
+              </li>
+            ))}
+            {posts.length === 0 && <li className="empty"><p>No messages yet. Say hello.</p></li>}
+          </ul>
+        </div>
       )}
+
+      {room.isTicketed && ticket?.status !== "granted" && (
+        <TicketPanel room={room} onBuy={() => void buyTicket()} />
+      )}
+
+      {message && <p className="meta row" style={{ gap: 4 }}><CheckIcon width={13} height={13} /> {message}</p>}
+      {error && <p className="error" role="alert">{error}</p>}
 
       {/* Floating energy bursts. */}
       <div className="burst-layer" aria-hidden="true">
@@ -729,88 +913,7 @@ export function RoomStudio({ roomId, viewerId, viewerName, onBack, onLeft }: Pro
         ))}
       </div>
 
-      {/* Reaction bar + mic share one dock that stays in reach while the room
-          scrolls. The mic is the control you must never have to hunt for, and
-          reactions belong next to it, not above it. */}
-      <div className="studio-dock">
-        <div className="react-bar" role="group" aria-label="Reactions">
-          {REACTIONS.map((r) => (
-            <button key={r.id} className="react-emoji" onClick={() => void react(r.id)} aria-label={`React ${r.label}`}>
-              <GiftArt id={r.id} size={26} />
-            </button>
-          ))}
-          <button className="react-emoji gift" onClick={() => setGifting(true)} aria-label="Send a gift"><CheerIcon width={18} height={18} /></button>
-          <button className="react-emoji gift" onClick={() => setPaidGifting(true)} aria-label="Send a paid gift"><GiftIcon width={18} height={18} /></button>
-        </div>
-
-        {/* One row, always the same height: the mic, the hand, the people count
-            and one More. A wrapping row of every control made the dock four rows
-            tall, and because it sticks to the bottom of the scroll it then sat
-            over the stage and the conversation. */}
-        <div className="studio-controls">
-          {(isOnStage || isHost) && canSpeak && (
-            <button
-              className={`btn mic-btn${micOn ? " live" : ""}`}
-              onClick={() => void toggleMic()}
-              aria-pressed={micOn}
-              title={micOn ? "Mute your microphone" : "Turn your microphone on"}
-            >
-              {micOn ? <MicOnIcon width={17} height={17} /> : <MicOffIcon width={17} height={17} />}
-              <span className="mic-btn-label">{micOn ? "Mic on" : "Mic off"}</span>
-              <span className="mic-meter" aria-hidden="true">
-                <span className="mic-meter-fill" style={{ width: `${micOn ? micLevel : 0}%` }} />
-              </span>
-            </button>
-          )}
-          {/* A listener has no mic. They ask to speak, and the host decides —
-              the same door Clubhouse and Spaces use. When the host has closed
-              the queue, the button is replaced by the reason. */}
-          {!isOnStage && canSpeak && (
-            room.allowHands ? (
-              <button
-                className={`btn raise-hand${audience.find((a) => a.id === viewerId)?.handRaised ? " waiting" : ""}`}
-                onClick={() => void raiseHand(!audience.find((a) => a.id === viewerId)?.handRaised)}
-                title={audience.find((a) => a.id === viewerId)?.handRaised ? "Lower your hand" : "Ask to speak"}
-              >
-                <HandIcon width={16} height={16} />
-                <span>{audience.find((a) => a.id === viewerId)?.handRaised ? "Hand raised" : "Raise hand"}</span>
-              </button>
-            ) : (
-              <span className="meta hand-closed"><HandIcon width={14} height={14} /> Hand raising is off</span>
-            )
-          )}
-          <button
-            className="btn ghost"
-            onClick={() => setPeople(true)}
-            aria-label={`People, ${stage.length + audience.length} in the room`}
-            title="People in the room"
-          >
-            <UsersIcon width={15} height={15} /> {stage.length + audience.length}
-          </button>
-          {!joined ? (
-            <button className="btn" onClick={() => void join()} disabled={busy}>Join</button>
-          ) : (
-            <button className="btn" onClick={() => void leaveRoom()}><LogOutIcon width={15} height={15} /> Leave</button>
-          )}
-          <button className="btn ghost icon-only" onClick={() => setMore(true)} title="More" aria-label="More controls">
-            <MoreIcon width={17} height={17} />
-          </button>
-        </div>
-        {/* Only when it says something the button does not. The mic button
-            already reads "Mic off", and when there is an error the notice below
-            is the useful message. */}
-        {canSpeak && isOnStage && micOn && !micError && (
-          <p className="meta mic-state">You are on the stage — everyone can hear you.</p>
-        )}
-        {canSpeak && !isOnStage && audience.find((a) => a.id === viewerId)?.handRaised && (
-          <p className="meta mic-state">Hand raised — the host decides who speaks.</p>
-        )}
-        {micError && <div className="notice">{micError}</div>}
-      </div>
-
-      {/* Host: the hand queue, and the switch that turns it on and off. This
-          stays visible even when no hand is up, because the switch is the point:
-          Clubhouse lets a host close the queue, and the audience is told. */}
+      {/* Host: the hand queue. */}
       {isHost && canSpeak && (
         <div className="card hands">
           <div className="row spread">
@@ -826,10 +929,10 @@ export function RoomStudio({ roomId, viewerId, viewerName, onBack, onLeft }: Pro
           {!room.allowHands && <p className="meta">Hand raising is off. The audience can see this.</p>}
           {audience.filter((a) => a.handRaised).map((a) => (
             <div key={a.id} className="row spread">
-              <span>@{a.handle}</span>
+              <span className="truncate">@{a.handle}</span>
               <span className="people-actions">
                 <button className="btn small primary" onClick={() => void stageAction(a.id, "promote")}>Invite to speak</button>
-                <button className="mini" onClick={() => void stageAction(a.id, "decline")} title="Decline" aria-label={`Decline ${a.handle}`}>✕</button>
+                <button className="mini" onClick={() => void stageAction(a.id, "decline")} title="Decline" aria-label={`Decline ${a.handle}`}><CloseIcon width={12} height={12} /></button>
               </span>
             </div>
           ))}
@@ -839,67 +942,89 @@ export function RoomStudio({ roomId, viewerId, viewerName, onBack, onLeft }: Pro
         </div>
       )}
 
-      {room.audioTrack && (
-        <div className="now-playing">
-          <span className="eq" aria-hidden="true"><i /><i /><i /></span>
-          <span className="grow" style={{ minWidth: 0 }}>
-            <span style={{ display: "block", fontWeight: 600 }} className="truncate">{room.audioTrack.title}</span>
-            {room.audioTrack.artist && <span className="meta">{room.audioTrack.artist}</span>}
-          </span>
-          <span className="meta">{room.state === "live" ? "Live" : "Queued"}</span>
+      {/* The dock: composer when the chat is open, reactions when the stage is,
+          and one fixed row of controls underneath. It is sticky, so the mic is
+          always reachable and never covers the stage. */}
+      <div className="studio-dock">
+        {panel === "chat" ? (
+          <div className="composer">
+            <input className="input" value={draft} placeholder="Add to the conversation" aria-label="Message"
+              onChange={(e) => setDraft(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") void send(); }} />
+            <button className="btn small" onClick={send} disabled={busy || !draft.trim()}>Send</button>
+          </div>
+        ) : (
+          <div className="react-bar" role="group" aria-label="Reactions">
+            {REACTIONS.slice(0, 5).map((r) => (
+              <button key={r.id} className="react-emoji" onClick={() => void react(r.id)} aria-label={`React ${r.label}`}>
+                <GiftArt id={r.id} size={24} />
+              </button>
+            ))}
+            <button className="react-emoji gift" onClick={() => setGifting(true)} aria-label="Send a gift"><CheerIcon width={18} height={18} /></button>
+            <button className="react-emoji gift" onClick={() => setPaidGifting(true)} aria-label="Send a paid gift"><GiftIcon width={18} height={18} /></button>
+          </div>
+        )}
+
+        <div className="studio-controls">
+          {(isOnStage || isHost) && canSpeak ? (
+            <button
+              className={`mic-btn${micOn ? " live" : ""}`}
+              onClick={() => void toggleMic()}
+              aria-pressed={micOn}
+              title={micOn ? "Mute your microphone" : "Turn your microphone on"}
+            >
+              <span className="mic-btn-icon">{micOn ? <MicOnIcon width={18} height={18} /> : <MicOffIcon width={18} height={18} />}</span>
+              <span className="mic-meter" aria-hidden="true">
+                <span className="mic-meter-fill" style={{ width: `${micOn ? micLevel : 0}%` }} />
+              </span>
+            </button>
+          ) : null}
+
+          {!isOnStage && canSpeak && !joined && (
+            <button className="btn primary" onClick={() => void join()} disabled={busy}>Join room</button>
+          )}
+          {!isOnStage && canSpeak && joined && (
+            room.allowHands ? (
+              <button
+                className={`btn raise-hand${audience.find((a) => a.id === viewerId)?.handRaised ? " waiting" : ""}`}
+                onClick={() => void raiseHand(!audience.find((a) => a.id === viewerId)?.handRaised)}
+                title={audience.find((a) => a.id === viewerId)?.handRaised ? "Lower your hand" : "Ask to speak"}
+              >
+                <HandIcon width={16} height={16} />
+                <span className="raise-hand-label">{audience.find((a) => a.id === viewerId)?.handRaised ? "Hand raised" : "Raise hand"}</span>
+              </button>
+            ) : (
+              <span className="meta hand-closed"><HandIcon width={14} height={14} /> Hands off</span>
+            )
+          )}
+
+          <button
+            className="dock-icon"
+            onClick={() => setPeople(true)}
+            aria-label={`People, ${stage.length + audience.length} in the room`}
+            title="People in the room"
+          >
+            <UsersIcon width={17} height={17} />
+            <span className="dock-badge">{stage.length + audience.length}</span>
+          </button>
+
+          <button className="dock-icon" onClick={() => setMore(true)} title="More" aria-label="More controls">
+            <MoreIcon width={18} height={18} />
+          </button>
+
+          {joined && (
+            <button className="btn ghost dock-leave" onClick={() => void leaveRoom()}>
+              <LogOutIcon width={15} height={15} /> Leave
+            </button>
+          )}
         </div>
-      )}
 
-      {room.externalUrl && (
-        <p className="meta row" style={{ gap: 4 }}>
-          <LinkIcon width={13} height={13} />
-          {room.playbackMode === "synchronized" ? "Synchronized playback through the licensed service" : "Coordinated — open on the licensed service"}
-          {" "}· <a href={room.externalUrl} target="_blank" rel="noreferrer">open</a>
-        </p>
-      )}
-
-      {room.isTicketed && ticket?.status !== "granted" && (
-        <TicketPanel room={room} onBuy={() => void buyTicket()} />
-      )}
-
-      {message && <p className="meta row" style={{ gap: 4 }}><CheckIcon width={13} height={13} /> {message}</p>}
-      {error && <p className="error" role="alert">{error}</p>}
-
-      {/* Audience. */}
-      <section className="audience" aria-label="Audience">
-        <span className="eyebrow"><UsersIcon width={13} height={13} /> Audience · {audience.length}</span>
-        <div className="audience-strip">
-          {audience.map((a) => (
-            <span key={a.id} className="audience-chip" title={`@${a.handle}`}>
-              {a.handRaised && <HandIcon width={11} height={11} />}
-              {a.id === viewerId ? "You" : a.displayName}
-            </span>
-          ))}
-          {audience.length === 0 && <span className="meta">No one in the audience yet.</span>}
-        </div>
-      </section>
-
-      {/* Chat. */}
-      <ul className="room-posts">
-        {posts.map((p) => (
-          <li key={p.id} className="room-post">
-            <div className="meta row" style={{ gap: 6 }}>
-              <strong>{p.author.displayName}</strong>
-              {p.author.kind !== "person" && <span className="host-tag"><ShieldIcon width={11} height={11} /> Official host</span>}
-              <span className="muted">{new Date(p.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</span>
-            </div>
-            {p.hidden && !revealed.has(p.id) ? (
-              <button className="spoiler" onClick={() => setRevealed((s) => new Set(s).add(p.id))}>Spoiler — tap to reveal</button>
-            ) : (<p>{p.body}</p>)}
-          </li>
-        ))}
-        {posts.length === 0 && <li className="empty"><p>No messages yet. Say hello.</p></li>}
-      </ul>
-
-      <div className="composer">
-        <input className="input" value={draft} placeholder="Add to the conversation" aria-label="Message"
-          onChange={(e) => setDraft(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") void send(); }} />
-        <button className="btn small" onClick={send} disabled={busy || !draft.trim()}>Send</button>
+        {micError && <div className="notice">{micError}</div>}
+        {canSpeak && isOnStage && micOn && !micError && (
+          <p className="meta mic-state">Live on stage — everyone can hear you.</p>
+        )}
+        {canSpeak && !isOnStage && audience.find((a) => a.id === viewerId)?.handRaised && (
+          <p className="meta mic-state">Hand raised — the host decides who speaks.</p>
+        )}
       </div>
 
       {gifting && <GiftSheet roomId={room.id} authorName={room.host.displayName} onClose={() => setGifting(false)} onSent={load} />}

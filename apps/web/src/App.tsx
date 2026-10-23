@@ -162,7 +162,11 @@ export function App() {
   }, [me, inviteToken, acceptInvite]);
 
   // A committed change elsewhere refreshes what this client is looking at.
-  useRealtime(() => {
+  useRealtime((event) => {
+    // The count moves on the frame itself, so the label is live even while the
+    // counts request is in flight. The refetch below is only reconciliation —
+    // it is what keeps two open tabs agreeing after a read on the other one.
+    if (event.type === "notification.created") setUnread((n) => n + 1);
     setRefreshKey((k) => k + 1);
     void Promise.all([
       api<{ unread: number }>("/v1/notifications/unread-count"),
@@ -171,6 +175,12 @@ export function App() {
       .then(([n, m]) => setUnread(n.unread + m.unread))
       .catch(() => undefined);
   });
+
+  // The tab label carries the same count as the badge, so an unread message in
+  // a background tab is visible without switching to it.
+  useEffect(() => {
+    document.title = unread > 0 ? `(${unread}) Vibe` : "Vibe";
+  }, [unread]);
 
   useEffect(() => {
     const saved = localStorage.getItem("vibe.theme");
@@ -412,6 +422,7 @@ export function App() {
               <span>
                 <PlusIcon width={22} height={22} />
               </span>
+              <em className="create-label">Create</em>
             </button>
             <NavButton
               id="play"

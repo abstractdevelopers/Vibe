@@ -95,38 +95,38 @@
       },
       {
         "kind": "text-overlap",
-        "el": "span.rail-battle-title <> label.",
-        "detail": "184x10"
+        "el": "span.creator-handle <> button.btn primary block",
+        "detail": "62x17"
       },
       {
         "kind": "text-overlap",
-        "el": "span.rail-battle-meta <> button.btn primary block",
-        "detail": "184x24"
+        "el": "button.feed-author <> p.eyebrow",
+        "detail": "83x5"
       },
       {
         "kind": "text-overlap",
-        "el": "h2.rail-title <> p.eyebrow",
-        "detail": "131x8"
+        "el": "p.post-body <> strong.",
+        "detail": "63x20"
       },
       {
         "kind": "text-overlap",
-        "el": "span.creator-name <> span.meta",
-        "detail": "81x4"
+        "el": "p.post-body <> span.meta",
+        "detail": "122x18"
       },
       {
         "kind": "text-overlap",
-        "el": "span.creator-name <> span.meta",
-        "detail": "7x4"
+        "el": "p.post-body <> strong.",
+        "detail": "37x20"
       },
       {
         "kind": "text-overlap",
-        "el": "span.creator-name <> span.meta",
-        "detail": "7x4"
+        "el": "p.post-body <> span.meta",
+        "detail": "85x18"
       },
       {
         "kind": "text-overlap",
         "el": "button.feed-author <> span.meta",
-        "detail": "26x6"
+        "detail": "26x11"
       }
     ]
   }

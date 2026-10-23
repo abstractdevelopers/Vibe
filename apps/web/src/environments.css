@@ -197,6 +197,7 @@
   align-self: flex-start;
 }
 .play-segment {
+  position: relative;
   padding: 7px 18px;
   border-radius: var(--radius-pill);
   font-size: var(--text-supporting);
@@ -207,6 +208,12 @@
   cursor: pointer;
   font-family: inherit;
   transition: color var(--motion-fast) var(--ease-out), background var(--motion-fast) var(--ease-out);
+}
+/* The switcher reads compact; the hit box is a full 44px tall. */
+.play-segment::after {
+  content: "";
+  position: absolute;
+  inset: -5px 0;
 }
 .play-segment:hover { color: var(--text); }
 .play-segment.active {

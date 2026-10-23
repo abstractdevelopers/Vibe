@@ -5,7 +5,10 @@ import { EmptyState } from "../components/EmptyState";
 import {
   BellIcon,
   CalendarIcon,
+  ChatIcon,
   CheckIcon,
+  GiftIcon,
+  HeartIcon,
   MoneyIcon,
   UsersIcon,
 } from "../components/Icons";
@@ -104,6 +107,13 @@ export function InboxScreen({ refreshKey, onChanged }: Props) {
   );
 }
 
+/** Who did it, from the payload the emitter already carries. Emitters are not
+ *  uniform: social writes `actorHandle`, gifts and games write `from`. */
+function actor(n: Notification): string {
+  const handle = n.payload?.actorHandle ?? n.payload?.from;
+  return typeof handle === "string" && handle ? `@${handle}` : "Someone";
+}
+
 function describe(n: Notification): { Icon: typeof BellIcon; text: string; tone: string } {
   const place = typeof n.payload?.title === "string" ? n.payload.title : "a plan";
   switch (n.type) {
@@ -120,6 +130,16 @@ function describe(n: Notification): { Icon: typeof BellIcon; text: string; tone:
       return { Icon: MoneyIcon, text: "A shared expense payment was reported — it needs verification", tone: "coral" };
     case "payment.verified":
       return { Icon: MoneyIcon, text: "A payment was verified on a shared expense", tone: "violet" };
+    case "follow.new":
+      return { Icon: UsersIcon, text: `${actor(n)} started following you`, tone: "violet" };
+    case "post.reaction":
+      return { Icon: HeartIcon, text: `${actor(n)} liked your post`, tone: "coral" };
+    case "comment.reply":
+      return { Icon: ChatIcon, text: `${actor(n)} replied to your comment`, tone: "violet" };
+    case "comment.mention":
+      return { Icon: ChatIcon, text: `${actor(n)} commented on your post`, tone: "violet" };
+    case "gift.received":
+      return { Icon: GiftIcon, text: `${actor(n)} sent you a gift`, tone: "coral" };
     default:
       return { Icon: BellIcon, text: n.type.replace(/[._]/g, " "), tone: "violet" };
   }

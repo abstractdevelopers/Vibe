@@ -4,7 +4,14 @@ import { ApiError } from "../errors.js";
 import { queryMany, queryOne, withTransaction } from "../db.js";
 import { parse, publicUser, requireUser, type AppContext } from "../http.js";
 import { newId } from "../ids.js";
-import { walletBalance, lockWalletAccount, postBattleStake, postBattlePayout, postBattleRefund } from "../money/ledger.js";
+import {
+  walletBalance,
+  lockWalletAccount,
+  postBattleStake,
+  postBattlePayout,
+  postBattleRefund,
+  postBattleBoost,
+} from "../money/ledger.js";
 import { trackSafe } from "./analytics.js";
 
 /**
@@ -22,6 +29,21 @@ import { trackSafe } from "./analytics.js";
  */
 
 const STAKE_MAX_MINOR = 5_000_000; // ₦50,000, a guard rail, not a product limit
+
+/**
+ * The venues a battle can be fought in. The ids are stable because the client
+ * renders a different arena for each — a colosseum bowl, a desert pit, a
+ * rooftop, a quarry. Adding one means adding its scene on the client too.
+ */
+export const BATTLE_STADIUMS = ["colosseum", "dunes", "lagoon", "neon", "rooftop", "quarry"] as const;
+export type BattleStadium = (typeof BATTLE_STADIUMS)[number];
+
+/** A stable venue for a battle that did not choose one. */
+export function stadiumForBattle(id: string): BattleStadium {
+  let h = 0;
+  for (let i = 0; i < id.length; i++) h = (h * 31 + id.charCodeAt(i)) >>> 0;
+  return BATTLE_STADIUMS[h % BATTLE_STADIUMS.length]!;
+}
 
 const createSchema = z.object({
   title: z.string().trim().min(3).max(120),
@@ -47,6 +69,12 @@ const createSchema = z.object({
     .optional(),
   circleId: z.string().uuid().optional(),
   stakeMinor: z.number().int().min(0).max(STAKE_MAX_MINOR).default(0),
+  // The arena is presentation, but it is part of the creation decision: a host
+  // picks the venue, the same way they pick the title.
+  stadium: z.enum(BATTLE_STADIUMS).optional(),
+  // A round has a length. `endsAt` still wins when supplied, so a scheduled
+  // battle can end at a specific wall-clock time.
+  intervalSeconds: z.number().int().min(60).max(86_400).optional(),
   endsAt: z.string().datetime().optional(),
 });
 
@@ -68,6 +96,8 @@ interface BattleRow {
   ends_at: Date | null;
   closed_at: Date | null;
   created_at: Date;
+  stadium: BattleStadium;
+  interval_seconds: number;
   image_url: string | null;
   character_a_url: string | null;
   character_b_url: string | null;
@@ -80,6 +110,9 @@ interface SideTally {
   /** Distinct people who commented; this is what the score counts. */
   commenters: number;
   gifts: number;
+  /** Paid punches and the points they bought. */
+  boosts: number;
+  boostPoints: number;
   points: number;
   backers: number;
   stakedMinor: number;
@@ -94,6 +127,20 @@ export const BATTLE_GIFT_KINDS = [
 ] as const;
 
 const BATTLE_GIFT_IDS = BATTLE_GIFT_KINDS.map((g) => g.id) as [string, ...string[]];
+
+/**
+ * The paid punches. A boost is the one way money moves a score, so it is
+ * priced in Vibe Yens, capped per person per battle, and booked on the ledger.
+ * Prices are minor units: ₦50, ₦150, ₦500.
+ */
+export const BATTLE_BOOSTS = [
+  { id: "jab", label: "Jab", priceMinor: 5_000, points: 5, cap: 6 },
+  { id: "hook", label: "Hook", priceMinor: 15_000, points: 18, cap: 4 },
+  { id: "haymaker", label: "Haymaker", priceMinor: 50_000, points: 70, cap: 2 },
+] as const;
+
+const BATTLE_BOOST_IDS = BATTLE_BOOSTS.map((b) => b.id) as [string, ...string[]];
+const BOOST_BY_ID = new Map<string, (typeof BATTLE_BOOSTS)[number]>(BATTLE_BOOSTS.map((b) => [b.id, b]));
 
 interface BackerRow {
   id: string;
@@ -123,7 +170,10 @@ function projectedShare(myStake: number, sideStaked: number, pot: number): numbe
 
 /** The tallies for both sides, computed from the vote, stake, comment and gift rows. */
 async function tallies(ctx: AppContext, battleId: string): Promise<{ a: SideTally; b: SideTally }> {
-  const rows = await queryMany<{ side: string; votes: string; backers: string; staked: string; comments: string; commenters: string; gifts: string }>(
+  const rows = await queryMany<{
+    side: string; votes: string; backers: string; staked: string;
+    comments: string; commenters: string; gifts: string; boosts: string; boost_points: string;
+  }>(
     ctx.pool,
     `SELECT s.side,
             COALESCE(v.votes, '0') AS votes,
@@ -131,14 +181,18 @@ async function tallies(ctx: AppContext, battleId: string): Promise<{ a: SideTall
             COALESCE(p.staked, '0') AS staked,
             COALESCE(c.comments, '0') AS comments,
             COALESCE(c.commenters, '0') AS commenters,
-            COALESCE(g.gifts, '0') AS gifts
+            COALESCE(g.gifts, '0') AS gifts,
+            COALESCE(bo.boosts, '0') AS boosts,
+            COALESCE(bo.points, '0') AS boost_points
        FROM (SELECT 'a' AS side UNION SELECT 'b') s
        LEFT JOIN (SELECT side, COUNT(*)::text AS votes FROM battle_votes WHERE battle_id = $1 GROUP BY side) v ON v.side = s.side
        LEFT JOIN (SELECT side, COUNT(*)::text AS backers, COALESCE(SUM(stake_minor),0)::text AS staked
                     FROM battle_participants WHERE battle_id = $1 AND stake_minor > 0 GROUP BY side) p ON p.side = s.side
        LEFT JOIN (SELECT side, COUNT(*)::text AS comments, COUNT(DISTINCT user_id)::text AS commenters
                     FROM battle_comments WHERE battle_id = $1 GROUP BY side) c ON c.side = s.side
-       LEFT JOIN (SELECT side, COUNT(*)::text AS gifts FROM battle_gifts WHERE battle_id = $1 GROUP BY side) g ON g.side = s.side`,
+       LEFT JOIN (SELECT side, COUNT(*)::text AS gifts FROM battle_gifts WHERE battle_id = $1 GROUP BY side) g ON g.side = s.side
+       LEFT JOIN (SELECT side, COUNT(*)::text AS boosts, COALESCE(SUM(points),0)::text AS points
+                    FROM battle_boosts WHERE battle_id = $1 GROUP BY side) bo ON bo.side = s.side`,
     [battleId],
   );
   const byside: Record<string, SideTally> = {};
@@ -147,24 +201,33 @@ async function tallies(ctx: AppContext, battleId: string): Promise<{ a: SideTall
     const comments = Number(r.comments);
     const commenters = Number(r.commenters);
     const gifts = Number(r.gifts);
+    const boosts = Number(r.boosts);
+    const boostPoints = Number(r.boost_points);
     byside[r.side] = {
       side: r.side as "a" | "b",
       votes,
       comments,
       commenters,
       gifts,
+      boosts,
+      boostPoints,
       // The score the crowd moves: a vote is one point, each *person* who
-      // comments is one, and a gift is two. Counting one user's repeated
-      // comments would let a single account decide the winner.
-      points: votes + commenters + gifts * 2,
+      // comments is one, a gift is two, and a paid punch is whatever it bought.
+      // Counting one user's repeated comments would let a single account decide
+      // the winner, which is why commenters, not comments, is the term.
+      points: votes + commenters + gifts * 2 + boostPoints,
       backers: Number(r.backers),
       stakedMinor: Number(r.staked),
     };
   }
   return {
-    a: byside.a ?? { side: "a", votes: 0, comments: 0, commenters: 0, gifts: 0, points: 0, backers: 0, stakedMinor: 0 },
-    b: byside.b ?? { side: "b", votes: 0, comments: 0, commenters: 0, gifts: 0, points: 0, backers: 0, stakedMinor: 0 },
+    a: byside.a ?? emptyTally("a"),
+    b: byside.b ?? emptyTally("b"),
   };
+}
+
+function emptyTally(side: "a" | "b"): SideTally {
+  return { side, votes: 0, comments: 0, commenters: 0, gifts: 0, boosts: 0, boostPoints: 0, points: 0, backers: 0, stakedMinor: 0 };
 }
 
 async function battleView(ctx: AppContext, row: BattleRow, viewerId: string) {
@@ -216,6 +279,11 @@ async function battleView(ctx: AppContext, row: BattleRow, viewerId: string) {
     "SELECT kind FROM battle_gifts WHERE battle_id = $1 AND user_id = $2",
     [row.id, viewerId],
   );
+  const myBoosts = await queryMany<{ kind: string }>(
+    ctx.pool,
+    "SELECT kind FROM battle_boosts WHERE battle_id = $1 AND user_id = $2",
+    [row.id, viewerId],
+  );
   return {
     id: row.id,
     title: row.title,
@@ -231,6 +299,12 @@ async function battleView(ctx: AppContext, row: BattleRow, viewerId: string) {
     potMinor: pot,
     endsAt: row.ends_at,
     createdAt: row.created_at,
+    // Where the fight is and how long a round lasts. The client draws a
+    // different arena per stadium and counts the round down from `endsAt`.
+    stadium: row.stadium ?? stadiumForBattle(row.id),
+    intervalSeconds: row.interval_seconds ?? 600,
+    boostCatalogue: BATTLE_BOOSTS,
+    myBoosts,
     // `tally` stays the raw vote counts so a vote never silently changes meaning;
     // `score` is the crowd's total, which is what decides a winner.
     tally: { a: t.a.votes, b: t.b.votes },
@@ -245,6 +319,7 @@ async function battleView(ctx: AppContext, row: BattleRow, viewerId: string) {
     // Zero until they stake, and labelled as an estimate on the screen.
     myProjectedMinor: row.status === "open" ? projectedShare(myStake, mySideStaked, pot) : 0,
     myGifts: myGifts.map((g) => g.kind),
+    myBoostCount: myBoosts.length,
     comments: comments.map((c) => ({
       id: c.id,
       side: c.side,
@@ -258,6 +333,22 @@ async function battleView(ctx: AppContext, row: BattleRow, viewerId: string) {
       user: publicUser(b),
     })),
   };
+}
+
+/**
+ * A round ends when its clock does, not when someone remembers to close it.
+ * Reading a battle therefore settles it if it is due. `settle` locks the row and
+ * returns immediately if another request got there first, so this is safe to
+ * call on every read.
+ */
+async function expireIfDue(ctx: AppContext, row: BattleRow): Promise<BattleRow> {
+  if (row.status !== "open" || !row.ends_at) return row;
+  if (new Date(row.ends_at).getTime() > Date.now()) return row;
+  const t = await tallies(ctx, row.id);
+  const winner: "a" | "b" | "tie" = t.a.points === t.b.points ? "tie" : t.a.points > t.b.points ? "a" : "b";
+  await settle(ctx, row, winner);
+  const settled = await queryOne<BattleRow>(ctx.pool, "SELECT * FROM battles WHERE id = $1", [row.id]);
+  return settled ?? row;
 }
 
 /** Resolve the winning side, then pay the pot to the backers of that side. */
@@ -327,6 +418,8 @@ async function settle(ctx: AppContext, battle: BattleRow, winner: "a" | "b" | "t
 
     await tx.query("UPDATE battles SET status = 'closed', winner = $2, closed_at = now() WHERE id = $1", [row.id, winner]);
   });
+  // The map and every open arena show a result without a reload.
+  ctx.hub.publishBroadcast({ type: "battles.changed", entityId: battle.id, payload: { battleId: battle.id, change: "closed" } });
 }
 
 export function battleRoutes(ctx: AppContext) {
@@ -342,7 +435,10 @@ export function battleRoutes(ctx: AppContext) {
           LIMIT $2`,
         [q.status ?? null, q.limit],
       );
-      return { battles: await Promise.all(rows.map((r) => battleView(ctx, r, user.id))) };
+      // A round that ran out of time reads as finished, even before anyone
+      // opens it.
+      const current = await Promise.all(rows.map((r) => expireIfDue(ctx, r)));
+      return { battles: await Promise.all(current.map((r) => battleView(ctx, r, user.id))) };
     });
 
     app.post("/v1/battles", async (req, reply) => {
@@ -361,12 +457,18 @@ export function battleRoutes(ctx: AppContext) {
           const balance = await walletBalance(tx as unknown as AppContext["pool"], user.id, "NGN");
           if (balance.balanceMinor < input.stakeMinor) throw ApiError.badRequest("Not enough Vibe Yens for this stake");
         }
+        const interval = input.intervalSeconds ?? 600;
+        const endsAt = input.endsAt
+          ? new Date(input.endsAt)
+          : new Date(Date.now() + interval * 1000);
         await tx.query(
-          `INSERT INTO battles (id, host_id, circle_id, title, topic, side_a, side_b, image_url, character_a_url, character_b_url, stake_minor, currency, pot_minor, ends_at)
-           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,'NGN',$12,$13)`,
+          `INSERT INTO battles (id, host_id, circle_id, title, topic, side_a, side_b, image_url, character_a_url, character_b_url,
+                                stake_minor, currency, pot_minor, ends_at, stadium, interval_seconds)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,'NGN',$12,$13,$14,$15)`,
           [id, user.id, input.circleId ?? null, input.title, input.topic ?? null, input.sideA, input.sideB,
            input.imageUrl ?? null, input.characterAUrl ?? null, input.characterBUrl ?? null,
-           input.stakeMinor, input.stakeMinor, input.endsAt ? new Date(input.endsAt) : null],
+           input.stakeMinor, input.stakeMinor, endsAt,
+           input.stadium ?? stadiumForBattle(id), interval],
         );
         // The host picks a side and backs it immediately, so their stake leaves
         // the wallet now rather than waiting for a join that may never come.
@@ -488,7 +590,68 @@ export function battleRoutes(ctx: AppContext) {
       const { id } = req.params as { id: string };
       const row = await queryOne<BattleRow>(ctx.pool, "SELECT * FROM battles WHERE id = $1", [id]);
       if (!row) throw ApiError.notFound("That battle does not exist");
-      return { battle: await battleView(ctx, row, user.id) };
+      return { battle: await battleView(ctx, await expireIfDue(ctx, row), user.id) };
+    });
+
+    // A paid punch. It is the one way money moves a score, so it is capped per
+    // person per battle (not per request), priced in Vibe Yens, and booked on
+    // the ledger like any other purchase. The host's own battle is not exempt.
+    app.post("/v1/battles/:id/boosts", async (req, reply) => {
+      const user = await requireUser(ctx, req);
+      const { id } = req.params as { id: string };
+      const input = parse(z.object({ side: z.enum(["a", "b"]), kind: z.enum(BATTLE_BOOST_IDS) }), req.body);
+      const boost = BOOST_BY_ID.get(input.kind)!;
+      if (!ctx.config.WALLET_ENABLED) throw ApiError.badRequest("Vibe Yens are not available right now");
+
+      let points = 0;
+      await withTransaction(ctx.pool, async (tx) => {
+        const res = await tx.query<BattleRow>("SELECT * FROM battles WHERE id = $1 FOR UPDATE", [id]);
+        const battle = res.rows[0];
+        if (!battle) throw ApiError.notFound("That battle does not exist");
+        if (battle.status !== "open") throw ApiError.badRequest("This battle is closed");
+        if (battle.ends_at && new Date(battle.ends_at).getTime() <= Date.now()) {
+          throw ApiError.badRequest("This battle has ended");
+        }
+        const used = await tx.query<{ count: string }>(
+          "SELECT COUNT(*)::text AS count FROM battle_boosts WHERE battle_id = $1 AND user_id = $2 AND kind = $3",
+          [id, user.id, input.kind],
+        );
+        if (Number(used.rows[0]?.count ?? 0) >= boost.cap) {
+          throw ApiError.badRequest(`You have used all ${boost.cap} ${boost.label.toLowerCase()}s in this battle`);
+        }
+
+        // Lock the wallet before reading it: two simultaneous boosts must not
+        // both pass the balance check.
+        await lockWalletAccount(tx, user.id, battle.currency);
+        const balance = await walletBalance(tx as unknown as AppContext["pool"], user.id, battle.currency);
+        if (balance.balanceMinor < boost.priceMinor) {
+          throw ApiError.badRequest("Not enough Vibe Yens for that punch");
+        }
+
+        const boostId = newId();
+        await tx.query(
+          `INSERT INTO battle_boosts (id, battle_id, user_id, side, kind, points, amount_minor, currency)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
+          [boostId, id, user.id, input.side, input.kind, boost.points, boost.priceMinor, battle.currency],
+        );
+        await postBattleBoost(tx, {
+          reference: `BATTLEBOOST-${boostId}`,
+          userId: user.id,
+          amountMinor: boost.priceMinor,
+          currency: battle.currency,
+        });
+        points = boost.points;
+      });
+
+      trackSafe(ctx.pool, {
+        name: "battle_boosted",
+        userId: user.id,
+        properties: { entityType: "battle", entityId: id },
+      });
+      ctx.hub.publishBroadcast({ type: "battles.changed", entityId: id, payload: { battleId: id, change: "boost", side: input.side, points } });
+      reply.code(201);
+      const row = await queryOne<BattleRow>(ctx.pool, "SELECT * FROM battles WHERE id = $1", [id]);
+      return { battle: await battleView(ctx, row!, user.id), points };
     });
 
     // Attack: drop a comment on a side. It is a point for that side, so the

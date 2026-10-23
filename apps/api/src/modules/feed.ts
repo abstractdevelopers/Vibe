@@ -675,7 +675,7 @@ export function feedRoutes(ctx: AppContext) {
       const user = await requireUser(ctx, req);
       const { id } = req.params as { id: string };
       const input = parse(reactionSchema, req.body);
-      await requirePostVisible(ctx, id, user.id);
+      const post = await requirePostVisible(ctx, id, user.id);
       const existing = await queryOne(
         ctx.pool,
         "SELECT 1 FROM reactions WHERE post_id = $1 AND user_id = $2 AND kind = $3",
@@ -695,6 +695,14 @@ export function feedRoutes(ctx: AppContext) {
         input.kind,
       ]);
       trackSafe(ctx.pool, { name: "post_reacted", userId: user.id, properties: { entityType: "post", entityId: id, kind: input.kind } });
+      // Tell the author once, on the reaction that was added. Un-reacting is a
+      // withdrawal, not an event worth a second row.
+      if (post.author_id !== user.id) {
+        await notifyUsers(ctx, [post.author_id], "post.reaction", "post", id, {
+          actorHandle: user.handle,
+          kind: input.kind,
+        });
+      }
       return { reacted: true };
     });
 

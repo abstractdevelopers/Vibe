@@ -18,3 +18,8 @@ apps/api/.data/
 # The deep audit writes one full-page screenshot per sub-page; they are
 # regenerable and large, so only the shallow set stays in the repo.
 artifacts/visual-audit/deep/
+
+# scripts/audit-ui.mjs and scripts/shoot-screens.mjs write a screenshot matrix
+# at four widths; ~25 MB per run and fully regenerable, so they stay out.
+artifacts/screens/
+artifacts/ui-audit/

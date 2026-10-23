@@ -65,6 +65,24 @@ export function probeOverflow() {
   }
 
   // 4. Text overlapping other text (collision).
+  //
+  // Two texts on different layers are not a collision: a sheet sits over the
+  // page while the page keeps its own text at the same coordinates, and the
+  // bottom nav floats over content it is meant to cover. Comparing them
+  // reported dozens of "overlaps" that a screenshot shows are not there. A
+  // layer is the nearest fixed/absolute overlay ancestor; a pair only counts
+  // when both texts live on the same one.
+  const layerOf = (el) => {
+    let n = el;
+    let layer = null;
+    while (n && n !== document.body) {
+      const pos = getComputedStyle(n).position;
+      if (pos === "fixed" || pos === "absolute") layer = n;
+      n = n.parentElement;
+    }
+    return layer;
+  };
+
   const texts = [...document.querySelectorAll("body *")].filter((el) => {
     if (el.children.length > 0) return false;
     const t = (el.textContent || "").trim();
@@ -81,6 +99,11 @@ export function probeOverflow() {
       if (ox > 3 && oy > 3) {
         // Ignore when one contains the other (normal nesting).
         if (texts[i].contains(texts[j]) || texts[j].contains(texts[i])) continue;
+        // Different stacking layers: the overlay paints over the page by
+        // design, so this is not a collision.
+        const la = layerOf(texts[i]);
+        const lb = layerOf(texts[j]);
+        if (la !== lb) continue;
         findings.push({
           kind: "text-overlap",
           el: `${desc(texts[i])} <> ${desc(texts[j])}`,

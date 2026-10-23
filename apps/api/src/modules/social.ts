@@ -3,6 +3,7 @@ import type { FastifyInstance } from "fastify";
 import { ApiError } from "../errors.js";
 import { queryMany, queryOne } from "../db.js";
 import { parse, publicUser, requireUser, type AppContext, type UserLike } from "../http.js";
+import { notifyUsers } from "./notifications.js";
 
 const followSchema = z.object({ followeeId: z.string().uuid() });
 
@@ -27,11 +28,28 @@ export function socialRoutes(ctx: AppContext) {
       if (blocked) throw ApiError.forbidden("You cannot follow this account");
       // Private profiles require approval before the follow becomes accepted.
       const state = target.profile_audience === "private" ? "pending" : "accepted";
+      const before = await queryOne<{ state: string }>(
+        ctx.pool,
+        "SELECT state FROM follows WHERE follower_id = $1 AND followee_id = $2",
+        [user.id, input.followeeId],
+      );
       await ctx.pool.query(
         `INSERT INTO follows (follower_id, followee_id, state) VALUES ($1, $2, $3)
          ON CONFLICT (follower_id, followee_id) DO UPDATE SET state = EXCLUDED.state`,
         [user.id, input.followeeId, state],
       );
+      // A follow is the one social event a person expects to hear about, and it
+      // is dormant until they open their profile otherwise. `notifyUsers`
+      // publishes it over realtime as well, so the badge moves in place.
+      // Only on a change: a double tap or a retry re-posts the same follow and
+      // must not write a second row.
+      if (!before || before.state !== state) {
+        await notifyUsers(ctx, [input.followeeId], "follow.new", "user", user.id, {
+          actorHandle: user.handle,
+          actorName: user.displayName,
+          state,
+        });
+      }
       reply.code(201);
       return { state };
     });

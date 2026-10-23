@@ -1,0 +1,354 @@
+/* ==========================================================================
+   Game tables.
+
+   The table is a surface you sit at, not a card you scroll past. Three zones,
+   top to bottom and never overlapping:
+
+     rail    — the world, the pot, the round state
+     seats   — who is here, who is up
+     surface — the board itself
+
+   The previous table put the player list as a stack of `.card` rows above the
+   board and the board inside the same padded column, so the board was pushed
+   below the fold and the seats looked like settings rows. Everything here is
+   scoped to `.table-shell`, so nothing leaks into the rest of Play.
+   ========================================================================== */
+
+.table-shell {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: var(--space-3);
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--border);
+  background:
+    radial-gradient(120% 80% at 50% 0%, var(--felt-accent, transparent) 0%, transparent 62%),
+    linear-gradient(160deg, var(--felt-from, var(--surface-1)), var(--felt-to, var(--surface-0)));
+  overflow: hidden;
+}
+
+/* Faint material so the surface reads as a table, not a coloured box. Each
+   world keeps its own texture — baize, slate, lacquer, neon — the same way the
+   catalogue plate does, so the table and the shelf agree. */
+.table-shell::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0.28;
+  z-index: 0;
+  background-image: repeating-linear-gradient(45deg, rgba(255, 255, 255, 0.05) 0 2px, transparent 2px 5px);
+}
+
+.table-shell.felt-slate::before {
+  background-image:
+    linear-gradient(rgba(255, 255, 255, 0.05) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.05) 1px, transparent 1px);
+  background-size: 28px 28px;
+  opacity: 1;
+}
+
+.table-shell.felt-lacquer::before {
+  background-image: repeating-linear-gradient(115deg, rgba(255, 255, 255, 0.05) 0 1px, transparent 1px 9px);
+  opacity: 1;
+}
+
+.table-shell.felt-neon::before {
+  background-image:
+    radial-gradient(circle at 20% 15%, color-mix(in srgb, var(--felt-accent) 40%, transparent) 0 2px, transparent 2px),
+    radial-gradient(circle at 78% 72%, color-mix(in srgb, var(--felt-accent) 32%, transparent) 0 2px, transparent 2px);
+  background-size: 90px 90px, 120px 120px;
+  opacity: 1;
+}
+
+.table-shell > * { position: relative; z-index: 1; }
+
+.table-rail {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  padding: 0 2px;
+}
+
+.table-rail-world {
+  flex: 0 0 auto;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--felt-accent, var(--accent));
+}
+
+.table-rail-tagline {
+  min-width: 0;
+  flex: 0 1 auto;
+  font-size: var(--text-meta);
+  color: var(--text-muted);
+}
+
+.table-rail-spacer { flex: 1 1 auto; }
+
+.table-rail-pot {
+  flex: 0 0 auto;
+  padding: 3px 9px;
+  border-radius: var(--radius-pill);
+  border: 1px solid color-mix(in srgb, var(--felt-accent, var(--accent)) 45%, transparent);
+  background: rgba(0, 0, 0, 0.28);
+  color: var(--text);
+  font-size: 11px;
+  font-weight: 700;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.table-rail-pot.muted { color: var(--text-muted); border-color: var(--border); }
+
+/* Seats ------------------------------------------------------------------- */
+
+.table-seats {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  padding: 2px 2px 4px;
+  scrollbar-width: none;
+}
+
+.table-seats::-webkit-scrollbar { display: none; }
+
+.table-shell .seat {
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  width: 78px;
+  padding: 8px 6px;
+  border-radius: var(--radius-md);
+  border: 1px solid transparent;
+  background: rgba(0, 0, 0, 0.18);
+  min-width: 0;
+}
+
+.table-shell .seat.is-you { background: rgba(255, 255, 255, 0.06); }
+
+.table-shell .seat.is-turn {
+  border-color: var(--felt-accent, var(--accent));
+  background: color-mix(in srgb, var(--felt-accent, var(--accent)) 16%, transparent);
+}
+
+.table-shell .seat.empty { opacity: 0.4; }
+
+.table-shell .seat-face {
+  width: 38px;
+  height: 38px;
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+}
+
+.table-shell .seat-face .avatar {
+  width: 100%;
+  height: 100%;
+  border-radius: 999px;
+}
+
+.table-shell .seat-name {
+  font-size: 11px;
+  font-weight: 650;
+  max-width: 100%;
+  text-align: center;
+}
+
+.table-shell .seat-meta {
+  font-size: 10px;
+  color: var(--text-muted);
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.table-shell .seat.is-turn .seat-meta { color: var(--felt-accent, var(--accent)); font-weight: 700; }
+
+/* The surface ------------------------------------------------------------- */
+
+.table-surface {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  min-height: 220px;
+  padding: var(--space-3);
+  border-radius: var(--radius-md);
+  background: rgba(0, 0, 0, 0.16);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.table-surface > .stack { display: flex; flex-direction: column; gap: var(--space-3); }
+
+.table-shell .section-title { font-size: var(--text-label); }
+
+/* Lobby */
+.table-lobby {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: var(--space-5) var(--space-3);
+  text-align: center;
+}
+
+.table-lobby-count {
+  margin: 0;
+  font-size: 2.2rem;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+}
+
+.table-lobby-count span { font-size: 1rem; color: var(--text-muted); font-weight: 600; }
+
+.table-lobby-actions {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 8px;
+  width: 100%;
+  max-width: 280px;
+  margin-top: var(--space-3);
+}
+
+/* Winner */
+.table-winner {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: var(--space-4);
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--felt-accent, var(--accent)) 14%, transparent);
+  border: 1px solid color-mix(in srgb, var(--felt-accent, var(--accent)) 40%, transparent);
+}
+
+.table-winner-label {
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.table-winner-name { font-size: var(--text-title); font-weight: 800; letter-spacing: -0.01em; }
+
+.table-winner-pot {
+  font-size: var(--text-meta);
+  font-weight: 700;
+  color: var(--felt-accent, var(--accent));
+  font-variant-numeric: tabular-nums;
+}
+
+/* Boards inside the shell: keep them from outgrowing the surface. */
+.table-surface .hand-grid,
+.table-surface .checker-grid,
+.table-surface .line-grid {
+  max-width: 100%;
+}
+
+.table-surface .hand-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.table-surface .card-button { flex: 0 0 auto; }
+
+@media (max-width: 420px) {
+  .table-shell { padding: var(--space-2); }
+  .table-surface { padding: var(--space-2); }
+  .table-shell .seat { width: 68px; }
+  .table-shell .seat-face { width: 34px; height: 34px; }
+  .table-rail-tagline { display: none; }
+}
+
+/* The wider arcade ------------------------------------------------------- */
+
+.external-row { gap: var(--space-2); }
+
+.external-tile {
+  flex: 0 0 auto;
+  width: 132px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 0 0 8px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border);
+  background: var(--surface-1);
+  color: var(--text);
+  text-decoration: none;
+  overflow: hidden;
+  min-width: 0;
+}
+
+.external-tile:active { transform: scale(0.98); }
+
+.external-tile-shot {
+  position: relative;
+  display: block;
+  width: 100%;
+  aspect-ratio: 16 / 10;
+  background: var(--surface-0);
+  overflow: hidden;
+}
+
+.external-tile-shot img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.external-tile-fallback {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 28px;
+  font-weight: 800;
+  color: var(--text-muted);
+}
+
+.external-tile-out {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  width: 20px;
+  height: 20px;
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.6);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.external-tile-name {
+  padding: 0 8px;
+  font-size: var(--text-meta);
+  font-weight: 650;
+  max-width: 100%;
+}
+
+.external-tile-genre {
+  padding: 0 8px;
+  font-size: 10px;
+  color: var(--text-muted);
+  max-width: 100%;
+}

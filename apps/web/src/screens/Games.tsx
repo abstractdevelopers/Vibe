@@ -6,11 +6,15 @@ import { PlaySegments } from "../components/PlaySegments";
 import { formatMoney } from "../money";
 import { EmptyState } from "../components/EmptyState";
 import { GameArt, GameCover, WORLD_ORDER, worldFor } from "../components/GameArt";
-import { SpinnerIcon, UsersIcon, PlayIcon, RadioIcon, TrophyIcon, SplitIcon, ChevronRightIcon, SearchIcon, CloseIcon } from "../components/Icons";
+import { SpinnerIcon, UsersIcon, PlayIcon, RadioIcon, TrophyIcon, SplitIcon, ChevronRightIcon, SearchIcon, CloseIcon, GlobeIcon } from "../components/Icons";
 import { themeForGame } from "../themes";
 import { applyTheme, pickedTheme, themeMode } from "../theme-runtime";
 import { GAME_RAKE_BPS } from "@vibe/shared";
 import { noteFor } from "../gameInfo";
+// The arcade shelf renders `.external-tile`, which lives in this stylesheet. It
+// was imported only by GameTable, so a session that never opened a table drew
+// the shelf as bare unstyled links — 700px wide and 24px tall.
+import "../game-table.css";
 
 /**
  * Play — the game world.
@@ -64,6 +68,19 @@ interface Session {
 }
 
 
+/** A title from the public catalogue. It is browsable here, played elsewhere. */
+interface ExternalGame {
+  id: string;
+  name: string;
+  blurb: string;
+  genre: string;
+  platform: string;
+  thumbnail: string | null;
+  url: string;
+  publisher: string | null;
+  releaseDate: string | null;
+}
+
 const STAKES = [0, 5_000, 10_000, 20_000, 50_000];
 
 export function GamesScreen({ onBack, viewerId, onOpenBattles }: { onBack?: () => void; viewerId?: string; onOpenBattles?: () => void }) {
@@ -74,6 +91,11 @@ export function GamesScreen({ onBack, viewerId, onOpenBattles }: { onBack?: () =
   const [error, setError] = useState<string | null>(null);
   const [category, setCategory] = useState<string | null>(null);
   const [query, setQuery] = useState("");
+  // The arcade's outer shelf, sourced from a public games catalogue. It is
+  // fetched separately: a slow or unavailable upstream must not stop the
+  // playable tables from loading.
+  const [external, setExternal] = useState<ExternalGame[] | null>(null);
+  const [externalDegraded, setExternalDegraded] = useState(false);
 
   const load = useCallback(async () => {
     try {
@@ -93,6 +115,15 @@ export function GamesScreen({ onBack, viewerId, onOpenBattles }: { onBack?: () =
     const t = window.setInterval(() => { void load(); }, 6000);
     return () => window.clearInterval(t);
   }, [load]);
+
+  // The public shelf loads once; the server caches it for ten minutes.
+  useEffect(() => {
+    let live = true;
+    api<{ external: ExternalGame[]; degraded: boolean }>("/v1/games/catalogue")
+      .then((r) => { if (live) { setExternal(r.external); setExternalDegraded(r.degraded); } })
+      .catch(() => { if (live) setExternal([]); });
+    return () => { live = false; };
+  }, []);
 
   const playable = useMemo(() => (games ?? []).filter((g) => g.availability === "playable"), [games]);
   const featured = playable[0] ?? games?.[0] ?? null;
@@ -128,6 +159,13 @@ export function GamesScreen({ onBack, viewerId, onOpenBattles }: { onBack?: () =
     if (!q) return base;
     return base.filter((g) => g.name.toLowerCase().includes(q) || g.blurb.toLowerCase().includes(q));
   }, [category, byCategory, games, query]);
+
+  const externalShown = useMemo(() => {
+    const list = external ?? [];
+    const q = query.trim().toLowerCase();
+    if (!q) return list;
+    return list.filter((g) => g.name.toLowerCase().includes(q) || g.blurb.toLowerCase().includes(q) || g.genre.toLowerCase().includes(q));
+  }, [external, query]);
 
   // The room takes on the environment of whatever game is in focus.
   const focus = picked ?? (category ? (byCategory[category]?.[0] ?? featured) : featured);
@@ -290,6 +328,46 @@ export function GamesScreen({ onBack, viewerId, onOpenBattles }: { onBack?: () =
           })}
         </div>
       </section>
+
+      {/* The wider arcade. These are real titles from the public games
+          catalogue; we do not build or host them, so every card says where it
+          plays. Our own tables stay above, where a stake and a winner are real. */}
+      {external && external.length > 0 && !category && (
+        <section className="shelf">
+          <div className="shelf-head">
+            <h2 className="section-title"><GlobeIcon width={16} height={16} /> From the wider arcade</h2>
+            <span className="meta">plays elsewhere</span>
+          </div>
+          {externalDegraded && (
+            <p className="meta">The catalogue is a little slow right now — showing a short shelf.</p>
+          )}
+          {externalShown.length === 0 ? (
+            <p className="meta">Nothing in the wider arcade matches “{query.trim()}”.</p>
+          ) : (
+            <div className="shelf-row external-row">
+              {externalShown.slice(0, 24).map((g) => (
+                <a
+                  key={g.id}
+                  className="external-tile"
+                  href={g.url}
+                  target="_blank"
+                  rel="noreferrer noopener"
+                  aria-label={`${g.name} — opens on the publisher's site`}
+                >
+                  <span className="external-tile-shot">
+                    {g.thumbnail
+                      ? <img src={g.thumbnail} alt="" loading="lazy" referrerPolicy="no-referrer" />
+                      : <span className="external-tile-fallback">{g.name.slice(0, 1)}</span>}
+                    <span className="external-tile-out" aria-hidden>↗</span>
+                  </span>
+                  <span className="external-tile-name truncate">{g.name}</span>
+                  <span className="external-tile-genre truncate">{g.genre} · {g.platform}</span>
+                </a>
+              ))}
+            </div>
+          )}
+        </section>
+      )}
 
       {/* The catalogue. */}
       {games === null && <div className="skeleton" aria-busy="true" />}

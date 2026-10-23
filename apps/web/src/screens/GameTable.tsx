@@ -1,12 +1,15 @@
 import { useCallback, useEffect, useState, type CSSProperties } from "react";
 import { api, ApiError } from "../api";
 import { ScreenHeader } from "../components/ScreenHeader";
+import { Avatar } from "../components/Avatar";
 import { formatMoney } from "../money";
 import { SpinnerIcon, ArrowLeftIcon } from "../components/Icons";
 import { ShapeMark, SuitMark, Piece, WHOT_SHAPES, SHAPE_NAME } from "../components/CardFaces";
 import { useActivityTheme } from "../components/useActivityTheme";
 import { themeForGame } from "../themes";
 import { feltFor, worldFor, worldVars } from "../components/GameArt";
+// Split out with this lazy chunk rather than shipped in the launch bundle.
+import "../game-table.css";
 
 /**
  * A game table.
@@ -144,53 +147,95 @@ export function GameTableScreen({ sessionId, viewerId, onBack }: { sessionId: st
           game on cold slate, a card game on plum baize — so Play stops looking
           like the same room with a different title. */}
       <div
-        className={`table-felt felt-${feltFor(session.category)}`}
+        className={`table-shell felt-${feltFor(session.category)}`}
         data-world={worldFor(session.category).label}
         style={worldVars(session.category) as CSSProperties}
       >
-        <div className="table-felt-head">
-          <span className="table-felt-world">{worldFor(session.category).label}</span>
-          <span className="table-felt-tagline">{worldFor(session.category).tagline}</span>
+        {/* The rail: world, pot and round state, in one line that never wraps
+            into the play area. */}
+        <div className="table-rail">
+          <span className="table-rail-world">{worldFor(session.category).label}</span>
+          <span className="table-rail-tagline truncate">{worldFor(session.category).tagline}</span>
+          <span className="table-rail-spacer" />
+          {session.potMinor > 0 ? (
+            <span className="table-rail-pot">Pot {formatMoney(session.potMinor, session.currency)}</span>
+          ) : (
+            <span className="table-rail-pot muted">Free table</span>
+          )}
         </div>
 
-        <section className="stack">
-          <h2 className="section-title">Players</h2>
+        {/* Seats: the people at the table, always visible, never scrolled away
+            behind the board. The active seat is the only one that moves. */}
+        <div className="table-seats" aria-label="Players at the table">
           {session.players.map((p) => {
             const turn = session.state?.turnUserId === p.id && session.status === "active";
             return (
-              <div key={p.id} className={`card row spread ${turn ? "is-turn" : ""}`}>
-                <div className="row" style={{ gap: "var(--space-2)" }}>
-                  <span className={`chip ${turn ? "chip-live" : ""}`}>{turn ? "Turn" : `#${p.seat + 1}`}</span>
-                  <strong>{p.displayName}{p.id === viewerId ? " (you)" : ""}</strong>
-                </div>
-                {p.stakedMinor > 0 && <span className="chip">{formatMoney(p.stakedMinor, session.currency)}</span>}
+              <div key={p.id} className={`seat${turn ? " is-turn" : ""}${p.id === viewerId ? " is-you" : ""}`}>
+                <span className="seat-face" aria-hidden>
+                  <Avatar name={p.displayName} url={p.avatarUrl} seed={p.id} size="sm" />
+                </span>
+                <span className="seat-name truncate">{p.id === viewerId ? "You" : p.displayName}</span>
+                <span className="seat-meta">
+                  {turn ? "Turn" : `#${p.seat + 1}`}
+                  {p.stakedMinor > 0 && <em> · {formatMoney(p.stakedMinor, session.currency)}</em>}
+                </span>
               </div>
             );
           })}
-        </section>
+          {Array.from({ length: Math.max(0, session.maxPlayers - session.players.length) }).slice(0, 3).map((_, i) => (
+            <div key={`empty-${i}`} className="seat empty" aria-hidden>
+              <span className="seat-face" />
+              <span className="seat-name">Open</span>
+              <span className="seat-meta">seat</span>
+            </div>
+          ))}
+        </div>
 
-        {session.status === "lobby" && (
-          <section className="stack">
-            {!me && (
-              <button className="btn primary block" disabled={busy} onClick={() => void act("/join")}>
-                {session.stakeMinor > 0 ? `Join · stake ${formatMoney(session.stakeMinor, session.currency)}` : "Join game"}
-              </button>
-            )}
-            {isHost && (
-              <button className="btn primary block" disabled={busy || !canStart} onClick={() => void act("/start")}>
-                {canStart ? "Start game" : `Need ${session.minPlayers} players`}
-              </button>
-            )}
-          </section>
-        )}
+        {/* The felt: one surface, one focus. */}
+        <div className="table-surface">
+          {session.status === "lobby" && (
+            <div className="table-lobby">
+              <p className="table-lobby-count">{session.players.length}<span>/{session.maxPlayers}</span></p>
+              <p className="meta">
+                {session.players.length < session.minPlayers
+                  ? `Waiting for ${session.minPlayers - session.players.length} more to start`
+                  : "Everyone is here. The host can start."}
+              </p>
+              <div className="table-lobby-actions">
+                {!me && (
+                  <button className="btn primary" disabled={busy} onClick={() => void act("/join")}>
+                    {session.stakeMinor > 0 ? `Join · ${formatMoney(session.stakeMinor, session.currency)}` : "Join game"}
+                  </button>
+                )}
+                {isHost && (
+                  <button className="btn primary" disabled={busy || !canStart} onClick={() => void act("/start")}>
+                    {canStart ? "Start game" : `Need ${session.minPlayers} players`}
+                  </button>
+                )}
+                {me && !isHost && <span className="meta">Waiting for the host to start…</span>}
+              </div>
+            </div>
+          )}
 
-        {session.status === "active" && session.state && (
-          <GameBoard session={session} state={session.state} busy={busy} act={act} />
-        )}
+          {session.status === "active" && session.state && (
+            <GameBoard session={session} state={session.state} busy={busy} act={act} />
+          )}
 
-        {session.status === "finished" && session.state && (
-          <GameBoard session={session} state={session.state} busy act={act} readOnly />
-        )}
+          {session.status === "finished" && session.state && (
+            <>
+              {session.winnerId && (
+                <div className="table-winner">
+                  <span className="table-winner-label">Winner</span>
+                  <span className="table-winner-name">
+                    {session.players.find((p) => p.id === session.winnerId)?.displayName ?? "—"}
+                  </span>
+                  {session.potMinor > 0 && <span className="table-winner-pot">{formatMoney(session.potMinor, session.currency)}</span>}
+                </div>
+              )}
+              <GameBoard session={session} state={session.state} busy act={act} readOnly />
+            </>
+          )}
+        </div>
       </div>
 
       {busy && <div className="row" style={{ justifyContent: "center" }}><SpinnerIcon width={18} height={18} /></div>}

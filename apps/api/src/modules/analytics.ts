@@ -91,6 +91,14 @@ export const ANALYTICS_EVENTS = [
   "wallet_topup_settled",
   "wallet_sent",
   "wallet_received",
+  // Brand Battles. These were emitted but never allow-listed, so every battle
+  // event was silently dropped before this.
+  "battle_created",
+  "battle_viewed",
+  "battle_voted",
+  "battle_commented",
+  "battle_boosted",
+  "battle_closed",
 ] as const;
 
 export type AnalyticsEventName = (typeof ANALYTICS_EVENTS)[number];

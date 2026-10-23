@@ -27,6 +27,8 @@ export const NOTIFICATION_TYPES = [
   "payment_verified",
   "mention",
   "comment_reply",
+  "follow",
+  "reaction",
   "message",
   "gift",
   "wallet",
