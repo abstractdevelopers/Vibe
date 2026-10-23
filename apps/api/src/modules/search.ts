@@ -2,6 +2,7 @@ import { z } from "zod";
 import type { FastifyInstance } from "fastify";
 import { queryMany } from "../db.js";
 import { parse, publicUser, requireUser, type AppContext } from "../http.js";
+import { VISIBILITY } from "./feed.js";
 
 /**
  * Post search (§6, "PostgreSQL full-text initially").
@@ -32,19 +33,16 @@ export function searchRoutes(ctx: AppContext) {
         ctx.pool,
         `SELECT p.id, p.body, p.type, p.audience, p.circle_id, p.created_at,
                 u.id AS author_id, u.handle, u.display_name, u.avatar_url,
-                ts_rank(p.search_vector, websearch_to_tsquery('english', $1)) AS rank
+                ts_rank(p.search_vector, websearch_to_tsquery('english', $2)) AS rank
            FROM posts p JOIN users u ON u.id = p.author_id
-          WHERE p.search_vector @@ websearch_to_tsquery('english', $1)
+          WHERE p.search_vector @@ websearch_to_tsquery('english', $2)
             AND p.status = 'published'
-            AND (
-              p.author_id = $2
-              OR p.audience = 'public'
-              OR (p.circle_id IS NOT NULL AND EXISTS (
-                    SELECT 1 FROM circle_members cm WHERE cm.circle_id = p.circle_id AND cm.user_id = $2))
-            )
+            -- The feed's one visibility clause: audience, blocks and mutes.
+            -- $1 is the viewer, which is what VISIBILITY expects.
+            ${VISIBILITY}
           ORDER BY rank DESC, p.created_at DESC
           LIMIT $3`,
-        [input.q, user.id, input.limit],
+        [user.id, input.q, input.limit],
       );
 
       return {

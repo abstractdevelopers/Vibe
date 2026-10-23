@@ -278,6 +278,10 @@ export async function buildApp(ctx: AppContext): Promise<FastifyInstance> {
     // check access completes before any signalling frame that follows it is
     // relayed. Without the queue an offer could be published before the socket
     // was registered in the room, and the answer would never arrive.
+    // Rooms this socket actually completed `room.join` for. Signalling is only
+    // relayed for one of these: otherwise a socket could publish SDP/ICE into
+    // any public room without ever joining it.
+    const joinedRooms = new Set<string>();
     let chain: Promise<void> = Promise.resolve();
     handleFrame = (raw: Buffer) => {
       // Flood guard: a well-behaved client sends a handful of frames a second at
@@ -303,16 +307,23 @@ export async function buildApp(ctx: AppContext): Promise<FastifyInstance> {
           // Authorize before joining: a private room is only for its host and
           // members. Without this any session could listen to any room.
           const allowed = await canAccessRoom(ctx, msg.roomId!, user.id).catch(() => false);
-          if (allowed) ctx.hub.joinRoom(socket, msg.roomId!);
+          if (allowed) {
+            ctx.hub.joinRoom(socket, msg.roomId!);
+            joinedRooms.add(msg.roomId!);
+          }
           return;
         }
         if (msg.type === "room.leave") {
           ctx.hub.leaveRoom(socket, msg.roomId!);
+          joinedRooms.delete(msg.roomId!);
           return;
         }
         // WebRTC signalling: relay to the room, addressed to one peer. The
         // server is a dumb relay here; it never inspects or stores the SDP/ICE.
+        // Only a room this socket joined may be signalled into, so an offer
+        // cannot be pushed into a room the sender was refused.
         if (msg.type === "rtc.offer" || msg.type === "rtc.answer" || msg.type === "rtc.ice") {
+          if (!joinedRooms.has(msg.roomId!)) return;
           ctx.hub.publishToRoom(
             msg.roomId!,
             { type: msg.type, entityId: msg.roomId!, payload: { from: user.id, to: msg.to, data: msg.payload } },

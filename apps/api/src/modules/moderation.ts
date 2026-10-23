@@ -4,6 +4,7 @@ import { ApiError } from "../errors.js";
 import { queryMany, queryOne, withTransaction } from "../db.js";
 import { newId } from "../ids.js";
 import { parse, requireAdmin, requireUser, type AppContext } from "../http.js";
+import { invalidateUserSessions } from "../auth.js";
 import { trackSafe } from "./analytics.js";
 const reportSchema = z.object({
   targetType: z.enum(["user", "post", "comment", "activity", "circle", "ad"]),
@@ -106,6 +107,50 @@ export function moderationRoutes(ctx: AppContext) {
               activityState,
               report.target_id,
             ]);
+          }
+        }
+        if (report.target_type === "comment") {
+          // A moderator removal is recorded as the deleter, so the author
+          // cannot undo it through the author restore route.
+          if (input.action === "remove") {
+            await tx.query(
+              "UPDATE comments SET deleted_at_prev = deleted_at, deleted_at = now(), deleted_by = $2 WHERE id = $1",
+              [report.target_id, user.id],
+            );
+          } else if (input.action === "restore") {
+            await tx.query(
+              "UPDATE comments SET deleted_at = deleted_at_prev, deleted_at_prev = NULL, deleted_by = NULL WHERE id = $1",
+              [report.target_id],
+            );
+          }
+        }
+        if (report.target_type === "user") {
+          const accountStatus =
+            input.action === "ban"
+              ? "banned"
+              : input.action === "suspend"
+                ? "suspended"
+                : input.action === "restrict"
+                  ? "restricted"
+                  : input.action === "warn"
+                    ? "warned"
+                    : input.action === "restore"
+                      ? "active"
+                      : null;
+          if (accountStatus) {
+            await tx.query(
+              `UPDATE users SET moderation_status = $2, moderation_until = NULL,
+                      moderation_reason = $3, updated_at = now()
+                WHERE id = $1`,
+              [report.target_id, accountStatus, input.reason ?? null],
+            );
+            if (accountStatus === "banned") {
+              await tx.query(
+                "UPDATE sessions SET revoked_at = now() WHERE user_id = $1 AND revoked_at IS NULL",
+                [report.target_id],
+              );
+              invalidateUserSessions(report.target_id);
+            }
           }
         }
 

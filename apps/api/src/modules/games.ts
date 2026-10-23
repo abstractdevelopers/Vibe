@@ -7,7 +7,7 @@ import { parse, publicUser, requireUser, type AppContext } from "../http.js";
 import { requireCircleMember } from "./access.js";
 import { trackSafe } from "./analytics.js";
 import { notifyUsers } from "./notifications.js";
-import { walletBalance, postGameStake, postGamePayout, postGameRefund } from "../money/ledger.js";
+import { walletBalance, lockWalletAccount, postGameStake, postGamePayout, postGameRefund } from "../money/ledger.js";
 import { getEngine, type EngineContext } from "../games/engine.js";
 import { registerAllEngines } from "../games/registry.js";
 import { GAME_RAKE_BPS as SHARED_GAME_RAKE_BPS } from "@vibe/shared";
@@ -54,6 +54,54 @@ interface SessionRow {
 
 async function loadSession(pool: AppContext["pool"], id: string): Promise<SessionRow | null> {
   return queryOne<SessionRow>(pool, "SELECT * FROM game_sessions WHERE id = $1", [id]);
+}
+
+/**
+ * Who may join a table. The list route filters by the same rules, but a join
+ * must re-check on the server: a shared session id is not an invitation to a
+ * Circle-only or friends-only table.
+ */
+async function requireGameAccess(ctx: AppContext, session: SessionRow, userId: string): Promise<void> {
+  if (session.host_id === userId) return;
+  const seated = await queryOne<{ user_id: string }>(
+    ctx.pool,
+    "SELECT user_id FROM game_players WHERE session_id = $1 AND user_id = $2",
+    [session.id, userId],
+  );
+  if (seated) return;
+  const blocked = await queryOne<{ one: number }>(
+    ctx.pool,
+    `SELECT 1 AS one FROM blocks
+      WHERE (blocker_id = $1 AND blocked_id = $2) OR (blocker_id = $2 AND blocked_id = $1)
+      LIMIT 1`,
+    [userId, session.host_id],
+  );
+  if (blocked) throw ApiError.forbidden("You cannot join this table");
+  const follows = async (a: string, b: string): Promise<boolean> =>
+    (await queryOne<{ one: number }>(
+      ctx.pool,
+      "SELECT 1 AS one FROM follows WHERE follower_id = $1 AND followee_id = $2 AND state = 'accepted'",
+      [a, b],
+    )) !== null;
+  switch (session.scope) {
+    case "circle":
+      if (!session.circle_id) throw ApiError.forbidden("This table is limited to its Circle");
+      await requireCircleMember(ctx.pool, session.circle_id, userId);
+      return;
+    case "followers":
+      if (!(await follows(userId, session.host_id))) {
+        throw ApiError.forbidden("Only the host's followers can join this table");
+      }
+      return;
+    case "friends":
+      if (!(await follows(userId, session.host_id)) || !(await follows(session.host_id, userId))) {
+        throw ApiError.forbidden("Only friends can join this table");
+      }
+      return;
+    default:
+      // `strangers` is open, and `invite` is open to anyone holding the id.
+      return;
+  }
 }
 
 function engineContext(session: SessionRow, players: string[]): EngineContext {
@@ -190,11 +238,28 @@ export function gameRoutes(ctx: AppContext) {
       const q = req.query as { gameId?: string };
       const rows = await queryMany<SessionRow>(
         ctx.pool,
-        `SELECT * FROM game_sessions
-          WHERE status IN ('lobby', 'active')
-            AND ($1::text IS NULL OR game_id = $1)
-          ORDER BY created_at DESC LIMIT 50`,
-        [q.gameId ?? null],
+        `SELECT s.* FROM game_sessions s
+          WHERE s.status IN ('lobby', 'active')
+            AND ($1::text IS NULL OR s.game_id = $1)
+            AND NOT EXISTS (
+              SELECT 1 FROM blocks b
+               WHERE (b.blocker_id = s.host_id AND b.blocked_id = $2)
+                  OR (b.blocker_id = $2 AND b.blocked_id = s.host_id))
+            AND (
+              s.host_id = $2
+              OR EXISTS (SELECT 1 FROM game_players gp WHERE gp.session_id = s.id AND gp.user_id = $2)
+              OR s.scope = 'strangers'
+              OR (s.scope = 'circle' AND s.circle_id IN (
+                    SELECT circle_id FROM circle_members WHERE user_id = $2))
+              OR (s.scope IN ('followers', 'friends') AND EXISTS (
+                    SELECT 1 FROM follows f
+                     WHERE f.follower_id = $2 AND f.followee_id = s.host_id AND f.state = 'accepted'))
+            )
+            AND (s.scope <> 'friends' OR EXISTS (
+                  SELECT 1 FROM follows f2
+                   WHERE f2.follower_id = s.host_id AND f2.followee_id = $2 AND f2.state = 'accepted'))
+          ORDER BY s.created_at DESC LIMIT 50`,
+        [q.gameId ?? null, user.id],
       );
       return { sessions: await Promise.all(rows.map((s) => sessionView(ctx, s, user.id))) };
     });
@@ -220,6 +285,7 @@ export function gameRoutes(ctx: AppContext) {
         // The host is in their own game from the start, so their stake leaves
         // the wallet now rather than waiting for a join that will never come.
         if (input.stakeMinor > 0) {
+          await lockWalletAccount(tx, user.id, "NGN");
           const balance = await walletBalance(tx as unknown as AppContext["pool"], user.id, "NGN");
           if (balance.balanceMinor < input.stakeMinor) throw ApiError.badRequest("Not enough Vibe Yens for this stake");
         }
@@ -259,10 +325,8 @@ export function gameRoutes(ctx: AppContext) {
       );
       if (already) return { session: await sessionView(ctx, session, user.id), joined: true };
 
+      await requireGameAccess(ctx, session, user.id);
       const game = await queryOne<{ max_players: number }>(ctx.pool, "SELECT max_players FROM game_catalog WHERE id = $1", [session.game_id]);
-      const seated = await queryOne<{ n: string }>(ctx.pool, "SELECT count(*) AS n FROM game_players WHERE session_id = $1", [id]);
-      if (Number(seated?.n ?? 0) >= (game?.max_players ?? 8)) throw ApiError.badRequest("This game is full");
-      if (session.circle_id && session.scope === "circle") await requireCircleMember(ctx.pool, session.circle_id, user.id);
 
       const stake = Number(session.stake_minor);
       await withTransaction(ctx.pool, async (tx) => {
@@ -273,7 +337,16 @@ export function gameRoutes(ctx: AppContext) {
           [id],
         );
         if (!locked || locked.status !== "lobby") throw ApiError.badRequest("This game has already started");
+        // The capacity check belongs under the session lock; outside it, two
+        // joins could both read the last free seat and both take it.
+        const seated = await queryOne<{ n: string }>(
+          tx as unknown as AppContext["pool"],
+          "SELECT count(*) AS n FROM game_players WHERE session_id = $1",
+          [id],
+        );
+        if (Number(seated?.n ?? 0) >= (game?.max_players ?? 8)) throw ApiError.badRequest("This game is full");
         if (stake > 0) {
+          await lockWalletAccount(tx, user.id, session.currency);
           const balance = await walletBalance(tx as unknown as AppContext["pool"], user.id, session.currency);
           if (balance.balanceMinor < stake) throw ApiError.badRequest("Not enough Vibe Yens for this stake");
           await postGameStake(tx, {

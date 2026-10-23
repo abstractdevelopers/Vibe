@@ -149,19 +149,26 @@ export function allocateByWeights(
     throw new MoneyError("At least one participant must carry a positive weight");
   }
 
+  // Allocate the magnitude and reapply the sign at the end. Allocating a
+  // negative total directly lets `Math.floor` round each share toward negative
+  // infinity while the leftover loop only ever gives points *up*, so a refund
+  // no longer summed to the amount being refunded.
+  const negative = total < 0;
+  const magnitude = Math.abs(total);
+
   const floors: Allocation[] = [];
   const remainders: Array<{ index: number; remainder: number }> = [];
   let distributed = 0;
 
   weights.forEach((w, index) => {
-    const exact = (total * w.weight) / totalWeight;
+    const exact = (magnitude * w.weight) / totalWeight;
     const floor = Math.floor(exact);
     floors.push({ participantId: w.participantId, amount: floor });
     remainders.push({ index, remainder: exact - floor });
     distributed += floor;
   });
 
-  let leftover = total - distributed;
+  let leftover = magnitude - distributed;
   remainders.sort((a, b) => b.remainder - a.remainder || a.index - b.index);
   for (let i = 0; i < remainders.length && leftover > 0; i += 1) {
     const target = remainders[i]!;
@@ -169,7 +176,7 @@ export function allocateByWeights(
     leftover -= 1;
   }
 
-  return floors;
+  return negative ? floors.map((a) => ({ ...a, amount: -a.amount })) : floors;
 }
 
 /** Split equally across participants. */

@@ -100,7 +100,7 @@ function decodeDataUrl(dataUrl: string): { contentType: string; bytes: Buffer } 
   if (bytes.length === 0) throw ApiError.badRequest(isVideo ? "The video is empty" : "The image is empty");
   if (bytes.length > limit) {
     throw ApiError.badRequest(
-      isVideo ? "Videos must be 25 MB or smaller" : "Images must be 5 MB or smaller",
+      isVideo ? "Videos must be 200 MB or smaller" : "Images must be 5 MB or smaller",
     );
   }
   return { contentType, bytes };
@@ -155,12 +155,23 @@ export function mediaRoutes(ctx: AppContext) {
       },
     );
 
+    /**
+     * Read a stored file by its opaque id.
+     *
+     * The id is 96 random bits and is the capability: a post, avatar or banner
+     * embeds it in an `<img>`/`<video>`, which cannot send a bearer header, so
+     * requiring a session here would break every image in the product. What
+     * must not happen is a *shared* cache storing private Circle or message
+     * media, so the response is `private` (browser cache only) and never
+     * `public`.
+     */
     app.get("/v1/media/:id", async (req, reply) => {
       const { id } = req.params as { id: string };
       const media = await store.get(id);
       if (!media) throw ApiError.notFound("Media not found");
       reply.header("content-type", media.contentType);
-      reply.header("cache-control", "public, max-age=31536000, immutable");
+      reply.header("cache-control", "private, max-age=86400, immutable");
+      reply.header("x-content-type-options", "nosniff");
       reply.header("accept-ranges", "bytes");
 
       // Range support so a video can seek and stream instead of downloading the

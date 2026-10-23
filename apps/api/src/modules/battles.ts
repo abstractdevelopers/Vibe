@@ -4,7 +4,7 @@ import { ApiError } from "../errors.js";
 import { queryMany, queryOne, withTransaction } from "../db.js";
 import { parse, publicUser, requireUser, type AppContext } from "../http.js";
 import { newId } from "../ids.js";
-import { walletBalance, postBattleStake, postBattlePayout, postBattleRefund } from "../money/ledger.js";
+import { walletBalance, lockWalletAccount, postBattleStake, postBattlePayout, postBattleRefund } from "../money/ledger.js";
 import { trackSafe } from "./analytics.js";
 
 /**
@@ -77,6 +77,8 @@ interface SideTally {
   side: "a" | "b";
   votes: number;
   comments: number;
+  /** Distinct people who commented; this is what the score counts. */
+  commenters: number;
   gifts: number;
   points: number;
   backers: number;
@@ -121,19 +123,21 @@ function projectedShare(myStake: number, sideStaked: number, pot: number): numbe
 
 /** The tallies for both sides, computed from the vote, stake, comment and gift rows. */
 async function tallies(ctx: AppContext, battleId: string): Promise<{ a: SideTally; b: SideTally }> {
-  const rows = await queryMany<{ side: string; votes: string; backers: string; staked: string; comments: string; gifts: string }>(
+  const rows = await queryMany<{ side: string; votes: string; backers: string; staked: string; comments: string; commenters: string; gifts: string }>(
     ctx.pool,
     `SELECT s.side,
             COALESCE(v.votes, '0') AS votes,
             COALESCE(p.backers, '0') AS backers,
             COALESCE(p.staked, '0') AS staked,
             COALESCE(c.comments, '0') AS comments,
+            COALESCE(c.commenters, '0') AS commenters,
             COALESCE(g.gifts, '0') AS gifts
        FROM (SELECT 'a' AS side UNION SELECT 'b') s
        LEFT JOIN (SELECT side, COUNT(*)::text AS votes FROM battle_votes WHERE battle_id = $1 GROUP BY side) v ON v.side = s.side
        LEFT JOIN (SELECT side, COUNT(*)::text AS backers, COALESCE(SUM(stake_minor),0)::text AS staked
                     FROM battle_participants WHERE battle_id = $1 AND stake_minor > 0 GROUP BY side) p ON p.side = s.side
-       LEFT JOIN (SELECT side, COUNT(*)::text AS comments FROM battle_comments WHERE battle_id = $1 GROUP BY side) c ON c.side = s.side
+       LEFT JOIN (SELECT side, COUNT(*)::text AS comments, COUNT(DISTINCT user_id)::text AS commenters
+                    FROM battle_comments WHERE battle_id = $1 GROUP BY side) c ON c.side = s.side
        LEFT JOIN (SELECT side, COUNT(*)::text AS gifts FROM battle_gifts WHERE battle_id = $1 GROUP BY side) g ON g.side = s.side`,
     [battleId],
   );
@@ -141,22 +145,25 @@ async function tallies(ctx: AppContext, battleId: string): Promise<{ a: SideTall
   for (const r of rows) {
     const votes = Number(r.votes);
     const comments = Number(r.comments);
+    const commenters = Number(r.commenters);
     const gifts = Number(r.gifts);
     byside[r.side] = {
       side: r.side as "a" | "b",
       votes,
       comments,
+      commenters,
       gifts,
-      // The score the crowd moves: a vote is one point, a comment is one, and a
-      // gift is two — a gift is the loudest thing a bystander can do.
-      points: votes + comments + gifts * 2,
+      // The score the crowd moves: a vote is one point, each *person* who
+      // comments is one, and a gift is two. Counting one user's repeated
+      // comments would let a single account decide the winner.
+      points: votes + commenters + gifts * 2,
       backers: Number(r.backers),
       stakedMinor: Number(r.staked),
     };
   }
   return {
-    a: byside.a ?? { side: "a", votes: 0, comments: 0, gifts: 0, points: 0, backers: 0, stakedMinor: 0 },
-    b: byside.b ?? { side: "b", votes: 0, comments: 0, gifts: 0, points: 0, backers: 0, stakedMinor: 0 },
+    a: byside.a ?? { side: "a", votes: 0, comments: 0, commenters: 0, gifts: 0, points: 0, backers: 0, stakedMinor: 0 },
+    b: byside.b ?? { side: "b", votes: 0, comments: 0, commenters: 0, gifts: 0, points: 0, backers: 0, stakedMinor: 0 },
   };
 }
 
@@ -350,6 +357,7 @@ export function battleRoutes(ctx: AppContext) {
       const id = newId();
       await withTransaction(ctx.pool, async (tx) => {
         if (input.stakeMinor > 0) {
+          await lockWalletAccount(tx, user.id, "NGN");
           const balance = await walletBalance(tx as unknown as AppContext["pool"], user.id, "NGN");
           if (balance.balanceMinor < input.stakeMinor) throw ApiError.badRequest("Not enough Vibe Yens for this stake");
         }
@@ -407,6 +415,7 @@ export function battleRoutes(ctx: AppContext) {
         if (prior) {
           await tx.query("UPDATE battle_participants SET side = $3 WHERE battle_id = $1 AND user_id = $2", [id, user.id, input.side]);
         } else if (stake > 0) {
+          await lockWalletAccount(tx, user.id, "NGN");
           const balance = await walletBalance(tx as unknown as AppContext["pool"], user.id, "NGN");
           if (balance.balanceMinor < stake) throw ApiError.badRequest("Not enough Vibe Yens for this stake");
           await tx.query(

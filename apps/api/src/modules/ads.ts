@@ -82,6 +82,12 @@ export async function selectAdForViewer(
         AND (SELECT count(*) FROM ad_deliveries d
               WHERE d.campaign_id = c.id AND d.viewer_id = $1
                 AND d.served_at > now() - interval '1 day') < c.frequency_cap
+        -- The budget is a spend limit: every verified serving costs one
+        -- impression, and an exhausted campaign stops delivering. Before this
+        -- the budget was stored and reported but nothing ever consumed it.
+        AND c.budget_minor > (
+              SELECT count(*) * c.cost_per_impression_minor
+                FROM ad_deliveries d2 WHERE d2.campaign_id = c.id)
       ORDER BY c.created_at ASC
       LIMIT 1`,
     [viewerId],
@@ -182,9 +188,11 @@ export function adsRoutes(ctx: AppContext) {
     app.get("/v1/campaigns/:id/metrics", async (req) => {
       const user = await requireUser(ctx, req);
       const { id } = req.params as { id: string };
-      const c = await queryOne<{ advertiser_id: string; currency: string; budget_minor: number }>(
+      const c = await queryOne<{
+        advertiser_id: string; currency: string; budget_minor: number; cost_per_impression_minor: number;
+      }>(
         ctx.pool,
-        "SELECT advertiser_id, currency, budget_minor FROM campaigns WHERE id = $1",
+        "SELECT advertiser_id, currency, budget_minor, cost_per_impression_minor FROM campaigns WHERE id = $1",
         [id],
       );
       if (!c) throw ApiError.notFound("Campaign not found");
@@ -208,10 +216,16 @@ export function adsRoutes(ctx: AppContext) {
       const served = totals?.served ?? 0;
       const impressions = totals?.impressions ?? 0;
       const clicks = totals?.clicks ?? 0;
+      // Spend is the verified serving count times the campaign's rate. It is
+      // derived, not a running counter, so it cannot drift from deliveries.
+      const spentMinor = served * c.cost_per_impression_minor;
       return {
         campaignId: id,
         currency: c.currency,
         budgetMinor: c.budget_minor,
+        costPerImpressionMinor: c.cost_per_impression_minor,
+        spentMinor,
+        remainingBudgetMinor: Math.max(0, c.budget_minor - spentMinor),
         // Verified: the server served the ad. Reported: a client confirmed it
         // was on screen. Both are exposed so the UI can label them honestly.
         verified: { served, reach: totals?.reach ?? 0 },

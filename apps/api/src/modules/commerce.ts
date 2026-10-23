@@ -135,9 +135,9 @@ export async function transitionOrder(
  */
 export async function applyProviderEvent(db: pg.Pool, event: ProviderPaymentEvent): Promise<boolean> {
   if (!event.orderReference) return false;
-  const order = await queryOne<{ id: string; status: string }>(
+  const order = await queryOne<{ id: string; status: string; amount_minor: string; currency: string }>(
     db,
-    "SELECT id, status FROM orders WHERE reference = $1",
+    "SELECT id, status, amount_minor, currency FROM orders WHERE reference = $1",
     [event.orderReference],
   );
   if (!order) return false;
@@ -156,6 +156,39 @@ export async function applyProviderEvent(db: pg.Pool, event: ProviderPaymentEven
     // a real-money anomaly an operator must see. The event is already recorded,
     // so acknowledge it rather than making the provider retry forever.
     return false;
+  }
+  // The provider is authoritative that money moved, but the amount it reports
+  // must be the amount this order asks for. Fulfilling a ₦1 checkout against a
+  // ₦50,000 order would hand over the goods for free, so a mismatch is refused
+  // and recorded for an operator instead.
+  if (target === "paid") {
+    const paidMinor = event.amount?.amount ?? 0;
+    const paidCurrency = (event.amount?.currency ?? "").toUpperCase();
+    const expectedMinor = Number(order.amount_minor);
+    if (paidMinor !== expectedMinor || paidCurrency !== order.currency.toUpperCase()) {
+      const failed = canTransition(order.status, "failed");
+      await withTransaction(db, async (tx) => {
+        if (failed) {
+          await tx.query("UPDATE orders SET status = 'failed', updated_at = now() WHERE id = $1", [order.id]);
+          await tx.query(
+            `INSERT INTO order_events (id, order_id, from_status, to_status, reason, actor_id)
+             VALUES ($1, $2, $3, 'failed', 'provider:amount_mismatch', NULL)`,
+            [newId(), order.id, order.status],
+          );
+        }
+        await tx.query(
+          `INSERT INTO money_audit (actor_id, action, entity_type, entity_id, amount_minor, currency, metadata)
+           VALUES (NULL, 'order.amount_mismatch', 'order', $1, $2, $3, $4)`,
+          [
+            order.id,
+            paidMinor,
+            order.currency,
+            JSON.stringify({ expectedMinor, paidMinor, expectedCurrency: order.currency, paidCurrency }),
+          ],
+        );
+      });
+      return false;
+    }
   }
   // The order flip and its ledger entry are one transaction: a paid order can
   // never exist without its books, and a redelivered webhook finds the status

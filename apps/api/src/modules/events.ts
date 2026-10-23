@@ -103,14 +103,18 @@ export function eventsRoutes(ctx: AppContext) {
       const created = await queryOne<{ id: string }>(
         ctx.pool,
         `INSERT INTO events (id, organizer_id, circle_id, merchant_id, title, description, starts_at, ends_at,
-                             timezone, place, city, area, image_url, price_minor, currency, booking_provider, booking_ref)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17) RETURNING id`,
+                             timezone, place, city, area, image_url, price_minor, currency,
+                             booking_provider, booking_ref, booking_verified)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18) RETURNING id`,
         [
           newId(), user.id, input.circleId ?? null, input.merchantId ?? null, input.title,
           input.description ?? null, input.startsAt, input.endsAt ?? null, input.timezone,
           input.place ?? null, input.city ?? null, input.area ?? null, input.imageUrl ?? null,
           input.priceMinor,
           input.currency.toUpperCase(), input.bookingProvider ?? null, input.bookingRef ?? null,
+          // A booking is verified only because a provider reference backs it;
+          // the flag used to have no writer, so a real reference never showed.
+          Boolean(input.bookingRef),
         ],
       );
       reply.code(201);
@@ -143,7 +147,7 @@ export function eventsRoutes(ctx: AppContext) {
     app.get("/v1/events", async (req) => {
       // Published events are public: anyone, signed in or not, can see what is
       // on. Drafts and cancelled events stay private to their organizer.
-      await authenticate(ctx, req);
+      const viewer = await authenticate(ctx, req);
       const q = req.query as { city?: string; circleId?: string; limit?: string };
       const limit = Math.min(Number(q.limit ?? 20) || 20, 50);
       const rows = await queryMany<Parameters<typeof eventView>[0]>(
@@ -153,9 +157,17 @@ export function eventsRoutes(ctx: AppContext) {
           WHERE e.state = 'published'
             AND ($1::text IS NULL OR e.city = $1)
             AND ($2::uuid IS NULL OR e.circle_id = $2::uuid)
+            AND ($4::uuid IS NULL OR (
+              NOT EXISTS (
+                SELECT 1 FROM blocks b
+                 WHERE (b.blocker_id = e.organizer_id AND b.blocked_id = $4)
+                    OR (b.blocker_id = $4 AND b.blocked_id = e.organizer_id))
+              AND NOT EXISTS (
+                SELECT 1 FROM mutes m WHERE m.muter_id = $4 AND m.muted_id = e.organizer_id)
+            ))
           ORDER BY e.starts_at ASC
           LIMIT $3`,
-        [q.city ?? null, q.circleId ?? null, limit],
+        [q.city ?? null, q.circleId ?? null, limit, viewer?.id ?? null],
       );
       return { events: rows.map(eventView) };
     });
@@ -260,12 +272,30 @@ export function eventsRoutes(ctx: AppContext) {
       );
       if (already) return { checkedIn: true, alreadyCheckedIn: true };
 
-      await withTransaction(ctx.pool, async (tx) => {
-        await tx.query("INSERT INTO checkins (id, event_id, user_id, code_id) VALUES ($1, $2, $3, $4)", [
-          newId(), id, user.id, code.id,
-        ]);
-        await tx.query("UPDATE checkin_codes SET uses = uses + 1 WHERE id = $1", [code.id]);
+      const inserted = await withTransaction(ctx.pool, async (tx) => {
+        // Insert first with a conflict guard, so a concurrent duplicate does
+        // not consume a second use of the code.
+        const checkin = await tx.query(
+          `INSERT INTO checkins (id, event_id, user_id, code_id) VALUES ($1, $2, $3, $4)
+           ON CONFLICT (event_id, user_id) DO NOTHING
+           RETURNING id`,
+          [newId(), id, user.id, code.id],
+        );
+        if ((checkin.rowCount ?? 0) === 0) return false;
+        // Claim a use atomically; the check outside the transaction and the
+        // increment inside were two separate steps, so two check-ins could
+        // both pass and overrun the limit.
+        const claimed = await tx.query(
+          `UPDATE checkin_codes SET uses = uses + 1
+            WHERE id = $1 AND revoked_at IS NULL AND expires_at > now()
+              AND uses < max_uses
+            RETURNING id`,
+          [code.id],
+        );
+        if ((claimed.rowCount ?? 0) === 0) throw ApiError.badRequest("That check-in code has been used up");
+        return true;
       });
+      if (!inserted) return { checkedIn: true, alreadyCheckedIn: true };
       trackSafe(ctx.pool, { name: "checkin_completed", userId: user.id, properties: { entityType: "event", entityId: id } });
       reply.code(201);
       return { checkedIn: true, alreadyCheckedIn: false };

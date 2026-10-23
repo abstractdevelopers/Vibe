@@ -18,7 +18,7 @@
  *    otherwise).
  */
 
-import { apiUrl } from "./api";
+import { apiUrl, getToken } from "./api";
 
 const ICE_CACHE_MS = 10 * 60 * 1000;
 
@@ -40,7 +40,13 @@ const FALLBACK: IceServer[] = [{ urls: "stun:stun.l.google.com:19302" }];
 export async function loadIceServers(): Promise<IceServer[]> {
   if (cached && Date.now() - cached.at < ICE_CACHE_MS) return cached.servers;
   try {
-    const res = await fetch(apiUrl("/v1/rtc/ice"), { headers: { accept: "application/json" } });
+    // `/v1/rtc/ice` is session-gated: without the bearer token it answers 401
+    // and the call silently falls back to STUN, which cannot relay through
+    // carrier NAT.
+    const token = getToken();
+    const headers: Record<string, string> = { accept: "application/json" };
+    if (token) headers.authorization = `Bearer ${token}`;
+    const res = await fetch(apiUrl("/v1/rtc/ice"), { headers });
     if (!res.ok) return FALLBACK;
     const data = (await res.json()) as { iceServers?: IceServer[] };
     const servers = data.iceServers?.length ? data.iceServers : FALLBACK;

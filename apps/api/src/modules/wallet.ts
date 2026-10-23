@@ -7,7 +7,7 @@ import { parse, requireUser, type AppContext } from "../http.js";
 import { requireIdempotencyKey, runIdempotent } from "../idempotency.js";
 import { trackSafe } from "./analytics.js";
 import { notifyUsers } from "./notifications.js";
-import { walletBalance, postWalletTransfer, HOLD_DAYS } from "../money/ledger.js";
+import { walletBalance, lockWalletAccount, postWalletTransfer, HOLD_DAYS } from "../money/ledger.js";
 
 /**
  * Vibe Yens — an optional stored balance and send-to-a-friend.
@@ -113,6 +113,7 @@ export function walletRoutes(ctx: AppContext) {
           const transferId = await withTransaction(ctx.pool, async (tx) => {
             // Lock the sender's wallet row so two concurrent sends cannot both
             // see the same balance. The balance itself is still a ledger SUM.
+            await lockWalletAccount(tx, user.id, "NGN");
             const balance = await walletBalance(tx as unknown as typeof ctx.pool, user.id, "NGN");
             if (balance.balanceMinor < input.amountMinor) {
               throw ApiError.badRequest("That is more than your Vibe Yens balance");

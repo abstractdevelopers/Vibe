@@ -32,16 +32,27 @@ describe("audio profiles", () => {
 });
 
 describe("ICE servers", () => {
-  beforeEach(() => resetIceCache());
+  beforeEach(() => {
+    resetIceCache();
+    // The node test env has no localStorage; the client reads its session
+    // token from there before asking for ICE servers.
+    (globalThis as { localStorage?: Storage }).localStorage = { getItem: () => "tok-123" } as unknown as Storage;
+  });
 
   it("returns the API's servers, including TURN, when reachable", async () => {
     const turn = { urls: "turn:1.2.3.4:3478", username: "123:u", credential: "abc" };
-    globalThis.fetch = (async () =>
-      ({ ok: true, json: async () => ({ iceServers: [{ urls: "stun:x" }, turn] }) })) as unknown as typeof fetch;
+    let seen: RequestInit | undefined;
+    globalThis.fetch = (async (_url: string, init?: RequestInit) => {
+      seen = init;
+      return { ok: true, json: async () => ({ iceServers: [{ urls: "stun:x" }, turn] }) };
+    }) as unknown as typeof fetch;
 
     const servers = await loadIceServers();
     expect(servers).toContainEqual(turn);
     expect(servers.some((s) => String(s.urls).startsWith("stun:"))).toBe(true);
+    // `/v1/rtc/ice` is session-gated. Sending no token made every call fall
+    // back to STUN, which cannot relay through carrier NAT.
+    expect((seen?.headers as Record<string, string>)?.authorization).toBe("Bearer tok-123");
   });
 
   it("falls back to a public STUN server when the API fails", async () => {

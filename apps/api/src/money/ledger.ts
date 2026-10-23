@@ -92,6 +92,37 @@ async function accountId(
   return again.id;
 }
 
+/**
+ * Serialise money writers on one user's account.
+ *
+ * A balance is a SUM over entries, never a column, so the only way a
+ * check-then-write stays safe is to hold the account row while both happen.
+ * Call this inside the transaction, before reading the balance and before
+ * posting the journal: two concurrent sends, stakes or payout requests then
+ * take turns instead of both passing the same check.
+ */
+export async function lockLedgerAccount(
+  tx: pg.PoolClient,
+  kind: "user_wallet" | "creator_earnings",
+  userId: string,
+  currency: string,
+): Promise<void> {
+  // Create the row first so there is always something to lock; a missing
+  // account has a zero balance, which no debit can overdraw.
+  const id = await accountId(tx, kind, currency, userId);
+  await tx.query("SELECT id FROM ledger_accounts WHERE id = $1 FOR UPDATE", [id]);
+}
+
+/** Lock a user's Vibe Yens wallet for `currency`. */
+export function lockWalletAccount(tx: pg.PoolClient, userId: string, currency: string): Promise<void> {
+  return lockLedgerAccount(tx, "user_wallet", userId, currency);
+}
+
+/** Lock a creator's earnings account for `currency` before requesting a payout. */
+export function lockEarningsAccount(tx: pg.PoolClient, userId: string, currency: string): Promise<void> {
+  return lockLedgerAccount(tx, "creator_earnings", userId, currency);
+}
+
 async function writeJournal(
   tx: pg.PoolClient,
   input: { kind: JournalKind; currency: string; reference: string; memo: string; entries: Entry[] },
@@ -436,7 +467,9 @@ export async function creatorBalance(pool: pg.Pool, userId: string, currency: st
     paidOutMinor: debits,
     pendingMinor: pending,
     inFlightMinor: reserved,
-    availableMinor: Math.max(0, credits - debits - pending - reserved),
+    // Deliberately unclamped: a negative figure is the honest answer, and
+    // clamping it would let a payout proceed against money that is not there.
+    availableMinor: credits - debits - pending - reserved,
     minPayoutMinor: MIN_PAYOUT_MINOR,
   };
 }
@@ -558,7 +591,9 @@ export async function walletBalance(pool: pg.Pool, userId: string, currency: str
      FROM ledger_entries WHERE account_id = $1`,
     [account.id],
   );
-  return { currency, balanceMinor: Math.max(0, Number(totals?.credits ?? 0) - Number(totals?.debits ?? 0)) };
+  // Unclamped on purpose. An overdraft must surface as a negative balance and
+  // fail the caller's check, not be hidden as zero.
+  return { currency, balanceMinor: Number(totals?.credits ?? 0) - Number(totals?.debits ?? 0) };
 }
 
 

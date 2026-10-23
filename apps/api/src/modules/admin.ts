@@ -3,6 +3,7 @@ import type { FastifyInstance } from "fastify";
 import { ApiError } from "../errors.js";
 import { queryMany, queryOne, withTransaction } from "../db.js";
 import { parse, publicUser, requireAdmin, requireUser, type AppContext } from "../http.js";
+import { invalidateUserSessions } from "../auth.js";
 
 /**
  * Operator console (§9). Admin surfaces are required by the spec, not optional.
@@ -48,10 +49,13 @@ export function adminRoutes(ctx: AppContext) {
           ORDER BY created_at DESC LIMIT 25`,
         [`%${q}%`],
       );
+      // The audited entity is the user that was looked up, not the operator
+      // doing the lookup. A search can match several people, so it records a
+      // single target only when there is exactly one.
       await ctx.pool.query(
         `INSERT INTO audit_events (actor_id, action, entity_type, entity_id, metadata)
          VALUES ($1, 'admin.user_lookup', 'user', $2, $3)`,
-        [actor.id, actor.id, JSON.stringify({ query: q })],
+        [actor.id, rows.length === 1 ? (rows[0]?.id ?? null) : null, JSON.stringify({ query: q, resultCount: rows.length })],
       );
       return {
         users: rows.map((u) => ({
@@ -99,6 +103,9 @@ export function adminRoutes(ctx: AppContext) {
           await tx.query("UPDATE sessions SET revoked_at = now() WHERE user_id = $1 AND revoked_at IS NULL", [id]);
         }
       });
+      // The session rows are revoked, but a cached identity would keep the ban
+      // invisible for the rest of the cache's TTL. Evict it now.
+      if (status === "banned") invalidateUserSessions(id);
       return { id, moderationStatus: status, until };
     });
 

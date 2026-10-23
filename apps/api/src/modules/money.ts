@@ -7,8 +7,10 @@ import { parse, requireAdmin, requireUser, type AppContext } from "../http.js";
 import { requireIdempotencyKey, runIdempotent } from "../idempotency.js";
 import { trackSafe } from "./analytics.js";
 import { GIFT_CATALOGUE, GIFT_FEE_BPS, splitGift } from "../money/catalogue.js";
-import { creatorBalance, postPayout, postPayoutReversal, MIN_PAYOUT_MINOR } from "../money/ledger.js";
+import { creatorBalance, lockEarningsAccount, postPayout, postPayoutReversal, MIN_PAYOUT_MINOR } from "../money/ledger.js";
 import { ProviderError } from "../payments/payouts.js";
+import { requirePostVisible } from "./feed.js";
+import { canAccessRoom } from "./activities-live.js";
 
 /**
  * Money routes: paid gifts, creator balance, bank accounts and payouts.
@@ -121,6 +123,39 @@ export function moneyRoutes(ctx: AppContext) {
             [input.recipientId],
           );
           if (!recipient) throw ApiError.notFound("Recipient not found");
+
+          // A paid gift must land on something the buyer can actually see, and
+          // the money must go to that object's owner. Otherwise the post or
+          // room id is decoration on a transfer to an arbitrary account.
+          if (input.postId) {
+            const post = await requirePostVisible(ctx, input.postId, user.id);
+            if (post.author_id !== input.recipientId) {
+              throw ApiError.badRequest("A post gift goes to the post's author");
+            }
+          }
+          if (input.roomId) {
+            const room = await queryOne<{ host_id: string }>(
+              ctx.pool,
+              "SELECT host_id FROM activity_rooms WHERE id = $1",
+              [input.roomId],
+            );
+            if (!room) throw ApiError.notFound("Room not found");
+            if (room.host_id !== input.recipientId) {
+              throw ApiError.badRequest("A room gift goes to the room's host");
+            }
+            if (!(await canAccessRoom(ctx, input.roomId, user.id))) {
+              throw ApiError.forbidden("You cannot gift a room you cannot enter");
+            }
+          }
+          const blocked = await queryOne<{ one: number }>(
+            ctx.pool,
+            `SELECT 1 AS one FROM blocks
+              WHERE (blocker_id = $1 AND blocked_id = $2)
+                 OR (blocker_id = $2 AND blocked_id = $1)
+              LIMIT 1`,
+            [user.id, input.recipientId],
+          );
+          if (blocked) throw ApiError.forbidden("You cannot gift this user");
 
           const unitPrice = Number(gift.price_minor);
           const amountMinor = unitPrice * input.quantity;
@@ -305,27 +340,33 @@ export function moneyRoutes(ctx: AppContext) {
           if (destination.status !== "approved") {
             throw ApiError.badRequest("This bank account has not been approved by the bank yet");
           }
-          // The amount comes from the ledger, not the request.
-          const balance = await creatorBalance(ctx.pool, user.id, destination.currency);
-          const amountMinor = input.amountMinor ?? balance.availableMinor;
-          if (amountMinor > balance.availableMinor) {
-            throw ApiError.badRequest("That is more than your available balance");
-          }
-          if (amountMinor < MIN_PAYOUT_MINOR) {
-            throw ApiError.badRequest(
-              `The smallest payout is ${(MIN_PAYOUT_MINOR / 100).toFixed(2)} ${destination.currency}`,
-            );
-          }
+          // The amount comes from the ledger, not the request. The earnings
+          // account is locked while the balance is read and the reservation is
+          // written, so two concurrent requests cannot both see the same
+          // available balance and both reserve it.
           const reference = `WD-${newId()}`;
           const payoutId = newId();
-          // Reserve first: the row exists and is counted by `creatorBalance`
-          // before the provider is called, so two requests cannot both see the
-          // same available balance.
-          await ctx.pool.query(
-            `INSERT INTO payouts (id, user_id, destination_id, amount_minor, currency, status, provider, reference)
-             VALUES ($1,$2,$3,$4,$5,'requested',$6,$7)`,
-            [payoutId, user.id, destination.id, amountMinor, destination.currency, ctx.payouts.name, reference],
-          );
+          const amountMinor = await withTransaction(ctx.pool, async (tx) => {
+            await lockEarningsAccount(tx, user.id, destination.currency);
+            const balance = await creatorBalance(tx as unknown as typeof ctx.pool, user.id, destination.currency);
+            const amount = input.amountMinor ?? balance.availableMinor;
+            if (amount > balance.availableMinor) {
+              throw ApiError.badRequest("That is more than your available balance");
+            }
+            if (amount < MIN_PAYOUT_MINOR) {
+              throw ApiError.badRequest(
+                `The smallest payout is ${(MIN_PAYOUT_MINOR / 100).toFixed(2)} ${destination.currency}`,
+              );
+            }
+            // Reserve inside the lock: the row is counted by `creatorBalance`
+            // before the provider is called.
+            await tx.query(
+              `INSERT INTO payouts (id, user_id, destination_id, amount_minor, currency, status, provider, reference)
+               VALUES ($1,$2,$3,$4,$5,'requested',$6,$7)`,
+              [payoutId, user.id, destination.id, amount, destination.currency, ctx.payouts.name, reference],
+            );
+            return amount;
+          });
           let providerResult;
           try {
             providerResult = await ctx.payouts.createPayout({

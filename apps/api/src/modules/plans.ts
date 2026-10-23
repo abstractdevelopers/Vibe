@@ -136,42 +136,47 @@ export function plansRoutes(ctx: AppContext) {
       const user = await requireUser(ctx, req);
       const { id } = req.params as { id: string };
       const input = parse(rsvpSchema, req.body);
-      const plan = await queryOne<{
-        circle_id: string;
-        participant_limit: number | null;
-        organizer_id: string;
-      }>(
-        ctx.pool,
-        "SELECT circle_id, participant_limit, organizer_id FROM plans WHERE id = $1",
-        [id],
-      );
-      if (!plan) throw ApiError.notFound("Plan not found");
-      await requireCircleMember(ctx.pool, plan.circle_id, user.id);
-
-      let state = input.state;
-      if (input.state === "going" && plan.participant_limit !== null) {
-        const going = await queryOne<{ count: number }>(
-          ctx.pool,
-          "SELECT count(*) AS count FROM rsvps WHERE plan_id = $1 AND state IN ('going', 'checked_in')",
+      // Count and write under one lock. Two people RSVPing to the last place
+      // simultaneously used to both see a free slot and both go.
+      const { state, circleId } = await withTransaction(ctx.pool, async (tx) => {
+        const plan = await queryOne<{
+          circle_id: string;
+          participant_limit: number | null;
+          organizer_id: string;
+        }>(
+          tx,
+          "SELECT circle_id, participant_limit, organizer_id FROM plans WHERE id = $1 FOR UPDATE",
           [id],
         );
-        const alreadyGoing = await queryOne<{ state: string }>(
-          ctx.pool,
-          "SELECT state FROM rsvps WHERE plan_id = $1 AND user_id = $2",
-          [id, user.id],
-        );
-        const countsTowardLimit = alreadyGoing?.state !== "going" && alreadyGoing?.state !== "checked_in";
-        if (countsTowardLimit && (going?.count ?? 0) >= plan.participant_limit) {
-          state = "waitlisted";
-        }
-      }
+        if (!plan) throw ApiError.notFound("Plan not found");
+        await requireCircleMember(tx as unknown as typeof ctx.pool, plan.circle_id, user.id);
 
-      await ctx.pool.query(
-        `INSERT INTO rsvps (plan_id, user_id, state) VALUES ($1, $2, $3)
-         ON CONFLICT (plan_id, user_id) DO UPDATE SET state = EXCLUDED.state, updated_at = now()`,
-        [id, user.id, state],
-      );
-      await notifyCircle(ctx, plan.circle_id, user.id, "plan.rsvp_updated", id, {
+        let next = input.state;
+        if (input.state === "going" && plan.participant_limit !== null) {
+          const going = await queryOne<{ count: number }>(
+            tx,
+            "SELECT count(*) AS count FROM rsvps WHERE plan_id = $1 AND state IN ('going', 'checked_in')",
+            [id],
+          );
+          const alreadyGoing = await queryOne<{ state: string }>(
+            tx,
+            "SELECT state FROM rsvps WHERE plan_id = $1 AND user_id = $2",
+            [id, user.id],
+          );
+          const countsTowardLimit = alreadyGoing?.state !== "going" && alreadyGoing?.state !== "checked_in";
+          if (countsTowardLimit && (going?.count ?? 0) >= plan.participant_limit) {
+            next = "waitlisted";
+          }
+        }
+
+        await tx.query(
+          `INSERT INTO rsvps (plan_id, user_id, state) VALUES ($1, $2, $3)
+           ON CONFLICT (plan_id, user_id) DO UPDATE SET state = EXCLUDED.state, updated_at = now()`,
+          [id, user.id, next],
+        );
+        return { state: next, circleId: plan.circle_id };
+      });
+      await notifyCircle(ctx, circleId, user.id, "plan.rsvp_updated", id, {
         userId: user.id,
         state,
       });

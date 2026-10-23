@@ -350,13 +350,33 @@ export function circlesRoutes(ctx: AppContext) {
       if (invite.max_uses !== null && invite.uses >= invite.max_uses) {
         throw ApiError.forbidden("This invite has reached its usage limit");
       }
+      const alreadyMember = await queryOne(
+        ctx.pool,
+        "SELECT 1 FROM circle_members WHERE circle_id = $1 AND user_id = $2",
+        [invite.circle_id, user.id],
+      );
+      if (alreadyMember) return { circleId: invite.circle_id, role: invite.role, alreadyMember: true };
       await withTransaction(ctx.pool, async (tx) => {
+        // Claim a use atomically. Checking `uses` outside the transaction and
+        // incrementing unconditionally inside let two accepts both pass the
+        // check and take one invite past its limit.
+        const claimed = await tx.query(
+          `UPDATE circle_invites SET uses = uses + 1
+            WHERE id = $1
+              AND revoked_at IS NULL
+              AND (expires_at IS NULL OR expires_at > now())
+              AND (max_uses IS NULL OR uses < max_uses)
+            RETURNING id`,
+          [invite.id],
+        );
+        if ((claimed.rowCount ?? 0) === 0) {
+          throw ApiError.forbidden("This invite has reached its usage limit");
+        }
         await tx.query(
           `INSERT INTO circle_members (circle_id, user_id, role) VALUES ($1, $2, $3)
            ON CONFLICT (circle_id, user_id) DO NOTHING`,
           [invite.circle_id, user.id, invite.role],
         );
-        await tx.query("UPDATE circle_invites SET uses = uses + 1 WHERE id = $1", [invite.id]);
       });
       // If the circle already has a chat, the new member joins it.
       await addMemberToCircleChat(ctx.pool, invite.circle_id, user.id);

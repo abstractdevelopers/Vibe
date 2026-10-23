@@ -36,6 +36,8 @@ export interface AuthUser {
   displayName: string;
   isAdmin: boolean;
   moderationStatus: "active" | "warned" | "restricted" | "suspended" | "banned";
+  /** When a time-boxed suspension lapses. `null` lasts until restored. */
+  moderationUntil: Date | null;
 }
 
 interface UserRow {
@@ -45,6 +47,7 @@ interface UserRow {
   display_name: string;
   is_admin: boolean;
   moderation_status: AuthUser["moderationStatus"];
+  moderation_until: Date | null;
 }
 
 export async function createSession(
@@ -83,6 +86,13 @@ export function invalidateSession(token: string): void {
   sessionCache.delete(hashToken(token));
 }
 
+/** Drop every cached identity for one account (a ban must take effect now). */
+export function invalidateUserSessions(userId: string): void {
+  for (const [key, entry] of sessionCache) {
+    if (entry.user.id === userId) sessionCache.delete(key);
+  }
+}
+
 /** Clear the whole cache. Test-only. */
 export function clearSessionCache(): void {
   sessionCache.clear();
@@ -99,7 +109,7 @@ export async function resolveSession(db: Db, token: string): Promise<AuthUser | 
   const row = await queryOne<UserRow & { expires_at: Date; revoked_at: Date | null }>(
     db,
     `SELECT u.id, u.email, u.handle, u.display_name, u.is_admin, u.moderation_status,
-            s.expires_at, s.revoked_at
+            u.moderation_until, s.expires_at, s.revoked_at
        FROM sessions s
        JOIN users u ON u.id = s.user_id
       WHERE s.token_hash = $1 AND u.deleted_at IS NULL`,
@@ -107,13 +117,32 @@ export async function resolveSession(db: Db, token: string): Promise<AuthUser | 
   );
   if (!row) return null;
   if (row.revoked_at || row.expires_at.getTime() <= Date.now()) return null;
+  // A time-boxed suspension lapses on its own. Restoring here (rather than in
+  // a cron) means the account works on the first request after the deadline.
+  let moderationStatus = row.moderation_status;
+  let moderationUntil = row.moderation_until;
+  if (
+    moderationStatus === "suspended" &&
+    moderationUntil &&
+    moderationUntil.getTime() <= Date.now()
+  ) {
+    moderationStatus = "active";
+    moderationUntil = null;
+    await db.query(
+      `UPDATE users SET moderation_status = 'active', moderation_until = NULL,
+              moderation_reason = NULL, updated_at = now()
+        WHERE id = $1 AND moderation_status = 'suspended'`,
+      [row.id],
+    );
+  }
   const user: AuthUser = {
     id: row.id,
     email: row.email,
     handle: row.handle,
     displayName: row.display_name,
     isAdmin: row.is_admin,
-    moderationStatus: row.moderation_status,
+    moderationStatus,
+    moderationUntil,
   };
   if (cacheable) {
     if (sessionCache.size >= SESSION_CACHE_MAX) sessionCache.clear();

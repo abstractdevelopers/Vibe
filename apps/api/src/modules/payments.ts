@@ -32,12 +32,24 @@ const checkoutSchema = z.object({
   description: z.string().min(1).max(200),
 });
 
+/**
+ * References owned by an internal flow. Each of these is fulfilled by its own
+ * verified-webhook branch with its own amount check, so letting a caller mint a
+ * checkout for one would let them pick someone else's amount. Order references
+ * (`ord_...`) are issued by the order route and settled only after the amount
+ * check in `applyProviderEvent`.
+ */
+const RESERVED_REFERENCE = /^(ord_|GIFT-|TKT-|WALLET-|WD-|SEND-|GAMESTAKE-|BATTLESTAKE-)/i;
+
 export function paymentsRoutes(ctx: AppContext) {
   return async function register(app: FastifyInstance): Promise<void> {
     app.post("/v1/payments/checkout", async (req, reply) => {
       const user = await requireUser(ctx, req);
       const key = requireIdempotencyKey(req.headers["idempotency-key"] as string | undefined);
       const input = parse(checkoutSchema, req.body);
+      if (RESERVED_REFERENCE.test(input.reference)) {
+        throw ApiError.badRequest("That reference belongs to an existing purchase or order");
+      }
       const result = await runIdempotent(
         ctx.pool,
         { userId: user.id, route: "POST /v1/payments/checkout", key, requestBody: req.body },

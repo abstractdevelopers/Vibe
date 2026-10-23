@@ -105,9 +105,19 @@ export function socialRoutes(ctx: AppContext) {
         `SELECT id, handle, display_name, bio, avatar_url
            FROM users
           WHERE deleted_at IS NULL AND discoverable
+            AND id <> $2
+            -- A private profile is not discoverable through search; a block or
+            -- mute hides the account in both directions.
+            AND (profile_audience IS NULL OR profile_audience <> 'private')
+            AND NOT EXISTS (
+              SELECT 1 FROM blocks b
+               WHERE (b.blocker_id = id AND b.blocked_id = $2)
+                  OR (b.blocker_id = $2 AND b.blocked_id = id))
+            AND NOT EXISTS (
+              SELECT 1 FROM mutes m WHERE m.muter_id = $2 AND m.muted_id = id)
             AND (handle ILIKE $1 OR display_name ILIKE $1)
           ORDER BY handle LIMIT 20`,
-        [`%${q}%`],
+        [`%${q}%`, user.id],
       );
       return { users: rows.map(publicUser) };
     });

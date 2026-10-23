@@ -4,7 +4,7 @@ import { ApiError } from "../errors.js";
 import { queryMany, queryOne, withTransaction } from "../db.js";
 import { parse, requireUser, type AppContext } from "../http.js";
 import { newId } from "../ids.js";
-import { walletBalance, postCosmeticPurchase } from "../money/ledger.js";
+import { walletBalance, lockWalletAccount, postCosmeticPurchase } from "../money/ledger.js";
 
 /**
  * Identity and status.
@@ -200,6 +200,9 @@ export function identityStatusRoutes(ctx: AppContext) {
       if (!cosmetic) throw ApiError.notFound("That cosmetic does not exist");
 
       await withTransaction(ctx.pool, async (tx) => {
+        // Same stored-value rule as a wallet send: read and debit under one
+        // lock, or two concurrent buys can both pass the balance check.
+        await lockWalletAccount(tx, user.id, cosmetic.currency);
         const already = await tx.query(
           `SELECT 1 FROM cosmetic_purchases WHERE user_id = $1 AND cosmetic_id = $2`,
           [user.id, id],

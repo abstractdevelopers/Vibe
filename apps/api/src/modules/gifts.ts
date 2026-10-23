@@ -3,6 +3,8 @@ import { z } from "zod";
 import { queryMany, queryOne } from "../db.js";
 import { ApiError } from "../errors.js";
 import { parse, publicUser, requireUser, type AppContext } from "../http.js";
+import { requirePostVisible } from "./feed.js";
+import { notifyUsers } from "./notifications.js";
 
 /**
  * Non-monetary social gifts.
@@ -46,6 +48,7 @@ export function giftsRoutes(ctx: AppContext) {
     app.get("/v1/posts/:id/gifts", async (req) => {
       const user = await requireUser(ctx, req);
       const { id } = req.params as { id: string };
+      await requirePostVisible(ctx, id, user.id);
 
       const rows = await queryMany(
         ctx.pool,
@@ -78,23 +81,27 @@ export function giftsRoutes(ctx: AppContext) {
       const { id } = req.params as { id: string };
       const input = parse(giftSchema, req.body);
 
-      const post = await queryOne<{ author_id: string }>(
+      // Keep the explicit block answer (403) before the visibility check, which
+      // deliberately reports anything it hides as 404.
+      const existingPost = await queryOne<{ author_id: string }>(
         ctx.pool,
         "SELECT author_id FROM posts WHERE id = $1 AND status = 'published'",
         [id],
       );
-      if (!post) throw ApiError.notFound("Post not found");
-      if (post.author_id === user.id) throw ApiError.badRequest("You cannot gift your own post");
-
-      const blocked = await queryOne<{ exists: boolean }>(
+      if (!existingPost) throw ApiError.notFound("Post not found");
+      const blocked = await queryOne<{ one: number }>(
         ctx.pool,
-        `SELECT EXISTS (
-           SELECT 1 FROM blocks
-            WHERE (blocker_id = $1 AND blocked_id = $2) OR (blocker_id = $2 AND blocked_id = $1)
-         ) AS exists`,
-        [user.id, post.author_id],
+        `SELECT 1 AS one FROM blocks
+          WHERE (blocker_id = $1 AND blocked_id = $2) OR (blocker_id = $2 AND blocked_id = $1)
+          LIMIT 1`,
+        [user.id, existingPost.author_id],
       );
-      if (blocked?.exists) throw ApiError.forbidden("You cannot gift this post");
+      if (blocked) throw ApiError.forbidden("You cannot gift this post");
+
+      // Visibility also covers audience and mutes, so a private post's id is
+      // not a key to its gift list either.
+      const post = await requirePostVisible(ctx, id, user.id);
+      if (post.author_id === user.id) throw ApiError.badRequest("You cannot gift your own post");
 
       // ON CONFLICT makes a repeat a no-op rather than a duplicate.
       const inserted = await queryOne<{ id: string }>(
@@ -107,15 +114,11 @@ export function giftsRoutes(ctx: AppContext) {
       );
 
       if (inserted) {
-        await ctx.pool.query(
-          `INSERT INTO notifications (user_id, type, entity_type, entity_id, payload)
-           VALUES ($1, 'gift.received', 'post', $2, $3)`,
-          [post.author_id, id, JSON.stringify({ kind: input.kind, from: user.handle })],
-        );
-        ctx.hub.publishToUsers([post.author_id], {
-          type: "gift.created",
-          entityId: id,
-          payload: { postId: id, kind: input.kind },
+        // `notifyUsers` writes the row and publishes it, and — unlike a raw
+        // INSERT — honours the recipient's `gift` opt-out.
+        await notifyUsers(ctx, [post.author_id], "gift.received", "post", id, {
+          kind: input.kind,
+          from: user.handle,
         });
       }
 

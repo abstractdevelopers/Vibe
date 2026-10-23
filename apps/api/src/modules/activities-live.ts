@@ -1170,14 +1170,25 @@ async function loadRoom(ctx: AppContext, id: string, viewerId: string | null) {
  * applies it too — otherwise any session could listen to any room's events.
  */
 export async function canAccessRoom(ctx: AppContext, roomId: string, userId: string): Promise<boolean> {
-  const room = await queryOne<{ host_id: string; visibility: string }>(
+  const room = await queryOne<{ host_id: string; visibility: string; ticket_price_minor: string | null }>(
     ctx.pool,
-    `SELECT host_id, visibility FROM activity_rooms WHERE id = $1`,
+    `SELECT host_id, visibility, ticket_price_minor FROM activity_rooms WHERE id = $1`,
     [roomId],
   );
   if (!room) return false;
-  if (room.visibility !== "private") return true;
   if (room.host_id === userId) return true;
+  // A ticketed room's realtime channel is part of the room. Without this the
+  // HTTP join refused non-ticket holders while the socket let them listen to
+  // the whole event for free.
+  if (Number(room.ticket_price_minor ?? 0) > 0) {
+    const ticket = await queryOne(
+      ctx.pool,
+      "SELECT 1 FROM room_tickets WHERE room_id = $1 AND user_id = $2 AND status = 'granted'",
+      [roomId, userId],
+    );
+    if (!ticket) return false;
+  }
+  if (room.visibility !== "private") return true;
   const member = await queryOne(
     ctx.pool,
     `SELECT 1 FROM room_members WHERE room_id = $1 AND user_id = $2`,

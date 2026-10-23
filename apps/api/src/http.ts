@@ -37,13 +37,14 @@ export async function authenticate(ctx: AppContext, req: FastifyRequest): Promis
 export async function requireUser(ctx: AppContext, req: FastifyRequest): Promise<AuthUser> {
   const user = await authenticate(ctx, req);
   if (!user) throw ApiError.unauthorized();
-  // A suspended or banned account cannot act, even with a live session.
-  if (user.moderationStatus === "suspended" || user.moderationStatus === "banned") {
-    throw ApiError.forbidden(
-      user.moderationStatus === "banned"
-        ? "This account has been banned"
-        : "This account is suspended",
-    );
+  // A suspended or banned account cannot act, even with a live session. A
+  // time-boxed suspension has already been lazily lifted by `resolveSession`
+  // once its end date passed.
+  if (user.moderationStatus === "banned") {
+    throw ApiError.forbidden("This account has been banned");
+  }
+  if (user.moderationStatus === "suspended" && (!user.moderationUntil || user.moderationUntil.getTime() > Date.now())) {
+    throw ApiError.forbidden("This account is suspended");
   }
   return user;
 }

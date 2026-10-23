@@ -21,13 +21,30 @@ const mediaUrl = z
     message: "Must be an http(s) URL or a Vibe media path",
   });
 
-const createPostSchema = z.object({
-  body: z.string().max(5000).optional(),
-  type: z.enum(["text", "image", "video", "carousel", "poll", "announcement"]).default("text"),
-  audience: z.enum(["public", "connections", "circle", "private"]).default("connections"),
-  circleId: z.string().uuid().optional(),
-  mediaUrls: z.array(mediaUrl).max(4).optional(),
-});
+const createPostSchema = z
+  .object({
+    body: z.string().max(5000).optional(),
+    type: z.enum(["text", "image", "video", "carousel", "poll", "announcement"]).default("text"),
+    audience: z.enum(["public", "connections", "circle", "private"]).default("connections"),
+    circleId: z.string().uuid().optional(),
+    mediaUrls: z.array(mediaUrl).max(4).optional(),
+  })
+  .superRefine((value, ctx) => {
+    // `circle_id` is what the visibility rule checks, so it must mean exactly
+    // one thing: this post is Circle-only. A stray id on a public or private
+    // post used to be stored and could widen its reach in any query that
+    // keyed on `circle_id` alone.
+    if (value.audience === "circle" && !value.circleId) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["circleId"], message: "A Circle post needs a Circle" });
+    }
+    if (value.audience !== "circle" && value.circleId) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["circleId"],
+        message: "Only a Circle post may carry a Circle id",
+      });
+    }
+  });
 
 const commentSchema = z.object({
   body: z.string().min(1).max(2000),
@@ -116,7 +133,7 @@ interface PostRow {
 }
 
 /** Audience + block + mute filtering. This is the only place feed visibility is decided. */
-const VISIBILITY = `
+export const VISIBILITY = `
         AND NOT EXISTS (
           SELECT 1 FROM blocks b
            WHERE (b.blocker_id = p.author_id AND b.blocked_id = $1)
@@ -132,6 +149,32 @@ const VISIBILITY = `
           OR (p.audience = 'circle' AND p.circle_id IN (
                 SELECT circle_id FROM circle_members WHERE user_id = $1))
         )`;
+
+/**
+ * Re-check that a viewer may see one post before letting them read or write
+ * against it. The feed query filters lists; comments, reactions and gifts are
+ * separate routes and must apply the same rule themselves, or a private post's
+ * id becomes a key to its conversation.
+ *
+ * Expects `$1` = viewer id and `$2` = post id.
+ */
+export async function requirePostVisible(
+  ctx: AppContext,
+  postId: string,
+  viewerId: string,
+): Promise<{ id: string; author_id: string; audience: string; circle_id: string | null }> {
+  const post = await queryOne<{ id: string; author_id: string; audience: string; circle_id: string | null }>(
+    ctx.pool,
+    `SELECT p.id, p.author_id, p.audience, p.circle_id
+       FROM posts p
+      WHERE p.id = $2
+        AND p.status = 'published'
+        ${VISIBILITY}`,
+    [viewerId, postId],
+  );
+  if (!post) throw ApiError.notFound("Post not found");
+  return post;
+}
 
 /** Newest-first feed: the Following tab and profile post lists. */
 async function recentPosts(
@@ -284,12 +327,16 @@ async function rankedPosts(
 }
 
 /**
- * Diversify a ranked page: at most two posts per author in a row, and no more
- * than three per author per page, so one prolific account cannot fill the feed.
- * Order is otherwise preserved.
+ * Diversify a ranked page: no more than `perPage` posts per author in the
+ * page, so one prolific account cannot fill the feed. Order is otherwise
+ * preserved. Pass the same `counts` map across batches to keep the cap across
+ * a multi-batch fetch.
  */
-function diversify<T extends { author_id: string }>(items: T[], perPage = 3): T[] {
-  const counts = new Map<string, number>();
+function diversify<T extends { author_id: string }>(
+  items: T[],
+  perPage = 3,
+  counts: Map<string, number> = new Map<string, number>(),
+): T[] {
   const kept: T[] = [];
   for (const item of items) {
     const used = counts.get(item.author_id) ?? 0;
@@ -371,7 +418,11 @@ async function buildFeedPage(
   // the Circles you belong to. "For You" is the ranked baseline. They are
   // genuinely different feeds, not the same query with a different label.
   if (query.tab === "following") {
-    const rows = await recentPosts(ctx.pool, viewerId, { limit: limit + 1, followingOnly: true });
+    const rows = await recentPosts(ctx.pool, viewerId, {
+      limit: limit + 1,
+      cursor: query.cursor ? decodeCursor(query.cursor) : null,
+      followingOnly: true,
+    });
     const hasMore = rows.length > limit;
     const page = rows.slice(0, limit);
     const last = page[page.length - 1];
@@ -385,17 +436,37 @@ async function buildFeedPage(
   // The clock is frozen on the first page and carried in the cursor, so the
   // score of a given post does not drift between page requests.
   const asOf = cursor?.asOf ? new Date(cursor.asOf) : new Date();
-  // Fetch extra rows so diversification can drop repeats without shortening
-  // the page, and still know whether a next page exists.
-  const rows = await rankedPosts(ctx.pool, viewerId, {
-    limit: limit + 6,
-    asOf,
-    cursor:
-      cursor && cursor.score !== undefined
-        ? { score: cursor.score, createdAt: cursor.createdAt, id: cursor.id }
-        : null,
-  });
-  const kept = diversify(rows).slice(0, limit + 1);
+  // Diversification can drop many rows when a few authors are prolific, so a
+  // single over-fetch of six is not enough to guarantee a full page. Keep
+  // reading ranked batches until the page has `limit + 1` survivors (the extra
+  // row is how `hasMore` is known) or the ranked stream runs out. The
+  // per-author counts are carried across batches, or an author could take
+  // three slots in every batch and the cap would mean nothing.
+  const target = limit + 1;
+  const counts = new Map<string, number>();
+  const survivors: Array<PostRow & { rank: number }> = [];
+  let batchCursor =
+    cursor && cursor.score !== undefined
+      ? { score: cursor.score, createdAt: cursor.createdAt, id: cursor.id }
+      : null;
+  const batchLimit = Math.max(limit + 6, 30);
+  for (let guard = 0; guard < 6 && survivors.length < target; guard += 1) {
+    const batch = await rankedPosts(ctx.pool, viewerId, {
+      limit: batchLimit,
+      asOf,
+      cursor: batchCursor,
+    });
+    if (batch.length === 0) break;
+    survivors.push(...diversify(batch, 3, counts));
+    const tail = batch[batch.length - 1]!;
+    batchCursor = {
+      score: tail.rank,
+      createdAt: new Date(tail.created_at).toISOString(),
+      id: tail.id,
+    };
+    if (batch.length < batchLimit) break;
+  }
+  const kept = survivors.slice(0, target);
   const hasMore = kept.length > limit;
   const page = kept.slice(0, limit);
   const items = await attachActivities(ctx.pool, page, viewerId);
@@ -604,12 +675,7 @@ export function feedRoutes(ctx: AppContext) {
       const user = await requireUser(ctx, req);
       const { id } = req.params as { id: string };
       const input = parse(reactionSchema, req.body);
-      const post = await queryOne<{ id: string }>(
-        ctx.pool,
-        "SELECT id FROM posts WHERE id = $1 AND status = 'published'",
-        [id],
-      );
-      if (!post) throw ApiError.notFound("Post not found");
+      await requirePostVisible(ctx, id, user.id);
       const existing = await queryOne(
         ctx.pool,
         "SELECT 1 FROM reactions WHERE post_id = $1 AND user_id = $2 AND kind = $3",
@@ -641,6 +707,7 @@ export function feedRoutes(ctx: AppContext) {
     app.get("/v1/posts/:id/comments", async (req) => {
       const user = await requireUser(ctx, req);
       const { id } = req.params as { id: string };
+      await requirePostVisible(ctx, id, user.id);
       const rows = await queryMany<CommentRow>(
         ctx.pool,
         `SELECT c.id, c.parent_id, c.body, c.created_at, c.edited_at, c.deleted_at,
@@ -673,12 +740,7 @@ export function feedRoutes(ctx: AppContext) {
       const user = await requireUser(ctx, req);
       const { id } = req.params as { id: string };
       const input = parse(commentSchema, req.body);
-      const post = await queryOne<{ id: string; author_id: string }>(
-        ctx.pool,
-        "SELECT id, author_id FROM posts WHERE id = $1 AND status = 'published'",
-        [id],
-      );
-      if (!post) throw ApiError.notFound("Post not found");
+      const post = await requirePostVisible(ctx, id, user.id);
 
       // Replies are one level deep: a reply to a reply attaches to the same
       // root, so the thread never nests arbitrarily.
@@ -793,8 +855,8 @@ export function feedRoutes(ctx: AppContext) {
         return null;
       }
       await ctx.pool.query(
-        "UPDATE comments SET deleted_at_prev = deleted_at, deleted_at = now() WHERE id = $1",
-        [id],
+        "UPDATE comments SET deleted_at_prev = deleted_at, deleted_at = now(), deleted_by = $2 WHERE id = $1",
+        [id, user.id],
       );
       await ctx.pool.query(
         `INSERT INTO audit_events (actor_id, action, entity_type, entity_id)
@@ -809,18 +871,28 @@ export function feedRoutes(ctx: AppContext) {
     app.post("/v1/comments/:id/restore", async (req) => {
       const user = await requireUser(ctx, req);
       const { id } = req.params as { id: string };
-      const comment = await queryOne<{ author_id: string; deleted_at: Date | null; deleted_at_prev: Date | null }>(
+      const comment = await queryOne<{
+        author_id: string; deleted_at: Date | null; deleted_at_prev: Date | null; deleted_by: string | null;
+      }>(
         ctx.pool,
-        "SELECT author_id, deleted_at, deleted_at_prev FROM comments WHERE id = $1",
+        "SELECT author_id, deleted_at, deleted_at_prev, deleted_by FROM comments WHERE id = $1",
         [id],
       );
       if (!comment) throw ApiError.notFound("Comment not found");
       if (comment.author_id !== user.id) throw ApiError.forbidden("Only the author can restore this comment");
+      // An author may not undo a moderator's removal. Rows deleted before
+      // `deleted_by` existed are treated as author deletions.
+      if (comment.deleted_by && comment.deleted_by !== user.id) {
+        throw ApiError.forbidden("This comment was removed by a moderator");
+      }
       if (!comment.deleted_at) return { id, restored: false };
       if (Date.now() - new Date(comment.deleted_at).getTime() > UNDO_WINDOW_MS) {
         throw ApiError.badRequest("The undo window has passed");
       }
-      await ctx.pool.query("UPDATE comments SET deleted_at = deleted_at_prev, deleted_at_prev = NULL WHERE id = $1", [id]);
+      await ctx.pool.query(
+        "UPDATE comments SET deleted_at = deleted_at_prev, deleted_at_prev = NULL, deleted_by = NULL WHERE id = $1",
+        [id],
+      );
       await ctx.pool.query(
         `INSERT INTO audit_events (actor_id, action, entity_type, entity_id)
          VALUES ($1, 'comment.restored', 'comment', $2)`,
