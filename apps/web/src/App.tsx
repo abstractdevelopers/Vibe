@@ -36,6 +36,7 @@ import {
   SettingsIcon,
   WalletIcon,
   ShieldIcon,
+  SparklesIcon,
   TicketIcon,
   RadioIcon,
   TrophyIcon,
@@ -628,6 +629,16 @@ function AccountMenu({
             }}
           >
             <RadioIcon width={17} height={17} /> Live Now
+          </button>
+          <button
+            className="menu-item"
+            role="menuitem"
+            onClick={() => {
+              setOpen(false);
+              nav.push({ name: "assist" });
+            }}
+          >
+            <SparklesIcon width={17} height={17} /> Ask for a hand
           </button>
 
           <p className="menu-group" role="presentation">Money</p>
