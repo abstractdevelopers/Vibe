@@ -230,6 +230,17 @@ const MARKS: Record<string, (c: Material) => JSX.Element> = {
       <path d="M8 34h34" stroke={c.hi} strokeWidth="3" strokeLinecap="round" />
     </>
   ),
+  // A battle reaction, drawn like the rest of the artwork rather than set as an
+  // emoji character: the client has no emoji anywhere, because they render
+  // differently on every platform and read as a toy next to the SVG marks.
+  shock: (c) => (
+    <>
+      <circle cx="24" cy="24" r="15" fill={c.fill} />
+      <circle cx="18" cy="20" r="2.6" fill={c.hi} />
+      <circle cx="30" cy="20" r="2.6" fill={c.hi} />
+      <ellipse cx="24" cy="31" rx="4" ry="5" fill={c.hi} />
+    </>
+  ),
 };
 
 const FALLBACK = (c: Material): JSX.Element => (
@@ -243,7 +254,7 @@ const GIFT_MATERIAL: Record<string, string> = {
   fireworks: "violet", guitar: "cocoa", drum: "cocoa", crown: "gold", diamond: "cyan",
   rocket: "steel", trophy: "gold", galaxy: "violet", castle: "steel", lion: "gold",
   universe: "cyan", jet: "steel", yacht: "cyan",
-  laugh: "light", party: "violet", hundred: "gold", gift: "rose",
+  laugh: "light", party: "violet", hundred: "gold", gift: "rose", shock: "light",
 };
 
 export function giftMaterialName(id: string): string {

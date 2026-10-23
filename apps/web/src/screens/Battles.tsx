@@ -7,6 +7,7 @@ import { formatMoney, toMinorUnits } from "../money";
 import { Avatar } from "../components/Avatar";
 import { EmptyState } from "../components/EmptyState";
 import { BattleCanvas } from "../components/BattleCanvas";
+import { GiftArt } from "../components/GiftArt";
 import { useNav } from "../nav";
 import { useRealtime } from "../realtime";
 import { STADIUMS, stadium, type MapPlot } from "../iso";
@@ -92,10 +93,10 @@ interface Battle {
 
 /** The reactions a bystander can throw at a side. Mirrors BATTLE_GIFT_KINDS. */
 const BATTLE_REACTIONS = [
-  { id: "fire", label: "Fire", art: "🔥" },
-  { id: "clap", label: "Clap", art: "👏" },
-  { id: "shock", label: "Shock", art: "😱" },
-  { id: "crown", label: "Crown", art: "👑" },
+  { id: "fire", label: "Fire" },
+  { id: "clap", label: "Clap" },
+  { id: "shock", label: "Shock" },
+  { id: "crown", label: "Crown" },
 ] as const;
 
 /** Where a plot sits on the map. Fixed slots keep the field tidy. */
@@ -775,7 +776,7 @@ export function BattleScreen({ battleId, onBack }: { battleId: string; viewerId:
                       aria-label={`Throw ${r.label} at ${battle.sides[s]}`}
                       title={battle.myGifts.includes(r.id) ? `You already threw ${r.label}` : `${r.label} · +2 points`}
                     >
-                      {r.art}
+                      <GiftArt id={r.id} size={24} />
                     </button>
                   ))}
                 </span>
