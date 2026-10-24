@@ -42,7 +42,8 @@ const PAGES = [
 
 
 const browser = await puppeteer.launch({
-  executablePath: "/usr/bin/chromium",
+  // CI installs `chromium`; a Kydanet Computer ships Chrome. Allow either.
+  executablePath: process.env.CHROME_PATH ?? "/usr/bin/chromium",
   args: ["--no-sandbox", "--disable-gpu", "--hide-scrollbars"],
 });
 

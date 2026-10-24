@@ -17,7 +17,7 @@ const TOKEN = process.env.AUDIT_TOKEN ?? "";
 const ROOM_TITLE = process.env.ROOM_TITLE ?? "Late night radio";
 
 const browser = await puppeteer.launch({
-  executablePath: "/usr/bin/chromium",
+  executablePath: process.env.CHROME_PATH ?? "/usr/bin/chromium",
   args: ["--no-sandbox", "--disable-gpu", "--hide-scrollbars"],
 });
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));

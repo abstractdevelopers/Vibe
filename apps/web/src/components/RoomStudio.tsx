@@ -1026,8 +1026,8 @@ export function RoomStudio({ roomId, viewerId, viewerName, onBack, onLeft }: Pro
           </button>
 
           {joined && (
-            <button className="btn ghost dock-leave" onClick={() => void leaveRoom()}>
-              <LogOutIcon width={15} height={15} /> Leave
+            <button className="btn ghost dock-leave" onClick={() => void leaveRoom()} aria-label="Leave the room">
+              <LogOutIcon width={15} height={15} /> <span>Leave</span>
             </button>
           )}
         </div>

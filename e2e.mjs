@@ -38,6 +38,24 @@ const shot = async (n) => { const { data } = await rpc(ws, "Page.captureScreensh
 const bodyText = () => ev(`document.body.innerText`);
 const clickText = async (t, exact = true) => ev(`(()=>{const els=[...document.querySelectorAll("button,a,[role=button],label")];const el=els.find(e=>(e.textContent||"").trim()===${JSON.stringify(t)})||(${exact}?null:els.find(e=>(e.textContent||"").trim().includes(${JSON.stringify(t)})));if(!el)return false;el.click();return true;})()`);
 const clickSel = async (sel) => ev(`(()=>{const el=document.querySelector(${JSON.stringify(sel)});if(!el)return false;el.click();return true;})()`);
+// A lazy screen compiles on first visit, so a cold dev-server run can take
+// seconds to paint it. Wait for the screen's text instead of a fixed sleep, or
+// the check reads an empty shell and calls a working screen broken.
+const waitFor = async (re, ms = 8000) => {
+  for (let i = 0; i < ms / 200; i += 1) {
+    const b = await bodyText();
+    if (re.test(b)) return b;
+    await sleep(200);
+  }
+  return bodyText();
+};
+const waitForSel = async (sel, ms = 8000) => {
+  for (let i = 0; i < ms / 200; i += 1) {
+    if (await ev(`!!document.querySelector(${JSON.stringify(sel)})`)) return true;
+    await sleep(200);
+  }
+  return false;
+};
 
 const results = [];
 function check(name, ok, detail = "") { results.push({ name, ok, detail }); console.log(`${ok ? "PASS" : "FAIL"}  ${name}${detail ? "  — " + detail : ""}`); }
@@ -78,6 +96,7 @@ check("Can create a post via API", created === 201, "status " + created);
 
 // ---- reactions (optimistic) ----
 await rpc(ws, "Page.navigate", { url: WEB }, sessionId); await sleep(1800);
+await waitForSel(".react-btn");
 const reacted = await ev(`(()=>{const b=[...document.querySelectorAll(".react-btn")].find(e=>/like/i.test(e.textContent||"")||/^\\d+$/.test((e.textContent||"").trim()));if(!b)return "none";b.click();return "clicked";})()`);
 await sleep(500);
 check("Feed reaction control is clickable", reacted === "clicked", reacted);
@@ -90,7 +109,8 @@ await sleep(600);
 t = await bodyText();
 check("Create sheet opens with options", /Post/.test(t) && /Poll/.test(t) && /Plan/.test(t), t.replace(/\n/g, " ").slice(0, 60));
 await shot("e2e-create-sheet");
-await ev(`(()=>{const b=[...document.querySelectorAll("button")].find(e=>/cancel|close/i.test(e.textContent||""));if(b)b.click();})()`);
+// The sheet's close control is an icon button, so it has no text to match.
+await clickSel('[aria-label="Close"]');
 await sleep(400);
 
 // ---- circle detail + tabs ----
@@ -159,8 +179,8 @@ await shot("e2e-inbox");
 
 // ---- settings + theme toggle ----
 await ev(`document.querySelector('[aria-label="Account menu"]')?.click()`); await sleep(400);
-await clickText("Settings", false); await sleep(800);
-t = await bodyText();
+await clickText("Settings", false);
+t = await waitFor(/Privacy|Discoverable|Read receipts/i);
 check("Settings opens with privacy controls", /Privacy|Discoverable|Read receipts/i.test(t), t.replace(/\n/g, " ").slice(0, 60));
 check("Settings shows notification controls", /Notifications|Circle invites|Quiet hours/i.test(t), t.replace(/\n/g, " ").slice(0, 60));
 check("Settings shows data & account controls", /Your data|Download my data|Delete my account/i.test(t), t.replace(/\n/g, " ").slice(0, 60));
@@ -259,8 +279,9 @@ const prodId = await (await fetch(`${API}/v1/merchants/${shopId}/products`, { me
 
 await ev(`localStorage.setItem("vibe.token", ${JSON.stringify(token)})`);
 await rpc(ws, "Page.navigate", { url: WEB }, sessionId); await sleep(2000);
-await ev(`(()=>{const b=[...document.querySelectorAll("nav button")].find(e=>(e.textContent||"").trim()==="Explore");if(b)b.click();})()`); await sleep(1200);
-t = await bodyText();
+await ev(`(()=>{const b=[...document.querySelectorAll("nav button")].find(e=>(e.textContent||"").trim()==="Explore");if(b)b.click();})()`);
+// The subtitle also says "shops", so wait for the merchant itself, not the word.
+t = await waitFor(/E2E Coffee/, 12000);
 check("Explore lists verified shops", /Shops/.test(t) && /E2E Coffee/.test(t), t.replace(/\n/g, " ").slice(0, 60));
 await shot("e2e-shops");
 
@@ -337,8 +358,8 @@ await shot("e2e-events");
 // Vibe Pass: create, then flip a consent toggle and confirm it persists.
 await rpc(ws, "Page.navigate", { url: WEB }, sessionId); await sleep(1600);
 await ev(`document.querySelector('[aria-label="Account menu"]')?.click()`); await sleep(400);
-await clickText("Vibe Pass", false); await sleep(1000);
-t = await bodyText();
+await clickText("Vibe Pass", false);
+t = await waitFor(/Vibe Pass/i);
 if (/No pass yet/.test(t)) { await clickText("Create my pass", false); await sleep(900); t = await bodyText(); }
 check("Vibe Pass shows a revocable token and consent controls", /What a scan may show/i.test(t) && /Pass token/i.test(t), t.replace(/\n/g, " ").slice(0, 70));
 check("Vibe Pass offers revoke", /Revoke pass/i.test(t), t.replace(/\n/g, " ").slice(0, 60));
@@ -354,8 +375,8 @@ await shot("e2e-pass");
 // AI Assist: generate, then accept — and confirm nothing was created.
 await rpc(ws, "Page.navigate", { url: WEB }, sessionId); await sleep(1600);
 await ev(`document.querySelector('[aria-label="Account menu"]')?.click()`); await sleep(400);
-await clickText("Ask for a hand", false); await sleep(1000);
-t = await bodyText();
+await clickText("Ask for a hand", false);
+t = await waitFor(/Suggestion/i);
 check("Assist screen warns that a person confirms every action", /Suggestion/i.test(t) && /confirm|never sends/i.test(t), t.replace(/\n/g, " ").slice(0, 70));
 await clickText("Generate suggestion", false); await sleep(1000);
 t = await bodyText();
@@ -389,8 +410,8 @@ check("Live and scheduled states are shown distinctly", /Live/.test(t) && /(Sche
 await shot("e2e-live");
 
 // Open the live room and drive the real interaction.
-await clickText("E2E Matchday", false); await sleep(1200);
-t = await bodyText();
+await clickText("E2E Matchday", false);
+t = await waitFor(/Stage/i);
 check("Room opens with its derived state and a stage", /E2E Matchday/.test(t) && /LIVE/.test(t) && /Stage/.test(t), t.replace(/\n/g, " ").slice(0, 80));
 check("Room states where its data comes from", /Data:/i.test(t) || /authorized source/i.test(t), t.replace(/\n/g, " ").slice(0, 80));
 // The message box lives on the Chat face of the room, not stacked under the stage.

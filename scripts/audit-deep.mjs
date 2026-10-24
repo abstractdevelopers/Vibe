@@ -22,7 +22,7 @@ mkdirSync(OUT, { recursive: true });
 const TOKEN = process.env.AUDIT_TOKEN ?? "";
 
 const browser = await puppeteer.launch({
-  executablePath: "/usr/bin/chromium",
+  executablePath: process.env.CHROME_PATH ?? "/usr/bin/chromium",
   args: ["--no-sandbox", "--disable-gpu", "--hide-scrollbars"],
 });
 
@@ -126,9 +126,11 @@ await visit("profile", async (p) => {
 });
 
 // --- Circles: list then a circle ---------------------------------------------
+// Lists are one row language now (`.result-row`), so a card selector no longer
+// matches and the sweep silently stayed on the list.
 await visit("circle", async (p) => {
   await tab(p, "Circles");
-  const ok = await clickByText(p, "", ".circle-card, .card");
+  const ok = await clickByText(p, "", ".result-row");
   await sleep(1800);
   return ok ? null : "no circle to open";
 });
@@ -136,7 +138,7 @@ await visit("circle", async (p) => {
 // --- Play: games hub, a game, and a table ------------------------------------
 await visit("game", async (p) => {
   await tab(p, "Play");
-  const ok = await clickByText(p, "", ".live-card");
+  const ok = await clickByText(p, "", ".game-tile");
   await sleep(1800);
   return ok ? null : "no game to open";
 });
@@ -148,8 +150,14 @@ await visit("game-table", async (p) => {
 });
 
 // --- Battles: list then a battle ---------------------------------------------
+// Battles is the second face of Play, not a tab of its own.
 await visit("battle", async (p) => {
-  await tab(p, "Battles");
+  await tab(p, "Play");
+  await p.evaluate(() => {
+    const b = [...document.querySelectorAll(".seg button, button")].find((x) => (x.textContent || "").trim() === "Battles");
+    b?.click();
+  });
+  await sleep(1800);
   const ok = await clickByText(p, "", ".battle-card, .card");
   await sleep(1800);
   return ok ? null : "no battle to open";
@@ -187,7 +195,17 @@ await visit("place", async (p) => {
 // --- Storefront and a product, from the account menu --------------------------
 await visit("storefront", async (p) => {
   await tab(p, "Explore");
-  const ok = await clickByText(p, "", ".card.row.spread");
+  // People, events and shops share `.result-row`, so open the row that sits in
+  // the shelf whose heading is "Shops" rather than the first row on the page.
+  const ok = await p.evaluate(() => {
+    const shelf = [...document.querySelectorAll(".shelf")].find((s) =>
+      /^Shops$/.test((s.querySelector(".section-title")?.textContent || "").trim()),
+    );
+    const row = shelf?.querySelector(".result-row");
+    if (!row) return false;
+    row.click();
+    return true;
+  });
   await sleep(1800);
   return ok ? null : "no shop to open";
 });

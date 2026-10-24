@@ -77,57 +77,6 @@
       "w": 390,
       "h": 844
     },
-    "findings": [
-      {
-        "kind": "text-overlap",
-        "el": "h1.screen-title <> p.eyebrow",
-        "detail": "55x18"
-      },
-      {
-        "kind": "text-overlap",
-        "el": "p.vibe-line <> h2.",
-        "detail": "55x21"
-      },
-      {
-        "kind": "text-overlap",
-        "el": "span.live-card-meta <> span.",
-        "detail": "93x20"
-      },
-      {
-        "kind": "text-overlap",
-        "el": "span.creator-handle <> button.btn primary block",
-        "detail": "62x17"
-      },
-      {
-        "kind": "text-overlap",
-        "el": "button.feed-author <> p.eyebrow",
-        "detail": "83x5"
-      },
-      {
-        "kind": "text-overlap",
-        "el": "p.post-body <> strong.",
-        "detail": "63x20"
-      },
-      {
-        "kind": "text-overlap",
-        "el": "p.post-body <> span.meta",
-        "detail": "122x18"
-      },
-      {
-        "kind": "text-overlap",
-        "el": "p.post-body <> strong.",
-        "detail": "37x20"
-      },
-      {
-        "kind": "text-overlap",
-        "el": "p.post-body <> span.meta",
-        "detail": "85x18"
-      },
-      {
-        "kind": "text-overlap",
-        "el": "button.feed-author <> span.meta",
-        "detail": "26x11"
-      }
-    ]
+    "findings": []
   }
 }
