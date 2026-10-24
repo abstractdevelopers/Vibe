@@ -12,7 +12,7 @@ import { useActivityTheme } from "./useActivityTheme";
 import { themeForRoom } from "../themes";
 import {
   ArrowLeftIcon, BellIcon, ChatIcon, CheckIcon, CheerIcon, CloseIcon, EditIcon, FlameIcon, GiftIcon,
-  HandIcon, HeadphonesIcon, LinkIcon, MicIcon, MicOffIcon, MicOnIcon, MusicIcon,
+  HandIcon, HeadphonesIcon, LinkIcon, MicIcon, MicOffIcon, MicOnIcon, MusicIcon, RadioIcon,
   LogOutIcon, MoreIcon, ShareIcon, ShieldIcon, TicketIcon, TrashIcon, UploadIcon, UsersIcon,
 } from "./Icons";
 import { GiftArt } from "./GiftArt";
@@ -55,6 +55,8 @@ export interface Room {
   sponsorLabel: string | null;
   rules: string | null;
   bannerUrl: string | null;
+  dataSource: string | null;
+  dataSourceUrl: string | null;
   externalUrl: string | null;
   playbackMode: "coordinated" | "synchronized";
   spoilerPolicy: "open" | "spoiler_safe";
@@ -869,6 +871,18 @@ export function RoomStudio({ roomId, viewerId, viewerName, onBack, onLeft }: Pro
               <LinkIcon width={13} height={13} />
               {room.playbackMode === "synchronized" ? "Synchronized playback through the licensed service" : "Coordinated — open on the licensed service"}
               {" "}· <a href={room.externalUrl} target="_blank" rel="noreferrer">open</a>
+            </p>
+          )}
+
+          {/* Where a room's numbers come from, said in the room. A score with
+              no source is a rumour, so a room that declares a source names it
+              here rather than leaving it to the score panel alone. */}
+          {room.dataSource && (
+            <p className="meta row" style={{ gap: 4 }}>
+              <RadioIcon width={13} height={13} />
+              Data: {room.dataSourceUrl
+                ? <a href={room.dataSourceUrl} target="_blank" rel="noreferrer">{room.dataSource}</a>
+                : room.dataSource}
             </p>
           )}
 

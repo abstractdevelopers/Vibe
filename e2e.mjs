@@ -17,7 +17,9 @@ const OUT = ".audit/";
 fs.mkdirSync(OUT, { recursive: true });
 const CHROME_BIN = process.env.CHROME_BIN || "chromium";
 
-const chrome = spawn(CHROME_BIN, ["--headless=new", `--remote-debugging-port=${PORT}`, "--no-sandbox", "--disable-gpu", "--window-size=430,932", "--user-data-dir=/tmp/chrome-e2e", "about:blank"], { stdio: "ignore" });
+// `--disable-dev-shm-usage` matters in a container: /dev/shm is often 64 MB, and
+// a renderer that runs out of it dies mid-run, taking the CDP session with it.
+const chrome = spawn(CHROME_BIN, ["--headless=new", `--remote-debugging-port=${PORT}`, "--no-sandbox", "--disable-gpu", "--disable-dev-shm-usage", "--window-size=430,932", "--user-data-dir=/tmp/chrome-e2e", "about:blank"], { stdio: "ignore" });
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 async function wsurl() { for (let i = 0; i < 60; i++) { try { const j = await (await fetch(`http://127.0.0.1:${PORT}/json/version`)).json(); if (j.webSocketDebuggerUrl) return j.webSocketDebuggerUrl; } catch {} await sleep(200); } throw new Error("no chrome"); }
 let id = 0;
@@ -47,16 +49,24 @@ await ev(`localStorage.clear()`);
 await ev(`localStorage.setItem("vibe.token", ${JSON.stringify(token)}); localStorage.setItem("vibe.theme","dark")`);
 await rpc(ws, "Page.navigate", { url: WEB }, sessionId); await sleep(2200);
 let t = await bodyText();
-check("Signed-in home loads with feed", /Good to see you|What’s happening/i.test(t), t.slice(0, 40));
+check("Signed-in home loads with feed", /(Good morning|Good afternoon|Good evening|Still up|Late one)/i.test(t), t.slice(0, 40));
 
 // ---- nav ----
-for (const [label, expect] of [["Circles", /Circles/], ["Explore", /Explore/], ["You", /Zara Ade/]]) {
+// You is no longer a tab: the bar is Home, Circles, Create, Play, Explore and
+// "Your space" lives in the account menu. Assert the bar as it is, then reach
+// You the way a person does.
+for (const [label, expect] of [["Circles", /Circles/], ["Play", /Play/], ["Explore", /Explore/]]) {
   await ev(`(()=>{const b=[...document.querySelectorAll("nav button")].find(e=>(e.textContent||"").trim()===${JSON.stringify(label)});if(b)b.click();})()`);
   await sleep(800);
   t = await bodyText();
   check(`Tab ${label} renders`, expect.test(t), t.replace(/\n/g, " ").slice(0, 50));
   await shot(`e2e-tab-${label.toLowerCase()}`);
 }
+await ev(`document.querySelector('[aria-label="Account menu"]')?.click()`); await sleep(400);
+await clickText("Your space", false); await sleep(900);
+t = await bodyText();
+check("Your space opens from the account menu", /Zara Ade/.test(t), t.replace(/\n/g, " ").slice(0, 50));
+await shot("e2e-you");
 
 // ---- compose a post ----
 await ev(`(()=>{const b=[...document.querySelectorAll("nav button")].find(e=>(e.textContent||"").trim()==="Home");if(b)b.click();})()`); await sleep(700);
@@ -259,7 +269,9 @@ t = await bodyText();
 check("Storefront opens with a product", /E2E Latte/.test(t), t.replace(/\n/g, " ").slice(0, 60));
 await clickText("E2E Latte", false); await sleep(1000);
 t = await bodyText();
-check("Product detail shows a formatted price and no NaN", /25\.00/.test(t) && !/NaN/.test(t), t.replace(/\n/g, " ").slice(0, 80));
+// formatMoney trims a zero fraction, so ₦25 is the correct render of 2500
+// minor units; the failure this guards is the raw minor figure or a NaN.
+check("Product detail shows a formatted price and no NaN", /₦25(?!\d)/.test(t) && !/2500|NaN/.test(t), t.replace(/\n/g, " ").slice(0, 80));
 check("Product detail offers the continue action", /Continue to payment/i.test(t), t.replace(/\n/g, " ").slice(0, 60));
 await shot("e2e-product");
 
@@ -342,7 +354,7 @@ await shot("e2e-pass");
 // AI Assist: generate, then accept — and confirm nothing was created.
 await rpc(ws, "Page.navigate", { url: WEB }, sessionId); await sleep(1600);
 await ev(`document.querySelector('[aria-label="Account menu"]')?.click()`); await sleep(400);
-await clickText("Assist", false); await sleep(1000);
+await clickText("Ask for a hand", false); await sleep(1000);
 t = await bodyText();
 check("Assist screen warns that a person confirms every action", /Suggestion/i.test(t) && /confirm|never sends/i.test(t), t.replace(/\n/g, " ").slice(0, 70));
 await clickText("Generate suggestion", false); await sleep(1000);
@@ -379,18 +391,23 @@ await shot("e2e-live");
 // Open the live room and drive the real interaction.
 await clickText("E2E Matchday", false); await sleep(1200);
 t = await bodyText();
-check("Room opens with its derived state and a message box", /E2E Matchday/.test(t) && (await ev(`!!document.querySelector('[aria-label="Message"]')`)), t.replace(/\n/g, " ").slice(0, 80));
+check("Room opens with its derived state and a stage", /E2E Matchday/.test(t) && /LIVE/.test(t) && /Stage/.test(t), t.replace(/\n/g, " ").slice(0, 80));
 check("Room states where its data comes from", /Data:/i.test(t) || /authorized source/i.test(t), t.replace(/\n/g, " ").slice(0, 80));
+// The message box lives on the Chat face of the room, not stacked under the stage.
+await ev(`(()=>{const t=[...document.querySelectorAll('[role="tab"]')].find(e=>/^Chat/.test((e.textContent||"").trim()));if(!t)return false;t.click();return true;})()`); await sleep(800);
+t = await bodyText();
+check("Room's chat face offers a message box", !!(await ev(`!!document.querySelector('[aria-label="Message"]')`)), t.replace(/\n/g, " ").slice(0, 60));
 const postsBefore = await ev(`document.querySelectorAll('.room-post').length`);
 await ev(`(()=>{const i=document.querySelector('[aria-label="Message"]');const s=Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,"value").set;s.call(i,"E2E hello from the room");i.dispatchEvent(new Event("input",{bubbles:true}));})()`);
 await sleep(200);
 await clickText("Send", false); await sleep(1200);
 const postsAfter = await ev(`document.querySelectorAll('.room-post').length`);
 check("Posting to a room works and appears", postsAfter > postsBefore, `${postsBefore} -> ${postsAfter}`);
-// Share link is real and revocable.
-await clickText("Share", false); await sleep(1000);
+// Share link is real and revocable. It lives in the room's More sheet now.
+await clickSel('[aria-label="More controls"]'); await sleep(700);
+await clickText("Copy invite link", false); await sleep(1200);
 t = await bodyText();
-check("Sharing a room produces a context-preserving link", /Link ready/.test(t), t.replace(/\n/g, " ").slice(0, 80));
+check("Sharing a room produces a context-preserving link", /Link copied/.test(t), t.replace(/\n/g, " ").slice(0, 80));
 await shot("e2e-room");
 
 // A spoiler-safe room hides its messages until revealed.
