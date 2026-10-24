@@ -547,10 +547,14 @@ npm --workspace @vibe/api run test
   launch seeding) is unreachable. Use
   `npm --workspace @vibe/api run operator -- --grant <email>` (a CLI on purpose,
   not an endpoint).
-- **Nothing charges an ad budget.** `campaigns.budget_minor` is stored and
-  reported, but no code debits it √¢‚Ç¨‚Äù there is no spend ledger and no
-  authorization at review time. A campaign can run indefinitely at no cost. The
-  order path is different and real: it goes through Bachs.
+- **The ad budget is a delivery limit, derived from servings.** Every verified
+  serving costs one impression, and `selectAdForViewer` refuses a campaign whose
+  `budget_minor` no longer covers `served * cost_per_impression_minor`
+  (`modules/ads.ts`), so an exhausted campaign stops running without a counter
+  that could drift. Spend is still derived at read time in `/metrics`, never
+  stored, and nothing invoices a merchant or moves money: no card is charged
+  when a budget runs out. The order path is different and real: it goes through
+  Bachs.
 - **Ad creatives were text-only; a banner image is now supported.**
   `campaigns.creative_image_url` (migration 0013) holds an absolute http(s) URL
   or a `/v1/media/<id>` path, the same contract as `users.avatar_url`, so the
