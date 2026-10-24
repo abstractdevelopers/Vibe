@@ -815,11 +815,21 @@ Gotchas the harnesses encode, in case you write new checks:
   session stores its full engine state; every move is validated against that
   state, persisted with a sequence, and only then broadcast, so a client cannot
   invent a win or replay a move. `game_catalog` lists every title with an
-  `availability` of `playable` or `planned`; only `whot` has an engine and the
-  create route refuses a game that has none, so the "coming soon" badge is
-  enforced, not decorative. Stakes move real wallet Yens into a per-session
+  `availability` of `playable` or `planned`; 34 of the 45 have an engine in
+  `apps/api/src/games/`, and the create route refuses a game that has none, so
+  the "coming soon" badge is enforced, not decorative. Nothing is licensed from
+  a third-party game API: the rules, the randomness seed and the settlement are
+  ours, which is what lets a stake settle through our ledger. Stakes move real wallet Yens into a per-session
   escrow account and pay the winner with a 5% rake to revenue, as ordinary
   journals, so a game can never create or destroy Yens.
+- **The game UI is eight family renderers, not 34 screens.** `GameTable.tsx`
+  picks `WhotBoard`, `CardBoard`, `GridBoard` (tictactoe/connect4/gomoku/
+  checkers/reversi/battleship), `SnakesBoard`, `DotsBoard`, `OptionBoard`
+  (dice/slots/roulette/picks), `SimonBoard` and `GenericBoard` from the shape of
+  the engine's view. A new game should fit one of these - by emitting the same
+  view shape - rather than shipping its own front-end. A bespoke renderer is
+  only worth it when the interaction is genuinely new (a board nobody has drawn
+  yet), and `GenericBoard` is the honest fallback until then.
 - **A game's host is seated and staked at creation.** The host does not go
   through `/join` √¢‚Ç¨‚Äù they are already in the room √¢‚Ç¨‚Äù so the create route stakes
   them and writes their `game_players` row inside the same transaction. Missing
@@ -1203,6 +1213,21 @@ Gotchas the harnesses encode, in case you write new checks:
   (`COSMETICS`), like the gift catalogue, so a cosmetic is never a row that can
   drift from its price. Tiers are positional (`maxAhead`), so there is exactly
   one King and one Queen and the lower tiers read as belonging, not winning.
+- **A limited cosmetic is a numbered run, not a counter.** `editionSize` in
+  `COSMETICS` marks a finite run (Crown 100, Royal 50). The buy route takes
+  `pg_advisory_xact_lock(hashtext('cosmetic:<id>'))` for the duration of the
+  purchase, reads `max(serial)`, and writes `serial` + `edition_size` onto the
+  row, so the number is a receipt and the run size survives a catalogue change.
+  `cosmetic_purchases_edition_serial` (unique, partial on non-null serials) is
+  the backstop. A sold-out edition is a 409, not a 400 - it is a state, not
+  bad input - and the client disables the tile.
+- **A nameplate is one read, so every surface shows the same identity.**
+  `GET /v1/nameplates/:handle` returns the user, their standing and the frame
+  and outfit they wear with `serial`/`editionSize`. `/v1/status/board` carries
+  the same `standing` + `look` per row, derived from position on the board (a
+  tie shares a tier). Rooms, posts and profiles should read a nameplate rather
+  than re-deriving a title or a frame locally; a second derivation is how two
+  surfaces start disagreeing about who someone is.
 - **The dev API needs `WALLET_ENABLED=true` for the wardrobe and staked games.**
   It defaults off, so a local buy answers "not available right now". The flag is
   mirrored in `.env`; restart the API after changing it. A top-up is capped at

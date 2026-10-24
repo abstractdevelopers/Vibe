@@ -210,6 +210,89 @@ describe("cosmetics", () => {
     expect(res.statusCode).toBe(400);
   });
 
+  it("numbers a limited edition and reports what is left", async () => {
+    const first = await registerUser(wallet.app, "collector1");
+    const second = await registerUser(wallet.app, "collector2");
+    await fund(wallet, first.token, 2_000_000, "e1");
+    await fund(wallet, second.token, 2_000_000, "e2");
+
+    const buy1 = await wallet.app.inject({ method: "POST", url: "/v1/cosmetics/frame-crown/buy", headers: auth(first.token), payload: {} });
+    expect(buy1.statusCode).toBe(201);
+    const buy2 = await wallet.app.inject({ method: "POST", url: "/v1/cosmetics/frame-crown/buy", headers: auth(second.token), payload: {} });
+    expect(buy2.statusCode).toBe(201);
+
+    // The two holders drew different numbers from the same run.
+    const list1 = await wallet.app.inject({ method: "GET", url: "/v1/cosmetics", headers: auth(first.token) });
+    const list2 = await wallet.app.inject({ method: "GET", url: "/v1/cosmetics", headers: auth(second.token) });
+    const crown1 = (list1.json().cosmetics as Array<{ id: string; serial: number | null; editionSize: number | null; remaining: number | null }>)
+      .find((c) => c.id === "frame-crown")!;
+    const crown2 = (list2.json().cosmetics as Array<{ id: string; serial: number | null; editionSize: number | null; remaining: number | null }>)
+      .find((c) => c.id === "frame-crown")!;
+
+    expect(crown1.editionSize).toBe(100);
+    expect(crown1.serial).toBe(1);
+    expect(crown2.serial).toBe(2);
+    expect(crown1.remaining).toBe(98);
+  });
+
+  it("leaves an unlimited cosmetic unnumbered", async () => {
+    const me = await registerUser(wallet.app, "openrun");
+    await fund(wallet, me.token, 1_000_00, "e3");
+    const buy = await wallet.app.inject({ method: "POST", url: "/v1/cosmetics/frame-ember/buy", headers: auth(me.token), payload: {} });
+    expect(buy.statusCode).toBe(201);
+    const res = await wallet.app.inject({ method: "GET", url: "/v1/cosmetics", headers: auth(me.token) });
+    const ember = (res.json().cosmetics as Array<{ id: string; serial: number | null; editionSize: number | null; remaining: number | null }>)
+      .find((c) => c.id === "frame-ember")!;
+    expect(ember.serial).toBeNull();
+    expect(ember.editionSize).toBeNull();
+    expect(ember.remaining).toBeNull();
+  });
+
+  it("refuses to sell the same edition number twice", async () => {
+    const a = await registerUser(wallet.app, "dup1");
+    const b = await registerUser(wallet.app, "dup2");
+    await wallet.pool.query(
+      `INSERT INTO cosmetic_purchases (user_id, cosmetic_id, price_minor, currency, serial, edition_size)
+       VALUES ($1, 'frame-crown', 0, 'NGN', 7, 100)`,
+      [a.id],
+    );
+    // The unique index, not the route, is the last line of defence.
+    await expect(
+      wallet.pool.query(
+        `INSERT INTO cosmetic_purchases (user_id, cosmetic_id, price_minor, currency, serial, edition_size)
+         VALUES ($1, 'frame-crown', 0, 'NGN', 7, 100)`,
+        [b.id],
+      ),
+    ).rejects.toThrow(/unique/i);
+  });
+
+  it("puts a nameplate on the board and resolves it by handle", async () => {
+    const me = await registerUser(wallet.app, "plated");
+    await fund(wallet, me.token, 2_000_000, "e4");
+    await post(wallet, me.token, 3);
+    await wallet.app.inject({ method: "POST", url: "/v1/cosmetics/frame-crown/buy", headers: auth(me.token), payload: {} });
+    await wallet.app.inject({
+      method: "POST", url: "/v1/cosmetics/wear",
+      headers: auth(me.token), payload: { kind: "frame", cosmeticId: "frame-crown" },
+    });
+
+    const board = await wallet.app.inject({ method: "GET", url: "/v1/status/board", headers: auth(me.token) });
+    const entry = (board.json().board as Array<{
+      user: { handle: string };
+      standing: { title: string; rank: string } | null;
+      look: { frame: { id: string; serial: number | null; editionSize: number | null } | null };
+    }>).find((e) => e.user.handle === "plated")!;
+    expect(entry.standing?.title).toBe("Vibe Warrior");
+    expect(entry.look.frame?.id).toBe("frame-crown");
+    expect(entry.look.frame?.serial).toBe(1);
+    expect(entry.look.frame?.editionSize).toBe(100);
+
+    const plate = await wallet.app.inject({ method: "GET", url: "/v1/nameplates/plated", headers: auth(me.token) });
+    expect(plate.statusCode).toBe(200);
+    expect(plate.json().nameplate.standing.title).toBe("Vibe Warrior");
+    expect(plate.json().nameplate.look.frame.serial).toBe(1);
+  });
+
   it("does not sell cosmetics when the wallet is off", async () => {
     const me = await registerUser(h.app, "nowallet");
     const res = await h.app.inject({ method: "POST", url: "/v1/cosmetics/frame-ember/buy", headers: auth(me.token), payload: {} });

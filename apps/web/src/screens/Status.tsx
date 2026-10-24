@@ -33,11 +33,44 @@ interface Cosmetic {
   currency: string;
   owned: boolean;
   worn: boolean;
+  /** The holder's number in a limited run, or null for an open cosmetic. */
+  serial: number | null;
+  editionSize: number | null;
+  /** Copies left in a limited run, or null when the cosmetic is unlimited. */
+  remaining: number | null;
+}
+
+interface WornCosmetic {
+  id: string;
+  kind: "frame" | "outfit";
+  label: string;
+  style: string;
+  serial: number | null;
+  editionSize: number | null;
 }
 
 interface BoardEntry {
   user: { id: string; handle: string; displayName: string; avatarUrl: string | null };
   activity: number;
+  standing: { title: string; rank: string } | null;
+  look: { frame: WornCosmetic | null; outfit: WornCosmetic | null };
+}
+
+/** "No. 7 of 100", or nothing for an unlimited cosmetic. */
+const editionLine = (c: { serial: number | null; editionSize: number | null } | null | undefined) =>
+  c?.serial && c.editionSize ? `No. ${c.serial} of ${c.editionSize}` : null;
+
+/** The line under a cosmetic tile: what it costs, or what you hold. */
+function cosmeticMeta(c: Cosmetic): string {
+  if (c.owned) {
+    const line = editionLine(c);
+    return `${c.worn ? "Worn" : "Tap to wear"}${line ? ` · ${line}` : ""}`;
+  }
+  if (c.remaining === 0) return "Sold out";
+  if (c.remaining !== null && c.editionSize) {
+    return `${formatMoney(c.priceMinor, c.currency)} · ${c.remaining} left`;
+  }
+  return formatMoney(c.priceMinor, c.currency);
 }
 
 export function StatusScreen({ onBack }: { onBack: () => void }) {
@@ -128,6 +161,11 @@ export function StatusScreen({ onBack }: { onBack: () => void }) {
           {standing && standing.activity > 0 && (
             <span className="meta">{standing.activity} this week{standing.holders > 0 ? ` · ${standing.holders} hold this` : ""}</span>
           )}
+          {(() => {
+            const framed = cosmetics.find((c) => c.id === worn.frame) ?? null;
+            const line = editionLine(framed);
+            return line ? <span className="status-edition">{framed?.label} · {line}</span> : null;
+          })()}
         </div>
       </section>
 
@@ -139,10 +177,17 @@ export function StatusScreen({ onBack }: { onBack: () => void }) {
           {board.map((e, i) => (
             <li key={e.user.id} className={`status-row${i === 0 ? " king" : i === 1 ? " queen" : ""}`}>
               <span className="status-rank">{i + 1}</span>
-              <Avatar name={e.user.displayName} url={e.user.avatarUrl} seed={e.user.id} size="sm" />
+              <span className="status-row-face">
+                <Avatar name={e.user.displayName} url={e.user.avatarUrl} seed={e.user.id} size="sm" />
+                {e.look.frame && <span className={`status-frame style-${e.look.frame.style}`} aria-hidden />}
+              </span>
               <span className="grow" style={{ minWidth: 0 }}>
                 <span className="truncate" style={{ display: "block", fontWeight: 600 }}>{e.user.displayName}</span>
-                <span className="meta">@{e.user.handle}</span>
+                <span className="meta truncate" style={{ display: "block" }}>
+                  @{e.user.handle}
+                  {e.standing ? ` · ${e.standing.title}` : ""}
+                  {editionLine(e.look.frame) ? ` · ${editionLine(e.look.frame)}` : ""}
+                </span>
               </span>
               <span className="meta">{e.activity}</span>
             </li>
@@ -158,10 +203,10 @@ export function StatusScreen({ onBack }: { onBack: () => void }) {
         </div>
         <div className="cosmetic-grid">
           {frames.map((c) => (
-            <button key={c.id} className={`cosmetic-card${c.owned ? " owned" : ""}${c.worn ? " worn" : ""}`} disabled={busy === c.id} onClick={() => (c.owned ? void wear(c) : void buy(c))}>
+            <button key={c.id} className={`cosmetic-card${c.owned ? " owned" : ""}${c.worn ? " worn" : ""}`} disabled={busy === c.id || (!c.owned && c.remaining === 0)} onClick={() => (c.owned ? void wear(c) : void buy(c))}>
               <span className={`cosmetic-swatch status-frame style-${c.style}`} aria-hidden />
               <span className="cosmetic-label">{c.label}</span>
-              <span className="meta">{c.owned ? (c.worn ? "Worn" : "Tap to wear") : formatMoney(c.priceMinor, c.currency)}</span>
+              <span className="meta">{cosmeticMeta(c)}</span>
             </button>
           ))}
         </div>
@@ -171,10 +216,10 @@ export function StatusScreen({ onBack }: { onBack: () => void }) {
         <div className="shelf-head"><h2 className="section-title">Outfits</h2></div>
         <div className="cosmetic-grid">
           {outfits.map((c) => (
-            <button key={c.id} className={`cosmetic-card${c.owned ? " owned" : ""}${c.worn ? " worn" : ""}`} disabled={busy === c.id} onClick={() => (c.owned ? void wear(c) : void buy(c))}>
+            <button key={c.id} className={`cosmetic-card${c.owned ? " owned" : ""}${c.worn ? " worn" : ""}`} disabled={busy === c.id || (!c.owned && c.remaining === 0)} onClick={() => (c.owned ? void wear(c) : void buy(c))}>
               <span className={`cosmetic-swatch outfit style-${c.style}`} aria-hidden />
               <span className="cosmetic-label">{c.label}</span>
-              <span className="meta">{c.owned ? (c.worn ? "Worn" : "Tap to wear") : formatMoney(c.priceMinor, c.currency)}</span>
+              <span className="meta">{cosmeticMeta(c)}</span>
             </button>
           ))}
         </div>

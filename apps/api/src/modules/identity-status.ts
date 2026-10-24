@@ -32,6 +32,11 @@ interface Cosmetic {
   priceMinor: number;
   currency: string;
   sortOrder: number;
+  /**
+   * A numbered run. Omitted means unlimited: anyone may buy it at any time.
+   * A finite run is what makes a look mean more than its price.
+   */
+  editionSize?: number;
 }
 
 export const COSMETICS: Cosmetic[] = [
@@ -39,13 +44,31 @@ export const COSMETICS: Cosmetic[] = [
   { id: "frame-ember", kind: "frame", label: "Ember", hint: "A warm glow", style: "ember", priceMinor: 50_000, currency: "NGN", sortOrder: 10 },
   { id: "frame-tide", kind: "frame", label: "Tide", hint: "Cool and calm", style: "tide", priceMinor: 50_000, currency: "NGN", sortOrder: 15 },
   { id: "frame-gold", kind: "frame", label: "Gold", hint: "For the front row", style: "gold", priceMinor: 250_000, currency: "NGN", sortOrder: 30 },
-  { id: "frame-crown", kind: "frame", label: "Crown", hint: "Royalty only", style: "crown", priceMinor: 1_000_000, currency: "NGN", sortOrder: 60 },
+  { id: "frame-crown", kind: "frame", label: "Crown", hint: "Royalty only", style: "crown", priceMinor: 1_000_000, currency: "NGN", sortOrder: 60, editionSize: 100 },
   // Outfits: a colour and a pattern, again drawn client-side.
   { id: "outfit-lagos", kind: "outfit", label: "Lagos Nights", hint: "Neon and noise", style: "lagos", priceMinor: 120_000, currency: "NGN", sortOrder: 20 },
   { id: "outfit-ankara", kind: "outfit", label: "Ankara", hint: "Bold and bright", style: "ankara", priceMinor: 200_000, currency: "NGN", sortOrder: 25 },
   { id: "outfit-midnight", kind: "outfit", label: "Midnight", hint: "Dressed to disappear", style: "midnight", priceMinor: 300_000, currency: "NGN", sortOrder: 40 },
-  { id: "outfit-royal", kind: "outfit", label: "Royal", hint: "The full regalia", style: "royal", priceMinor: 1_500_000, currency: "NGN", sortOrder: 70 },
+  { id: "outfit-royal", kind: "outfit", label: "Royal", hint: "The full regalia", style: "royal", priceMinor: 1_500_000, currency: "NGN", sortOrder: 70, editionSize: 50 },
 ];
+
+/** A certified edition item as it is shown to a viewer. */
+export interface WornCosmetic {
+  id: string;
+  kind: "frame" | "outfit";
+  label: string;
+  style: string;
+  /** The holder's number in the run, or null for an open cosmetic. */
+  serial: number | null;
+  /** The run size, copied onto the purchase at the time it was bought. */
+  editionSize: number | null;
+}
+
+/** Look up the catalogue entry for an owned id. */
+function cosmeticById(id: string | null | undefined): Cosmetic | null {
+  if (!id) return null;
+  return COSMETICS.find((c) => c.id === id) ?? null;
+}
 
 const COSMETIC_IDS = COSMETICS.map((c) => c.id) as [string, ...string[]];
 
@@ -156,9 +179,9 @@ async function countAhead(ctx: AppContext, activity: number): Promise<number> {
 
 /** What a user owns and is wearing, for the wardrobe screen and the avatar. */
 async function wardrobeFor(ctx: AppContext, userId: string) {
-  const owned = await queryMany<{ cosmetic_id: string }>(
+  const owned = await queryMany<{ cosmetic_id: string; serial: number | null }>(
     ctx.pool,
-    `SELECT cosmetic_id FROM cosmetic_purchases WHERE user_id = $1`,
+    `SELECT cosmetic_id, serial FROM cosmetic_purchases WHERE user_id = $1`,
     [userId],
   );
   const worn = await queryMany<{ kind: string; cosmetic_id: string }>(
@@ -171,7 +194,53 @@ async function wardrobeFor(ctx: AppContext, userId: string) {
   return {
     owned: COSMETICS.filter((c) => ownedSet.has(c.id)).map((c) => c.id),
     worn: { frame: wornMap.get("frame") ?? null, outfit: wornMap.get("outfit") ?? null },
+    /** The holder's number in a limited run, keyed by cosmetic id. */
+    serials: Object.fromEntries(owned.map((o) => [o.cosmetic_id, o.serial])),
   };
+}
+
+/** How many copies of each limited edition have been sold. */
+async function soldCounts(ctx: AppContext, ids: string[]): Promise<Map<string, number>> {
+  if (!ids.length) return new Map();
+  const rows = await queryMany<{ cosmetic_id: string; sold: string }>(
+    ctx.pool,
+    `SELECT cosmetic_id, count(*)::text AS sold
+       FROM cosmetic_purchases
+      WHERE cosmetic_id = ANY($1::text[])
+      GROUP BY cosmetic_id`,
+    [ids],
+  );
+  return new Map(rows.map((r) => [r.cosmetic_id, Number(r.sold)]));
+}
+
+/**
+ * The looks a person is wearing, with their edition numbers. This is the
+ * public half of the wardrobe: a nameplate shows the frame, not the receipt.
+ */
+async function wornLookFor(ctx: AppContext, userId: string): Promise<{ frame: WornCosmetic | null; outfit: WornCosmetic | null }> {
+  const rows = await queryMany<{ kind: string; cosmetic_id: string; serial: number | null; edition_size: number | null }>(
+    ctx.pool,
+    `SELECT w.kind, w.cosmetic_id, p.serial, p.edition_size
+       FROM cosmetic_worn w
+       LEFT JOIN cosmetic_purchases p
+              ON p.user_id = w.user_id AND p.cosmetic_id = w.cosmetic_id
+      WHERE w.user_id = $1`,
+    [userId],
+  );
+  const look: { frame: WornCosmetic | null; outfit: WornCosmetic | null } = { frame: null, outfit: null };
+  for (const row of rows) {
+    const c = cosmeticById(row.cosmetic_id);
+    if (!c || (row.kind !== "frame" && row.kind !== "outfit")) continue;
+    look[row.kind] = {
+      id: c.id,
+      kind: c.kind,
+      label: c.label,
+      style: c.style,
+      serial: row.serial,
+      editionSize: row.edition_size,
+    };
+  }
+  return look;
 }
 
 export function identityStatusRoutes(ctx: AppContext) {
@@ -179,13 +248,22 @@ export function identityStatusRoutes(ctx: AppContext) {
     // The catalogue: everything buyable, with what the viewer owns and wears.
     app.get("/v1/cosmetics", async (req) => {
       const user = await requireUser(ctx, req);
-      const { owned, worn } = await wardrobeFor(ctx, user.id);
+      const { owned, worn, serials } = await wardrobeFor(ctx, user.id);
+      const sold = await soldCounts(ctx, COSMETICS.filter((c) => c.editionSize).map((c) => c.id));
       return {
-        cosmetics: COSMETICS.map((c) => ({
-          ...c,
-          owned: owned.includes(c.id),
-          worn: worn.frame === c.id || worn.outfit === c.id,
-        })),
+        cosmetics: COSMETICS.map((c) => {
+          const soldNow = sold.get(c.id);
+          return {
+            ...c,
+            owned: owned.includes(c.id),
+            worn: worn.frame === c.id || worn.outfit === c.id,
+            // A limited run reports what is left; an open cosmetic reports nulls
+            // so the client never renders a "0 of 0" badge.
+            serial: serials[c.id] ?? null,
+            editionSize: c.editionSize ?? null,
+            remaining: c.editionSize ? Math.max(0, c.editionSize - (soldNow ?? 0)) : null,
+          };
+        }),
         worn,
       };
     });
@@ -212,9 +290,28 @@ export function identityStatusRoutes(ctx: AppContext) {
         const balance = await walletBalance(tx as unknown as AppContext["pool"], user.id, cosmetic.currency);
         if (balance.balanceMinor < cosmetic.priceMinor) throw ApiError.badRequest("Not enough Vibe Yens");
 
+        // A limited run needs a number, and two buyers must never draw the same
+        // one. The advisory lock serialises buyers of this cosmetic (not of every
+        // cosmetic), and the highest number handed out so far is read inside the
+        // same transaction. The unique index on (cosmetic_id, serial) is the
+        // backstop if anything ever bypasses this path.
+        let serial: number | null = null;
+        if (cosmetic.editionSize) {
+          await tx.query(`SELECT pg_advisory_xact_lock(hashtext($1))`, [`cosmetic:${id}`]);
+          const drawn = await tx.query<{ sold: string; highest: string | null }>(
+            `SELECT count(*)::text AS sold, max(serial)::text AS highest
+               FROM cosmetic_purchases WHERE cosmetic_id = $1`,
+            [id],
+          );
+          const sold = Number(drawn.rows[0]?.sold ?? 0);
+          if (sold >= cosmetic.editionSize) throw ApiError.conflict("That edition is sold out");
+          serial = Number(drawn.rows[0]?.highest ?? 0) + 1;
+        }
+
         await tx.query(
-          `INSERT INTO cosmetic_purchases (user_id, cosmetic_id, price_minor, currency) VALUES ($1,$2,$3,$4)`,
-          [user.id, id, cosmetic.priceMinor, cosmetic.currency],
+          `INSERT INTO cosmetic_purchases (user_id, cosmetic_id, price_minor, currency, serial, edition_size)
+           VALUES ($1,$2,$3,$4,$5,$6)`,
+          [user.id, id, cosmetic.priceMinor, cosmetic.currency, serial, cosmetic.editionSize ?? null],
         );
         await postCosmeticPurchase(tx, {
           reference: `COSMETIC-${user.id}-${id}-${newId()}`,
@@ -268,7 +365,19 @@ export function identityStatusRoutes(ctx: AppContext) {
     // title, so the King and Queen are at the top.
     app.get("/v1/status/board", async (req) => {
       await requireUser(ctx, req);
-      const rows = await queryMany<{ id: string; handle: string; display_name: string; avatar_url: string | null; activity: string }>(
+      const rows = await queryMany<{
+        id: string;
+        handle: string;
+        display_name: string;
+        avatar_url: string | null;
+        activity: string;
+        frame_id: string | null;
+        frame_serial: number | null;
+        frame_edition: number | null;
+        outfit_id: string | null;
+        outfit_serial: number | null;
+        outfit_edition: number | null;
+      }>(
         ctx.pool,
         `SELECT u.id, u.handle, u.display_name, u.avatar_url,
                 ( (SELECT count(*) FROM posts p WHERE p.author_id = u.id AND p.created_at > now() - interval '7 days' AND p.status = 'published')
@@ -276,22 +385,64 @@ export function identityStatusRoutes(ctx: AppContext) {
                 + (SELECT count(*) FROM battle_comments c WHERE c.user_id = u.id AND c.created_at > now() - interval '7 days')
                 + (SELECT count(*) FROM battle_gifts g WHERE g.user_id = u.id AND g.created_at > now() - interval '7 days')
                 + (SELECT count(*) FROM post_gifts pg WHERE pg.sender_id = u.id AND pg.created_at > now() - interval '7 days')
-                )::text AS activity
+                )::text AS activity,
+                wf.cosmetic_id AS frame_id, pf.serial AS frame_serial, pf.edition_size AS frame_edition,
+                wo.cosmetic_id AS outfit_id, po.serial AS outfit_serial, po.edition_size AS outfit_edition
            FROM users u
+           LEFT JOIN cosmetic_worn wf ON wf.user_id = u.id AND wf.kind = 'frame'
+           LEFT JOIN cosmetic_purchases pf ON pf.user_id = u.id AND pf.cosmetic_id = wf.cosmetic_id
+           LEFT JOIN cosmetic_worn wo ON wo.user_id = u.id AND wo.kind = 'outfit'
+           LEFT JOIN cosmetic_purchases po ON po.user_id = u.id AND po.cosmetic_id = wo.cosmetic_id
           WHERE u.deleted_at IS NULL
           ORDER BY activity DESC
           LIMIT 50`,
       );
-      const withStanding = [];
-      for (const r of rows) {
-        const activity = Number(r.activity);
-        if (activity <= 0) continue;
-        withStanding.push({
+      // Only the movers are on the board, but "ahead" is counted against the
+      // whole board: a tie shares a tier, exactly as standingFor decides it.
+      const movers = rows.map((r) => ({ row: r, activity: Number(r.activity) })).filter((m) => m.activity > 0);
+      const withStanding = movers.map(({ row: r, activity }) => {
+        const ahead = movers.filter((m) => m.activity > activity).length;
+        const tier = TIERS.find((t) => activity >= t.min && ahead <= t.maxAhead) ?? null;
+        const wired = (id: string | null, serial: number | null, edition: number | null): WornCosmetic | null => {
+          const c = cosmeticById(id);
+          if (!c) return null;
+          return { id: c.id, kind: c.kind, label: c.label, style: c.style, serial, editionSize: edition };
+        };
+        return {
           user: { id: r.id, handle: r.handle, displayName: r.display_name, avatarUrl: r.avatar_url },
           activity,
-        });
-      }
+          standing: tier ? { title: tier.title, rank: tier.rank } : null,
+          look: {
+            frame: wired(r.frame_id, r.frame_serial, r.frame_edition),
+            outfit: wired(r.outfit_id, r.outfit_serial, r.outfit_edition),
+          },
+        };
+      });
       return { board: withStanding };
+    });
+
+    // A nameplate: what a person has earned, what they bought, and the number
+    // they hold. This is the one read that lets any surface - a room, a post, a
+    // profile - show the same identity without each one inventing its own.
+    app.get("/v1/nameplates/:handle", async (req) => {
+      await requireUser(ctx, req);
+      const { handle } = req.params as { handle: string };
+      const row = await queryOne<{ id: string; handle: string; display_name: string; avatar_url: string | null }>(
+        ctx.pool,
+        `SELECT id, handle, display_name, avatar_url
+           FROM users
+          WHERE handle = $1 AND deleted_at IS NULL`,
+        [handle.replace(/^@/, "")],
+      );
+      if (!row) throw ApiError.notFound("No such person");
+      const [standing, look] = await Promise.all([standingFor(ctx, row.id), wornLookFor(ctx, row.id)]);
+      return {
+        nameplate: {
+          user: { id: row.id, handle: row.handle, displayName: row.display_name, avatarUrl: row.avatar_url },
+          standing,
+          look,
+        },
+      };
     });
   };
 }

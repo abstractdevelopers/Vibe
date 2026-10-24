@@ -14,10 +14,17 @@ import { join } from "node:path";
 const ASSETS = "apps/web/dist/assets";
 
 // Budgets in bytes. JS is checked both raw and gzipped; CSS only gzipped.
+//
+// Raised deliberately (2026-10-24) from 120/400/20 kB for the status economy -
+// nameplates, edition badges and the wardrobe. That belongs in the launch chunk
+// because a frame on your own avatar and on every board row is not a
+// rarely-opened screen. The ceiling is not a target: the main chunk sat at 95% of
+// the old budget, so this buys room for one feature, not licence to import a 3D
+// engine. Anything heavier still goes behind lazy().
 const BUDGET = {
-  jsGzip: 120 * 1024,
-  jsRaw: 400 * 1024,
-  cssGzip: 20 * 1024,
+  jsGzip: 150 * 1024,
+  jsRaw: 480 * 1024,
+  cssGzip: 24 * 1024,
 };
 
 let files;
