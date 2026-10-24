@@ -4,7 +4,6 @@ import { useNav } from "../nav";
 import { ScreenHeader } from "../components/ScreenHeader";
 import { PlaySegments } from "../components/PlaySegments";
 import { formatMoney } from "../money";
-import { EmptyState } from "../components/EmptyState";
 import { GameArt, GameCover, WORLD_ORDER, worldFor } from "../components/GameArt";
 import { SpinnerIcon, UsersIcon, PlayIcon, RadioIcon, TrophyIcon, SplitIcon, ChevronRightIcon, SearchIcon, CloseIcon, GlobeIcon } from "../components/Icons";
 import { themeForGame } from "../themes";
@@ -208,6 +207,13 @@ export function GamesScreen({ onBack, viewerId, onOpenBattles }: { onBack?: () =
               {featured.stakeEnabled && <span className="chip chip-gold">Stakes</span>}
               <span className="chip">{worldFor(featured.category).label}</span>
             </div>
+            {/* The shelf's own numbers: how much is actually playable, and how
+                many tables are open right now. A hub should state its size. */}
+            <div className="games-hero-stats">
+              <span><b>{playable.length}</b> playable</span>
+              <span className="games-hero-stats-sep" aria-hidden="true" />
+              <span><b>{sessions.length}</b> {sessions.length === 1 ? "table" : "tables"} open</span>
+            </div>
             <button className="btn primary games-hero-cta" onClick={() => setPicked(featured)}>
               <PlayIcon width={17} height={17} /> {featured.availability === "playable" ? "Start a table" : "Coming soon"}
             </button>
@@ -266,11 +272,15 @@ export function GamesScreen({ onBack, viewerId, onOpenBattles }: { onBack?: () =
           {others.length > 0 && <span className="chip">{others.length} open</span>}
         </div>
         {others.length === 0 ? (
-          <EmptyState
-            icon={<UsersIcon />}
-            title="No tables open yet"
-            text="Start one below and it appears here for anyone to join."
-          />
+          /* A compact row, not a large empty card: an empty rail should read as
+             a quiet room, not as a missing screen. */
+          <div className="shelf-empty">
+            <span className="shelf-empty-icon" aria-hidden="true"><UsersIcon width={18} height={18} /></span>
+            <span className="shelf-empty-copy">
+              <strong>The room is quiet</strong>
+              <span className="meta">No open tables right now. Pick a game below and yours appears here.</span>
+            </span>
+          </div>
         ) : (
           <div className="shelf-row">
             {others.map((s) => (
@@ -369,45 +379,38 @@ export function GamesScreen({ onBack, viewerId, onOpenBattles }: { onBack?: () =
         </section>
       )}
 
-      {/* The catalogue. */}
+      {/* The catalogue. With no world chosen it groups by world, so the shelf is
+          an arcade with rooms rather than one undifferentiated grid; with a
+          world chosen it shows that room alone. */}
       {games === null && <div className="skeleton" aria-busy="true" />}
-      {games && (
+      {games && category && (
         <section className="shelf">
           <div className="shelf-head">
-            <h2 className="section-title">{category ? worldFor(category).label : "All games"}</h2>
+            <h2 className="section-title">{worldFor(category).label}</h2>
             <span className="meta">{shown.length} {shown.length === 1 ? "game" : "games"}</span>
           </div>
-          <div className="game-grid">
-            {shown.map((g) => {
-              const w = worldFor(g.category);
-              return (
-                <button
-                  key={g.id}
-                  className="game-tile"
-                  onClick={() => setPicked(g)}
-                  style={{ ["--world" as string]: w.accent }}
-                  aria-label={`${g.name}${g.availability === "planned" ? " (coming soon)" : ""}`}
-                >
-                  <span className="game-tile-art">
-                    <GameCover gameId={g.id} category={g.category} name={g.name} size={72} className="game-tile-cover" />
-                    {g.availability === "planned" && <span className="game-tile-soon">Soon</span>}
-                  </span>
-                  <span className="game-tile-name">{g.name}</span>
-                  <span className="game-tile-sub">
-                    <UsersIcon width={11} height={11} /> {g.minPlayers}–{g.maxPlayers}
-                  </span>
-                  <span className="game-tile-tags">
-                    {liveByGame[g.id] ? (
-                      <span className="chip chip-livecount"><span className="live-dot" aria-hidden="true" /> {liveByGame[g.id]} live</span>
-                    ) : null}
-                    {g.stakeEnabled && g.availability === "playable" && <span className="chip chip-gold">Stakes</span>}
-                    {g.availability === "playable" && <span className="chip chip-quiet">Playable</span>}
-                  </span>
-                </button>
-              );
-            })}
-          </div>
+          <GameGrid games={shown} liveByGame={liveByGame} onPick={setPicked} />
         </section>
+      )}
+      {games && !category && WORLD_ORDER.filter((c) => byCategory[c]?.length).map((c) => {
+        const w = worldFor(c);
+        const list = shown.filter((g) => g.category === c);
+        if (list.length === 0) return null;
+        return (
+          <section key={c} className="shelf" style={{ ["--world" as string]: w.accent }}>
+            <div className="shelf-head">
+              <h2 className="section-title">
+                <span className="shelf-world-dot" aria-hidden="true" />{w.label}
+                <span className="shelf-world-tagline">· {w.tagline}</span>
+              </h2>
+              <button className="link-button" onClick={() => setCategory(c)}>See all</button>
+            </div>
+            <GameGrid games={list} liveByGame={liveByGame} onPick={setPicked} />
+          </section>
+        );
+      })}
+      {games && !category && shown.length === 0 && (
+        <p className="meta">Nothing in the arcade matches “{query.trim()}”.</p>
       )}
 
       {picked && (
@@ -417,6 +420,54 @@ export function GamesScreen({ onBack, viewerId, onOpenBattles }: { onBack?: () =
           onCreated={(sessionId) => { setPicked(null); nav.push({ name: "game", sessionId }); }}
         />
       )}
+    </div>
+  );
+}
+
+/**
+ * One shelf's worth of cabinets.
+ *
+ * The artwork is the tile; the name and seat count sit beneath it. Live tables
+ * are marked on the poster itself so a full shelf can be scanned without
+ * reading every line.
+ */
+function GameGrid({
+  games,
+  liveByGame,
+  onPick,
+}: {
+  games: Game[];
+  liveByGame: Record<string, number>;
+  onPick: (game: Game) => void;
+}) {
+  return (
+    <div className="game-grid">
+      {games.map((g) => {
+        const w = worldFor(g.category);
+        const live = liveByGame[g.id] ?? 0;
+        return (
+          <button
+            key={g.id}
+            className="game-tile"
+            onClick={() => onPick(g)}
+            style={{ ["--world" as string]: w.accent, ["--world-from" as string]: w.from, ["--world-to" as string]: w.to }}
+            aria-label={`${g.name}${g.availability === "planned" ? " (coming soon)" : ""}${live ? `, ${live} playing now` : ""}`}
+          >
+            <span className="game-tile-art">
+              <GameCover gameId={g.id} category={g.category} name={g.name} size={72} className="game-tile-cover" />
+              {live > 0 && (
+                <span className="game-tile-live"><span className="live-dot" aria-hidden="true" />{live}</span>
+              )}
+              {g.availability === "planned" && <span className="game-tile-soon">Soon</span>}
+            </span>
+            <span className="game-tile-name">{g.name}</span>
+            <span className="game-tile-sub">
+              <UsersIcon width={11} height={11} /> {g.minPlayers}–{g.maxPlayers}
+              {g.stakeEnabled && g.availability === "playable" && <em className="game-tile-stake">Stakes</em>}
+            </span>
+          </button>
+        );
+      })}
     </div>
   );
 }

@@ -1,0 +1,886 @@
+/* ==========================================================================
+   Game boards.
+
+   The table is a place, so the pieces on it are drawn as material objects: a
+   card with pips, a beveled checker, a stone on a wooden grid, a disc in a
+   plastic frame, a ship's hull under water. Everything is built from one
+   surface (`.gb-board`) so a board sits inside the table felt rather than
+   floating as a coloured rectangle.
+
+   These rules ship in the lazy Play chunk — they are art, not chrome, and the
+   launch bundle never needs them. Raw hues are allowed here for the same
+   reason they are allowed in `environments.css`: a playing card is white, a
+   poker chip is red, and those are the objects' own colours, not the theme's.
+   ========================================================================== */
+
+/* ---- The board frame ---------------------------------------------------- */
+
+.gb-board {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-3);
+  min-width: 0;
+}
+
+/* Every board is a grid of square cells, and a square cell's min-content width
+   is not zero. Without these two rules an 8x8 board widens `.table-surface`
+   and the whole table slides past the right edge of a 390px phone. */
+.gb-board > *,
+.gb-checkers > *,
+.gb-bb > *,
+.gb-snake > * { max-width: 100%; min-width: 0; }
+.table-surface { min-width: 0; }
+.table-shell { min-width: 0; }
+
+.gb-board-frame {
+  width: min(100%, 372px);
+  padding: 10px;
+  border-radius: 18px;
+  background:
+    linear-gradient(150deg, rgba(255, 255, 255, 0.1), transparent 42%),
+    linear-gradient(160deg, #4b3524, #241a12 78%);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.18),
+    inset 0 -2px 6px rgba(0, 0, 0, 0.5),
+    0 22px 44px -24px rgba(0, 0, 0, 0.9);
+}
+
+.gb-board-note {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  width: 100%;
+  font-size: var(--text-meta);
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.gb-board-note strong { color: var(--text); font-weight: 700; }
+
+/* The rail's turn badge: whose move it is, in one word. */
+.table-rail-turn {
+  flex: 0 0 auto;
+  padding: 3px 9px;
+  border-radius: var(--radius-pill);
+  background: color-mix(in srgb, var(--felt-accent, var(--accent)) 20%, transparent);
+  border: 1px solid color-mix(in srgb, var(--felt-accent, var(--accent)) 48%, transparent);
+  color: var(--text);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+/* The active seat gets a lit ring, so the table reads as a table. */
+.table-shell .seat.is-turn .seat-face {
+  border-color: var(--felt-accent, var(--accent));
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--felt-accent, var(--accent)) 32%, transparent);
+}
+
+/* ---- Playing cards ------------------------------------------------------ */
+
+.pcard {
+  --pcard-w: 54px;
+  position: relative;
+  display: block;
+  width: var(--pcard-w);
+  height: calc(var(--pcard-w) * 1.4);
+  flex: none;
+  border-radius: 7px;
+  background: linear-gradient(155deg, #fffdf7, #efece2);
+  border: 1px solid rgba(0, 0, 0, 0.28);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.9),
+    0 6px 12px -4px rgba(0, 0, 0, 0.55);
+  color: #1a1b20;
+  font-variant-numeric: tabular-nums;
+  user-select: none;
+}
+
+.pcard.red { color: #c8102e; }
+
+.pcard-corner {
+  position: absolute;
+  top: 3px;
+  left: 4px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0;
+  line-height: 0.92;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+}
+
+.pcard-corner.bottom {
+  top: auto;
+  left: auto;
+  right: 4px;
+  bottom: 3px;
+  transform: rotate(180deg);
+}
+
+.pcard-corner svg { width: 9px; height: 9px; margin-top: 1px; }
+
+.pcard-face {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+}
+
+.pcard-pip {
+  position: absolute;
+  left: 0;
+  top: 0;
+  transform: translate(-50%, -50%);
+}
+
+.pcard-pip.flip { transform: translate(-50%, -50%) rotate(180deg); }
+
+.pcard-pip svg { width: 13px; height: 13px; }
+
+/* A court panel is a printed frame: an engraved double rule with the portrait
+   inside it. The figure is drawn twice and mirrored, so the card reads the same
+   upside down, as a real face card does. The panel is inset from the corners so
+   the rank always has clean card stock around it. */
+.pcard-court {
+  position: relative;
+  display: block;
+  width: 58%;
+  height: 76%;
+  border: 1px solid color-mix(in srgb, currentColor 55%, transparent);
+  border-radius: 3px;
+  box-shadow: inset 0 0 0 1.5px #fffdf7, inset 0 0 0 2.5px color-mix(in srgb, currentColor 28%, transparent);
+  background: #fffdf7;
+  overflow: hidden;
+}
+
+/* The ink is the suit's, not the body text's: a court figure is printed in the
+   card's own colour, so a red king is red. The panel keeps a warm stock under it
+   so the silhouette has something to sit on. */
+.pcard-court-ink {
+  display: block;
+  width: 100%;
+  height: 100%;
+  color: #1d1a17;
+}
+.pcard.red .pcard-court-ink { color: #c8102e; }
+
+.pcard.red .pcard-court { color: #c8102e; }
+
+/* A card back: a woven field, no rank. */
+.pcard.back {
+  background:
+    repeating-linear-gradient(45deg, rgba(255, 255, 255, 0.08) 0 2px, transparent 2px 7px),
+    linear-gradient(155deg, #2b3550, #141b2c);
+  border-color: rgba(255, 255, 255, 0.16);
+  box-shadow: inset 0 0 0 3px #1b2338, inset 0 0 0 4px rgba(255, 255, 255, 0.12), 0 6px 12px -4px rgba(0, 0, 0, 0.55);
+}
+
+.pcard.back::after {
+  content: "";
+  position: absolute;
+  inset: 22%;
+  border-radius: 4px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+}
+
+/* Whot: a dark deck with the shape colour on the pip. */
+.pcard.whot-card {
+  background: linear-gradient(155deg, #1d2028, #0c0e13);
+  border-color: rgba(255, 255, 255, 0.16);
+  color: #f4f1e6;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.12), 0 6px 12px -4px rgba(0, 0, 0, 0.6);
+}
+
+.pcard.whot-card .pcard-corner { font-size: 13px; }
+.pcard.whot-card .pcard-pip svg { width: 28px; height: 28px; }
+
+.pcard.whot-card.shape-circle { color: #48d68a; }
+.pcard.whot-card.shape-triangle { color: #f2c14e; }
+.pcard.whot-card.shape-cross { color: #64a8ff; }
+.pcard.whot-card.shape-square { color: #c084fc; }
+.pcard.whot-card.shape-star { color: #ff7a6b; }
+.pcard.whot-card.shape-whot { color: #ffd23f; }
+
+.pcard.whot-card .pcard-corner { color: inherit; }
+
+/* A hand of cards: overlapped, the last one free. */
+.gb-hand {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+  justify-content: center;
+  width: 100%;
+}
+
+.gb-hand .card-button { border-radius: 7px; }
+.gb-hand .card-button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.gb-hand .card-button.disabled .pcard { filter: saturate(0.4) brightness(0.72); }
+
+/* The pile: one card sitting on two ghost cards, so it reads as a discard. */
+.gb-pile {
+  position: relative;
+  display: grid;
+  place-items: center;
+  min-height: 86px;
+  padding: 0 18px;
+}
+
+.gb-pile::before,
+.gb-pile::after {
+  content: "";
+  position: absolute;
+  width: 54px;
+  height: 76px;
+  border-radius: 7px;
+  background: #d9d4c6;
+  border: 1px solid rgba(0, 0, 0, 0.22);
+  box-shadow: 0 4px 8px -4px rgba(0, 0, 0, 0.5);
+}
+
+.gb-pile::before { transform: translate(-4px, 2px) rotate(-4deg); }
+.gb-pile::after { transform: translate(4px, 2px) rotate(4deg); }
+.gb-pile > * { position: relative; z-index: 1; }
+
+.gb-deck {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--text-meta);
+  color: var(--text-muted);
+}
+
+/* ---- Checkers and Reversi ---------------------------------------------- */
+
+.gb-checkers {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  width: 100%;
+  min-width: 0;
+  align-items: center;
+}
+
+.gb-checker-grid {
+  display: grid;
+  grid-template-columns: repeat(8, minmax(0, 1fr));
+  width: min(100%, 340px);
+  /* A grid of aspect-ratio cells has a min-content width; without the explicit
+     zero track minimum it pushes the whole table shell wider than the phone. */
+  min-width: 0;
+  aspect-ratio: 1;
+  border-radius: 8px;
+  overflow: hidden;
+  background: #e7dcc3;
+  box-shadow: 0 10px 22px -12px rgba(0, 0, 0, 0.85);
+}
+
+.gb-sq {
+  position: relative;
+  display: grid;
+  place-items: center;
+  aspect-ratio: 1;
+  min-width: 0;
+  min-height: 0;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  background: #efe6d2;
+  transition: filter var(--motion-fast) var(--ease-out);
+}
+
+.gb-sq.dark {
+  background:
+    radial-gradient(circle at 30% 20%, rgba(255, 255, 255, 0.14), transparent 60%),
+    linear-gradient(155deg, #8a5a33, #5c3a20);
+}
+
+.gb-sq.light {
+  background:
+    radial-gradient(circle at 30% 20%, #fffdf6, transparent 70%),
+    linear-gradient(155deg, #f0e7d3, #d9cbae);
+}
+
+.gb-sq:disabled { cursor: default; }
+.gb-sq:not(:disabled):hover { filter: brightness(1.1); }
+.gb-sq.sel { box-shadow: inset 0 0 0 3px var(--felt-accent, var(--accent)); }
+.gb-sq.last { box-shadow: inset 0 0 0 2px rgba(255, 226, 150, 0.85); }
+.gb-sq.legal::after {
+  content: "";
+  width: 16%;
+  aspect-ratio: 1;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.32);
+}
+
+.gb-disc {
+  position: relative;
+  width: 74%;
+  aspect-ratio: 1;
+  border-radius: 50%;
+  box-shadow:
+    inset 0 2px 3px rgba(255, 255, 255, 0.42),
+    inset 0 -3px 5px rgba(0, 0, 0, 0.45),
+    0 3px 5px -1px rgba(0, 0, 0, 0.55);
+}
+
+.gb-disc::before {
+  content: "";
+  position: absolute;
+  inset: 18%;
+  border-radius: 50%;
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.25);
+}
+
+.gb-disc.dark { background: radial-gradient(circle at 34% 26%, #5a5e70, #14151c 72%); }
+.gb-disc.light { background: radial-gradient(circle at 34% 26%, #ffffff, #c9c4b6 76%); }
+.gb-disc.light::before { border-color: rgba(0, 0, 0, 0.14); }
+
+.gb-disc .gb-crown {
+  position: absolute;
+  inset: 26%;
+  display: grid;
+  place-items: center;
+  color: #f4d06f;
+  filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.55));
+}
+.gb-disc.light .gb-crown { color: #a8791b; filter: drop-shadow(0 1px 1px rgba(255, 255, 255, 0.6)); }
+.gb-disc .gb-crown svg { width: 100%; height: 100%; display: block; }
+
+/* Reversi discs are flat, split-tone, with a soft rim light. */
+.gb-disc.reversi { box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.18), 0 3px 6px -2px rgba(0, 0, 0, 0.6); }
+.gb-disc.reversi::before { inset: 10%; border-color: rgba(255, 255, 255, 0.1); }
+
+.gb-checker-score {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  font-size: var(--text-meta);
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.gb-checker-score b { color: var(--text); font-size: var(--text-body); }
+
+.gb-turn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: var(--radius-pill);
+  background: color-mix(in srgb, var(--felt-accent, var(--accent)) 18%, transparent);
+  border: 1px solid color-mix(in srgb, var(--felt-accent, var(--accent)) 45%, transparent);
+  font-size: var(--text-meta);
+  font-weight: 700;
+  color: var(--text);
+}
+
+.gb-turn .live-dot { width: 7px; height: 7px; background: var(--felt-accent, var(--accent)); box-shadow: none; animation: none; }
+
+/* ---- Connect Four ------------------------------------------------------- */
+
+.gb-c4 {
+  width: min(100%, 348px);
+  padding: 10px 10px 12px;
+  border-radius: 14px;
+  background:
+    linear-gradient(160deg, rgba(255, 255, 255, 0.14), transparent 40%),
+    linear-gradient(165deg, #2a5bd7, #173488 82%);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.25),
+    inset 0 -4px 10px rgba(0, 0, 0, 0.45),
+    0 22px 40px -22px rgba(0, 0, 0, 0.9);
+}
+
+.gb-c4-grid {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.gb-c4-col {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  border: none;
+  padding: 0;
+  background: none;
+  border-radius: 999px;
+  cursor: pointer;
+}
+
+.gb-c4-col:disabled { cursor: default; }
+
+.gb-c4-hole {
+  position: relative;
+  width: 100%;
+  min-width: 0;
+  aspect-ratio: 1;
+  border-radius: 50%;
+  background: radial-gradient(circle at 50% 38%, #0b1738, #0d1a3f 66%);
+  box-shadow:
+    inset 0 3px 6px rgba(0, 0, 0, 0.8),
+    inset 0 -1px 0 rgba(255, 255, 255, 0.12);
+}
+
+.gb-c4-disc {
+  position: absolute;
+  inset: 5%;
+  border-radius: 50%;
+  box-shadow:
+    inset 0 3px 4px rgba(255, 255, 255, 0.5),
+    inset 0 -4px 6px rgba(0, 0, 0, 0.42),
+    0 2px 4px rgba(0, 0, 0, 0.5);
+}
+
+.gb-c4-disc.p1 { background: radial-gradient(circle at 34% 26%, #ff8f8f, #d81f2a 70%); }
+.gb-c4-disc.p2 { background: radial-gradient(circle at 34% 26%, #ffe98a, #e0a800 72%); }
+
+.gb-c4-hole.last { box-shadow: inset 0 3px 6px rgba(0, 0, 0, 0.8), 0 0 0 2px rgba(255, 255, 255, 0.72); }
+
+.gb-c4-col:not(:disabled):hover .gb-c4-hole:first-child .gb-c4-ghost { opacity: 0.5; }
+
+.gb-c4-ghost {
+  position: absolute;
+  inset: 5%;
+  border-radius: 50%;
+  background: currentColor;
+  opacity: 0;
+  transition: opacity var(--motion-fast) var(--ease-out);
+}
+
+.gb-c4-col .gb-c4-ghost { color: #d81f2a; }
+.gb-c4-col.you-2 .gb-c4-ghost { color: #e0a800; }
+
+/* ---- Line boards (tic-tac-toe, Gomoku) --------------------------------- */
+
+.gb-line-frame {
+  width: min(100%, 344px);
+  padding: 12px;
+  border-radius: 12px;
+  background:
+    linear-gradient(150deg, rgba(255, 255, 255, 0.12), transparent 46%),
+    linear-gradient(160deg, #b8874d, #7c5227 78%);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.3),
+    inset 0 -3px 8px rgba(0, 0, 0, 0.4),
+    0 20px 36px -22px rgba(0, 0, 0, 0.9);
+}
+
+.gb-line-grid {
+  display: grid;
+  width: 100%;
+  min-width: 0;
+  aspect-ratio: 1;
+  background-color: #e8cfa4;
+  background-image:
+    linear-gradient(rgba(60, 38, 16, 0.55) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(60, 38, 16, 0.55) 1px, transparent 1px);
+  border: 1px solid rgba(60, 38, 16, 0.65);
+  box-shadow: inset 0 0 24px rgba(90, 60, 26, 0.35);
+}
+
+/* Tic-tac-toe is a hashtag: nine spaces divided by two lines each way, so the
+   lines sit on cell edges. Gomoku is a Go board: there are 15 lines and a stone
+   is placed *on* an intersection, so the lines have to run through the middle of
+   each cell — offsetting by half a cell is what puts a stone on a crossing
+   instead of in the middle of a square. */
+.gb-line-grid.ttt { background-size: 33.333% 33.333%; }
+.gb-line-grid.gomoku { background-size: 6.6667% 6.6667%; background-position: 3.3333% 3.3333%; }
+
+/* Nine cells do not need 344px: a 3x3 tic-tac-toe square that size reads as a
+   poster, not a game. Gomoku does, because it has 225 points to hit. */
+.gb-line-frame:has(.gb-line-grid.ttt) { width: min(100%, 268px); }
+
+.gb-line-cell {
+  display: grid;
+  place-items: center;
+  aspect-ratio: 1;
+  min-width: 0;
+  min-height: 0;
+  border: none;
+  padding: 0;
+  background: none;
+  cursor: pointer;
+}
+
+.gb-line-cell:disabled { cursor: default; }
+
+.gb-stone {
+  width: 76%;
+  aspect-ratio: 1;
+  border-radius: 50%;
+  box-shadow:
+    inset 0 2px 3px rgba(255, 255, 255, 0.45),
+    inset 0 -3px 5px rgba(0, 0, 0, 0.4),
+    0 3px 5px -1px rgba(0, 0, 0, 0.6);
+}
+
+.gb-stone.dark { background: radial-gradient(circle at 34% 26%, #5c6072, #0f1015 72%); }
+.gb-stone.light { background: radial-gradient(circle at 34% 26%, #ffffff, #cfcac0 76%); }
+
+.gb-line-cell.last .gb-stone { box-shadow: 0 0 0 2px var(--felt-accent, var(--accent)), 0 3px 6px rgba(0, 0, 0, 0.6); }
+.gb-line-cell:not(:disabled):hover .gb-stone.ghost { opacity: 0.45; }
+
+.gb-stone.ghost {
+  opacity: 0;
+  background: rgba(30, 24, 16, 0.5);
+  box-shadow: none;
+  transition: opacity var(--motion-fast) var(--ease-out);
+}
+
+/* ---- Battleship --------------------------------------------------------- */
+
+.gb-bb {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  width: 100%;
+  align-items: center;
+}
+
+.gb-bb-board {
+  width: min(100%, 340px);
+}
+
+.gb-bb-title {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-2);
+  margin-bottom: 6px;
+  font-size: var(--text-label);
+  font-weight: 700;
+}
+
+.gb-bb-title span { font-size: var(--text-meta); font-weight: 400; color: var(--text-muted); }
+
+.gb-bb-coords {
+  display: grid;
+  grid-template-columns: repeat(10, 1fr);
+  gap: 2px;
+  margin-left: 16px;
+  margin-bottom: 3px;
+}
+
+.gb-bb-coords span {
+  display: grid;
+  place-items: center;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+}
+
+.gb-bb-body {
+  display: flex;
+  gap: 4px;
+  align-items: stretch;
+}
+
+.gb-bb-rows {
+  display: grid;
+  grid-template-rows: repeat(10, 1fr);
+  gap: 2px;
+  width: 12px;
+}
+
+.gb-bb-rows span {
+  display: grid;
+  place-items: center;
+  font-size: 9px;
+  font-weight: 700;
+  color: var(--text-muted);
+}
+
+.gb-bb-grid {
+  flex: 1;
+  display: grid;
+  grid-template-columns: repeat(10, minmax(0, 1fr));
+  gap: 2px;
+  padding: 3px;
+  min-width: 0;
+  border-radius: 7px;
+  background: linear-gradient(160deg, #0d2a3a, #071a26 80%);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.1), inset 0 -2px 6px rgba(0, 0, 0, 0.6);
+}
+
+.gb-bb-cell {
+  position: relative;
+  aspect-ratio: 1;
+  min-width: 0;
+  border: 1px solid rgba(120, 200, 255, 0.18);
+  border-radius: 2px;
+  padding: 0;
+  background: rgba(64, 148, 190, 0.14);
+  cursor: pointer;
+}
+
+.gb-bb-cell:disabled { cursor: default; }
+.gb-bb-cell.own { cursor: default; border-color: rgba(120, 200, 255, 0.12); }
+.gb-bb-cell:not(:disabled):hover { background: rgba(110, 226, 255, 0.32); }
+.gb-bb-cell.ship { background: linear-gradient(160deg, #5f6f7d, #33414c); border-color: rgba(200, 220, 235, 0.3); }
+.gb-bb-cell.hit {
+  background: radial-gradient(circle at 50% 45%, #ff8a5c, #c0341f 72%);
+  border-color: rgba(255, 160, 120, 0.5);
+}
+.gb-bb-cell.miss { background: rgba(140, 170, 190, 0.28); }
+.gb-bb-cell.incoming { box-shadow: inset 0 0 0 1px rgba(255, 196, 90, 0.8); }
+
+.gb-bb-cell.hit::after {
+  content: "";
+  position: absolute;
+  inset: 26%;
+  border-radius: 50%;
+  background: #2a0b05;
+  box-shadow: 0 0 0 2px rgba(255, 210, 150, 0.45);
+}
+
+.gb-bb-cell.miss::after {
+  content: "";
+  position: absolute;
+  inset: 38%;
+  border-radius: 50%;
+  background: rgba(220, 240, 255, 0.7);
+}
+
+/* ---- Snakes ------------------------------------------------------------- */
+
+.gb-snake {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  width: 100%;
+  min-width: 0;
+  align-items: center;
+}
+
+.gb-snake-grid {
+  display: grid;
+  grid-template-columns: repeat(10, minmax(0, 1fr));
+  width: min(100%, 344px);
+  min-width: 0;
+  aspect-ratio: 1;
+  border-radius: 10px;
+  overflow: hidden;
+  border: 3px solid #3d2a1a;
+  box-shadow: inset 0 0 24px rgba(0, 0, 0, 0.5), 0 18px 32px -22px rgba(0, 0, 0, 0.9);
+}
+
+.gb-snake-cell {
+  position: relative;
+  display: flex;
+  align-items: flex-start;
+  justify-content: flex-start;
+  padding: 1px 3px;
+  font-size: 8px;
+  font-weight: 800;
+  line-height: 1.1;
+  color: rgba(52, 32, 12, 0.72);
+  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.55);
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  background: #f0e4c8;
+}
+
+.gb-snake-cell.alt { background: #e2d2ae; }
+.gb-snake-cell.start { background: #cdeccb; }
+.gb-snake-cell.end { background: #f6d7a8; }
+
+.gb-snake-tokens {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-content: center;
+  justify-content: center;
+  gap: 1px;
+}
+
+/* A pawn has to be findable at a glance on a board covered in snakes and
+   ladders, so it is large for its square and carries a light ring against the
+   sand. The number stays legible inside it rather than being a dot. */
+.gb-snake-token {
+  width: 64%;
+  aspect-ratio: 1;
+  border-radius: 50%;
+  border: 1px solid rgba(0, 0, 0, 0.45);
+  box-shadow: inset 0 1px 1px rgba(255, 255, 255, 0.55), 0 0 0 1.5px rgba(255, 255, 255, 0.92),
+    0 2px 4px rgba(0, 0, 0, 0.55);
+  display: grid;
+  place-items: center;
+  font-size: 9px;
+  line-height: 1;
+  font-weight: 800;
+  color: #fff;
+  text-transform: uppercase;
+}
+
+/* Player 1 is violet, not red: the snakes are already red, and a red pawn on a
+   red snake head is invisible. */
+.gb-snake-token.t1 { background: radial-gradient(circle at 34% 26%, #b9a2ff, #5b34c4 72%); }
+.gb-snake-token.t2 { background: radial-gradient(circle at 34% 26%, #ffe98a, #c99500 72%); color: #3b2a00; }
+.gb-snake-token.t3 { background: radial-gradient(circle at 34% 26%, #9ad6ff, #1667a8 72%); }
+.gb-snake-token.t4 { background: radial-gradient(circle at 34% 26%, #b6f0b0, #1c7a34 72%); }
+
+/* The ladders and snakes, over the numbered squares. Thin and semi-transparent
+   so the numbers stay readable underneath, which is what makes the board
+   legible at 390px. */
+.gb-snake-ways {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  overflow: visible;
+}
+
+.gb-snake-grid { position: relative; }
+
+.gb-ladder line { stroke: #2f7d4a; stroke-width: 0.55; stroke-linecap: round; opacity: 0.9; }
+.gb-ladder line.rung { stroke-width: 0.36; opacity: 0.72; }
+
+/* A snake is a scaled animal, not a mark: an outline that tapers to the tail, a
+   darker banding, and a head with eyes and a tongue. It stays opaque enough to
+   read but sits behind the tokens and the numbers. */
+.gb-snake-way .body {
+  fill: #b8352a;
+  stroke: #7d1f16;
+  stroke-width: 0.28;
+  stroke-linejoin: round;
+  opacity: 0.92;
+}
+.gb-snake-way .band { stroke: #7d1f16; stroke-width: 0.34; opacity: 0.4; stroke-linecap: round; }
+.gb-snake-way .head { fill: #c9422f; stroke: #7d1f16; stroke-width: 0.28; }
+.gb-snake-way .eye { fill: #2a1109; }
+.gb-snake-way .tongue { stroke: #c8102e; stroke-width: 0.28; stroke-linecap: round; }
+
+/* The note's two little swatches, so the legend is a shape not a sentence. */
+.gb-key {
+  display: inline-block;
+  width: 12px;
+  height: 3px;
+  border-radius: 2px;
+  vertical-align: middle;
+  margin-right: 2px;
+}
+.gb-key.ladder { background: #2f7d4a; }
+.gb-key.snake { background: #c0392b; }
+
+/* ---- Dots and boxes ----------------------------------------------------- */
+
+.gb-dots {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  align-items: center;
+  /* Without this the frame shrinks to its content, and `min(100%, 316px)` then
+     resolves against that shrunken box — a 4x4 board rendered the size of a
+     postage stamp. */
+  width: 100%;
+  min-width: 0;
+  padding: var(--space-3);
+  border-radius: 12px;
+  background: linear-gradient(160deg, #f4ead6, #ddcdae);
+  box-shadow: inset 0 0 0 1px rgba(90, 60, 26, 0.25), 0 18px 32px -22px rgba(0, 0, 0, 0.9);
+}
+
+.gb-dots-grid {
+  display: grid;
+  width: min(100%, 316px);
+  min-width: 0;
+  aspect-ratio: 1;
+  align-items: center;
+  justify-items: stretch;
+  grid-template-columns: repeat(9, minmax(0, 1fr));
+  grid-template-rows: repeat(9, minmax(0, 1fr));
+}
+
+.gb-dot { width: 9px; height: 9px; border-radius: 50%; background: #3b2a12; box-shadow: 0 1px 1px rgba(255, 255, 255, 0.7); }
+
+.gb-edge {
+  width: 100%;
+  height: 100%;
+  min-height: 6px;
+  border: none;
+  border-radius: 3px;
+  padding: 0;
+  background: transparent;
+  cursor: pointer;
+  position: relative;
+}
+
+.gb-edge::after {
+  content: "";
+  position: absolute;
+  inset: 46% 5%;
+  border-radius: 2px;
+  background: rgba(74, 52, 24, 0.26);
+  transition: background var(--motion-fast) var(--ease-out);
+}
+
+.gb-edge.v::after { inset: 5% 46%; }
+
+.gb-edge:not(:disabled):hover::after { background: rgba(74, 52, 24, 0.4); }
+.gb-edge.taken::after { background: #2f6bd8; opacity: 1; }
+.gb-edge.taken.t2::after { background: #d8452f; }
+
+.gb-box { width: 100%; height: 100%; display: grid; place-items: center; }
+.gb-box.owned-1 { background: rgba(47, 107, 216, 0.22); }
+.gb-box.owned-2 { background: rgba(216, 69, 47, 0.22); }
+.gb-box .gb-initial { font-size: 10px; font-weight: 800; color: #3a2a12; }
+
+/* ---- Dice --------------------------------------------------------------- */
+
+.gb-dice {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-3);
+}
+
+.gb-die {
+  position: relative;
+  width: 52px;
+  height: 52px;
+  border-radius: 11px;
+  background: linear-gradient(150deg, #fffdf7, #ddd6c6 90%);
+  box-shadow:
+    inset 0 2px 3px rgba(255, 255, 255, 0.9),
+    inset 0 -3px 6px rgba(0, 0, 0, 0.22),
+    0 8px 14px -6px rgba(0, 0, 0, 0.65);
+}
+
+.gb-die .gb-pip {
+  position: absolute;
+  width: 12%;
+  aspect-ratio: 1;
+  border-radius: 50%;
+  background: #1c1d24;
+  transform: translate(-50%, -50%);
+  box-shadow: inset 0 1px 1px rgba(255, 255, 255, 0.35);
+}
+
+@media (max-width: 420px) {
+  .pcard { --pcard-w: 46px; }
+  .pcard-corner { font-size: 10px; }
+  .pcard-pip svg { width: 11px; height: 11px; }
+  .gb-c4-grid,
+  .gb-c4-col { gap: 4px; }
+  .gb-bb-coords { margin-left: 14px; }
+  .gb-bb-rows { width: 10px; }
+  .gb-snake-cell { font-size: 7px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .gb-sq,
+  .gb-edge::after,
+  .gb-stone.ghost { transition: none; }
+}

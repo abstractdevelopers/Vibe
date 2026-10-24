@@ -83,6 +83,58 @@ export const SHAPE_NAME: Record<string, string> = {
 };
 
 /**
+ * A court card's portrait — a crowned bust rather than a letter in a box.
+ *
+ * One figure, drawn to fill the panel. A real face card mirrors its figure top
+ * and bottom, but at the 29px a card is on a phone each half would be 12px tall
+ * and the two dissolve into one dark mass. Legibility wins: a single bust reads
+ * as a crowned head at a glance, and the rank is already in both corners.
+ * The headpiece is what tells the three apart — a jewelled crown for the king,
+ * an open circlet for the queen, a soft cap and feather for the jack.
+ */
+export function CourtFigure({ rank, suit: su }: { rank: number; suit: string }): JSX.Element {
+  return (
+    <svg viewBox="0 0 40 56" width="100%" height="100%" fill="none" aria-hidden="true" style={{ display: "block" }}>
+      {/* Shoulders and robe, then the head clear of them. */}
+      <path d="M4 56c0-9.6 6-16.4 13-18.4h6C30 39.6 36 46.4 36 56z" fill="currentColor" opacity="0.92" />
+      <path d="M16 37.2l4-3 4 3-4 3.4z" fill="currentColor" opacity="0.3" />
+      <circle cx="20" cy="24" r="9.4" fill="currentColor" />
+      {/* A collar line keeps the head from merging into the shoulders. */}
+      <path d="M12.6 34.6c2 3 4.6 4.6 7.4 4.6s5.4-1.6 7.4-4.6" stroke="currentColor" strokeWidth="1.6" opacity="0.4" fill="none" />
+
+      {rank === 13 && (
+        <g fill="currentColor">
+          <path d="M10.6 15.6l2-6 3.8 4L20 8l3.6 5.6 3.8-4 2 6z" />
+          <rect x="10.2" y="15" width="19.6" height="2.8" rx="1.3" />
+          <circle cx="20" cy="16.4" r="1.1" fill="#fffdf7" opacity="0.55" />
+        </g>
+      )}
+      {rank === 12 && (
+        <g fill="currentColor">
+          <path d="M10.8 15.8c2-5.6 5.4-8.6 9.2-8.6s7.2 3 9.2 8.6z" opacity="0.94" />
+          <circle cx="20" cy="5" r="1.9" />
+          <circle cx="12.6" cy="8.4" r="1.4" />
+          <circle cx="27.4" cy="8.4" r="1.4" />
+          <rect x="10.4" y="15.4" width="19.2" height="2.5" rx="1.2" />
+        </g>
+      )}
+      {rank === 11 && (
+        <g fill="currentColor">
+          <path d="M10.9 16c.9-6.4 4.6-9.8 9.1-9.8s8.2 3.4 9.1 9.8z" />
+          <path d="M27 12.4c2.8-4.4 6.4-6.4 9-7-2.1 2.8-3 6.1-2.8 9.6z" opacity="0.85" />
+          <rect x="10.6" y="15.7" width="18.8" height="2.3" rx="1.1" />
+        </g>
+      )}
+
+      {/* The suit, held at the shoulder. */}
+      <g transform="translate(30.5 47) scale(0.44) translate(-12 -12)" fill="currentColor" opacity="0.9">
+        {suit(su)}
+      </g>
+    </svg>
+  );
+}
+
+/**
  * A board piece — a drawn disc rather than a text glyph, so a checkers board and
  * a Reversi board look like boards. `tone` picks the material, `king` adds the
  * crown for a crowned checker.
