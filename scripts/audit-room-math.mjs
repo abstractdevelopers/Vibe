@@ -40,9 +40,17 @@ async function openRoom(page) {
     b?.click();
   });
   await sleep(2800);
+  // Only a voice or listen room carries a stage; a match or watch room shows a
+  // scoreboard or a watch panel instead, so opening the first card on the list
+  // used to fail the geometry check for a room that is correct by design.
   await page.evaluate((t) => {
     const cards = [...document.querySelectorAll(".room-card")];
-    (cards.find((c) => (c.textContent || "").includes(t)) ?? cards[0])?.click();
+    const hasStage = (c) => /Voice room|Listen together/.test((c.textContent || ""));
+    const pick = cards.find((c) => hasStage(c) && (c.textContent || "").includes(t))
+      ?? cards.find(hasStage)
+      ?? cards.find((c) => (c.textContent || "").includes(t))
+      ?? cards[0];
+    pick?.click();
   }, ROOM_TITLE);
   await sleep(3500);
 }
@@ -94,7 +102,7 @@ for (const width of [390, 360, 320]) {
     check(m.stage.r <= m.vw + 1, "stage inside viewport", `right=${Math.round(m.stage.r)}`);
     check(m.stage.l >= -1, "stage not clipped left", `left=${Math.round(m.stage.l)}`);
   } else {
-    check(false, "stage present", "no .stage element");
+    check(false, "stage present", "no .stage element — is this a voice or listen room?");
   }
 
   // The spotlight must be the widest tile and never wider than the stage.
