@@ -241,7 +241,16 @@ function BattleWorld({ battles, onOpen }: { battles: Battle[]; onOpen: (b: Battl
         <span className="meta">{open.length} on air</span>
       </div>
       <div className="battle-world-stage">
-        <BattleCanvas kind="map" plots={plots} className="battle-world-canvas" label={`${open.length} live battles`} />
+        <BattleCanvas
+          kind="map"
+          plots={plots}
+          className="battle-world-canvas"
+          label={`${open.length} live battles`}
+          onPickPlot={(id) => {
+            const hit = open.find((b) => b.id === id);
+            if (hit) onOpen(hit);
+          }}
+        />
         {open.length === 0 && (
           <div className="battle-world-empty">
             <p>No stadium has a fight on right now.</p>

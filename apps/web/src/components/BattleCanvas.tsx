@@ -4,6 +4,7 @@ import {
   buildMap,
   fitCamera,
   IsoScene,
+  plotAt,
   stadium,
   type ArenaState,
   type MapPlot,
@@ -32,6 +33,8 @@ interface Props {
   className?: string;
   /** Accessible description; the canvas is decorative otherwise. */
   label?: string;
+  /** Map only: called with the plot id when a stadium is tapped. */
+  onPickPlot?: (plotId: string) => void;
 }
 
 /**
@@ -67,6 +70,7 @@ export function BattleCanvas({
   fighterBUrl,
   className,
   label,
+  onPickPlot,
 }: Props) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const frame = useRef(0);
@@ -171,6 +175,16 @@ export function BattleCanvas({
       role={label ? "img" : "presentation"}
       aria-label={label}
       aria-hidden={label ? undefined : true}
+      onClick={(e) => {
+        if (kind !== "map" || !onPickPlot) return;
+        const canvas = canvasRef.current;
+        if (!canvas) return;
+        const rect = canvas.getBoundingClientRect();
+        const cam = fitCamera(rect.width, rect.height, 7);
+        const id = plotAt(e.clientX - rect.left, e.clientY - rect.top, plots ?? [], cam);
+        if (id) onPickPlot(id);
+      }}
+      style={kind === "map" && onPickPlot ? { cursor: "pointer" } : undefined}
     />
   );
 }

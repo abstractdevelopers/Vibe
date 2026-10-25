@@ -216,6 +216,88 @@ export class IsoScene {
   draw(ctx: CanvasRenderingContext2D): void {
     for (const item of this.sorted()) item.paint(ctx);
   }
+
+  /**
+   * Depth of field, cheaply.
+   *
+   * A fixed isometric camera has no perspective divide, so nothing in the scene
+   * gets smaller with distance — which is why a flat iso drawing reads as a
+   * board rather than a place. Haze does the distance cue instead: a screen-space
+   * wash that is strongest at the top of the frame (the far edge of the world)
+   * and clears at the bottom (in front of the viewer). It is painted between the
+   * ground layer and the structures, so the bowl sinks into it and the near
+   * crowd stands out of it.
+   */
+  depthHaze(width: number, height: number, color: string, strength = 0.5): void {
+    this.items.push({
+      depth: -40,
+      paint: (ctx) => {
+        const g = ctx.createLinearGradient(0, 0, 0, height);
+        g.addColorStop(0, rgba(color, strength));
+        g.addColorStop(0.55, rgba(color, strength * 0.35));
+        g.addColorStop(1, rgba(color, 0));
+        ctx.fillStyle = g;
+        ctx.fillRect(0, 0, width, height);
+      },
+    });
+  }
+
+  /**
+   * A light with a direction: a long soft shadow cast from a point, plus a warm
+   * pool under the subject. This is what makes two objects read as sitting on
+   * the same floor rather than pasted over it.
+   */
+  castShadow(cx: number, cz: number, radius: number, cam: IsoCamera, opts: { length?: number; alpha?: number } = {}): void {
+    const p = project(cx, 0, cz, cam);
+    const rx = radius * (cam.tileW / 2) * cam.scale;
+    const ry = radius * (cam.tileH / 2) * cam.scale;
+    const len = (opts.length ?? 1.6) * cam.tileH * 0.5 * cam.scale;
+    this.items.push({
+      depth: cx + cz - 0.03,
+      paint: (ctx) => {
+        const prior = ctx.globalAlpha;
+        ctx.globalAlpha = prior * (opts.alpha ?? 0.34);
+        const g = ctx.createRadialGradient(p.x, p.y, 1, p.x, p.y, rx * 1.5);
+        g.addColorStop(0, "rgba(0,0,0,0.55)");
+        g.addColorStop(1, "rgba(0,0,0,0)");
+        ctx.fillStyle = g;
+        ctx.beginPath();
+        ctx.ellipse(p.x + len, p.y + len * 0.5, rx * 1.35, ry * 0.9, Math.PI / 7, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.globalAlpha = prior;
+      },
+    });
+  }
+
+  /**
+   * An impact: a ring that expands and fades, thrown from a world point toward
+   * the viewer. Used when an attack lands, so a comment, a vote and a paid
+   * boost all have a physical answer on the floor.
+   */
+  impact(cx: number, cz: number, cam: IsoCamera, color: string, age: number, power = 1): void {
+    const t = Math.max(0, Math.min(1, age));
+    if (t >= 1) return;
+    const p = project(cx, 0.15, cz, cam);
+    const r = (0.4 + t * 2.2 * power) * (cam.tileW / 2) * cam.scale;
+    this.items.push({
+      depth: cx + cz + 0.5,
+      paint: (ctx) => {
+        const prior = ctx.globalAlpha;
+        ctx.globalAlpha = prior * (1 - t) * 0.85;
+        ctx.strokeStyle = color;
+        ctx.lineWidth = Math.max(1, 4 * (1 - t));
+        ctx.beginPath();
+        ctx.ellipse(p.x, p.y, r, r * 0.5, 0, 0, Math.PI * 2);
+        ctx.stroke();
+        // A second, faster inner ring sells the strike without more geometry.
+        ctx.globalAlpha = prior * (1 - t) * 0.5;
+        ctx.beginPath();
+        ctx.ellipse(p.x, p.y, r * 0.55, r * 0.28, 0, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.globalAlpha = prior;
+      },
+    });
+  }
 }
 
 /* ------------------------------------------------------------------ scenes */
@@ -351,6 +433,14 @@ export function buildArena(scene: IsoScene, spec: StadiumSpec, state: ArenaState
   // raised seat.
 
   // ---- ground: sand, then a chalk ring marking the fight area
+  //
+  // The haze goes in first, underneath everything, so the far tiers sit in it
+  // and the near floor does not. That is the whole trick: at a fixed isometric
+  // angle nothing changes size with depth, so distance has to be shown by
+  // atmosphere instead.
+  const hazeColor = spec.sky[1];
+  scene.depthHaze(1400, 900, hazeColor, 0.62);
+
   for (let x = -3; x < 4; x++) {
     for (let z = -3; z < 4; z++) {
       const dark = (x + z) % 2 === 0;
@@ -412,6 +502,20 @@ export function buildArena(scene: IsoScene, spec: StadiumSpec, state: ArenaState
   const podiumB = { x: 1.1, z: 1.9 } as const;
   scene.box({ x: podiumA.x, z: podiumA.z, w: 1.0, d: 1.0, h: 0.2, color: shade(spec.sideA, 0.7) }, cam);
   scene.box({ x: podiumB.x, z: podiumB.z, w: 1.0, d: 1.0, h: 0.2, color: shade(spec.sideB, 0.7) }, cam);
+  // A cast shadow under each podium gives the floor a light direction, so the
+  // two fighters read as standing on it rather than printed on it.
+  scene.castShadow(podiumA.x + 0.5, podiumA.z + 0.5, 0.95, cam, { length: 1.4, alpha: 0.4 });
+  scene.castShadow(podiumB.x + 0.5, podiumB.z + 0.5, 0.95, cam, { length: -1.1, alpha: 0.4 });
+
+  // ---- impacts: every attack answers on the floor
+  //
+  // A comment, a vote and a paid boost all arrive here as an `impact`, so an
+  // audience can see a hit land without reading the scoreboard. Power scales
+  // the ring, which is what makes a boost feel heavier than a comment.
+  for (const hit of state.impacts) {
+    const at = hit.side === "a" ? podiumA : podiumB;
+    scene.impact(at.x + 0.5, at.z + 0.5, cam, hit.side === "a" ? spec.sideA : spec.sideB, hit.age, 0.55 + hit.power);
+  }
 
   // ---- fighters
   drawFighter(scene, cam, spec.sideA, podiumA.x + 0.5, podiumA.z + 0.5, state.fighterA, phase, "a", state);
@@ -569,7 +673,10 @@ export interface MapPlot {
 }
 
 export function buildMap(scene: IsoScene, plots: MapPlot[], cam: IsoCamera, phase: number): void {
-  // Ground: a dark grid so the plots read as lights on a surface, not cards.
+  // The map is where the battles live, so it needs the same two depth cues the
+  // arena got: haze for distance, and a cast shadow so each stadium sits on the
+  // ground instead of floating on it.
+  scene.depthHaze(1400, 900, "#2a2340", 0.7);
   for (let x = -7; x <= 7; x++) {
     for (let z = -7; z <= 7; z++) {
       const even = (x + z) % 2 === 0;
@@ -582,6 +689,9 @@ export function buildMap(scene: IsoScene, plots: MapPlot[], cam: IsoCamera, phas
     const pulse = plot.live ? 0.5 + 0.5 * Math.sin(phase * 2.4 + x + z) : 0;
     // Base plate
     scene.box({ x, z, w: 3, d: 3, h: 0.14, color: shade(spec.stone, 0.9) }, cam);
+    // The plot stands on the grid: one shadow per stadium is what stops the map
+    // reading as flat tiles arranged on a board.
+    scene.castShadow(x + 1.5, z + 1.5, 1.6, cam, { length: 1.1, alpha: 0.45 });
     // Ring of tiers
     for (let i = 0; i < 4; i++) {
       const o = i * 0.28;
@@ -594,14 +704,61 @@ export function buildMap(scene: IsoScene, plots: MapPlot[], cam: IsoCamera, phas
     const total = Math.max(1, plot.score.a + plot.score.b);
     scene.box({ x: x + 0.7, z: z + 0.7, w: 0.7 * (plot.score.a / total) + 0.05, d: 1.6, h: 0.12, color: spec.sideA }, cam);
     scene.box({ x: x + 2.3 - 0.7 * (plot.score.b / total) - 0.05, z: z + 0.7, w: 0.7 * (plot.score.b / total) + 0.05, d: 1.6, h: 0.12, color: spec.sideB }, cam);
-    // Flare
+    // Flare: the stadium is on air. It breathes so a still map still reads live.
     if (plot.live) {
       scene.box({ x: x + 1.3, z: z + 1.3, w: 0.4, d: 0.4, y: 0.2, h: 0.9 + pulse * 0.6, color: spec.accent, alpha: 0.55 + pulse * 0.4 }, cam);
+      scene.sprite({
+        x: x + 1.5,
+        z: z + 1.5,
+        bias: 4,
+        paint: (ctx) => {
+          const p = project(x + 1.5, 1.9 + pulse * 0.15, z + 1.5, cam);
+          const r = 0.5 * (cam.tileW / 2) * cam.scale;
+          const g = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, r * 2.2);
+          g.addColorStop(0, rgba(spec.accent, 0.5 + pulse * 0.3));
+          g.addColorStop(1, rgba(spec.accent, 0));
+          ctx.fillStyle = g;
+          ctx.beginPath();
+          ctx.arc(p.x, p.y, r * 2.2, 0, Math.PI * 2);
+          ctx.fill();
+        },
+      });
     }
   }
 }
 
 /* ------------------------------------------------------------------ canvas */
+
+/**
+ * Which plot is under a screen point.
+ *
+ * The map is a picture of a place, so tapping a stadium has to feel like
+ * tapping the stadium. Hit-testing is done in screen space against each plot's
+ * projected base diamond — cheap, exact at any camera size, and it needs no
+ * second source of truth alongside the renderer.
+ */
+export function plotAt(
+  px: number,
+  py: number,
+  plots: Array<{ id: string; x: number; z: number }>,
+  cam: IsoCamera,
+  size = 3,
+): string | null {
+  let best: { id: string; depth: number } | null = null;
+  for (const plot of plots) {
+    const c = project(plot.x + size / 2, 0, plot.z + size / 2, cam);
+    const halfW = (size / 2) * (cam.tileW / 2) * cam.scale;
+    const halfH = (size / 2) * (cam.tileH / 2) * cam.scale;
+    // Diamond test: normalised |dx| + |dy| <= 1.
+    const dx = Math.abs(px - c.x) / (halfW * 2);
+    const dy = Math.abs(py - c.y) / (halfH * 2);
+    if (dx + dy <= 1) {
+      const depth = plot.x + plot.z;
+      if (!best || depth > best.depth) best = { id: plot.id, depth };
+    }
+  }
+  return best?.id ?? null;
+}
 
 export function fitCamera(width: number, height: number, plotRadius: number): IsoCamera {
   // The scene is a diamond: 2r tiles across, r tiles tall, plus height for the
