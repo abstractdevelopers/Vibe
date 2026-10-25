@@ -158,14 +158,20 @@ export async function applyProviderEvent(db: pg.Pool, event: ProviderPaymentEven
     return false;
   }
   // The provider is authoritative that money moved, but the amount it reports
-  // must be the amount this order asks for. Fulfilling a ₦1 checkout against a
-  // ₦50,000 order would hand over the goods for free, so a mismatch is refused
-  // and recorded for an operator instead.
+  // has to be able to cover the order. Two cases, deliberately different:
+  //
+  //   short paid   — refuse and record it. Fulfilling a ₦1 payment against a
+  //                  ₦50,000 order hands over the goods for free.
+  //   overpaid     — fulfil and record it. The money was really collected
+  //                  (Bachs reports OVERPAID), so refusing would leave a
+  //                  customer charged for nothing while the order sat failed.
+  //                  The excess is flagged for an operator to refund.
   if (target === "paid") {
     const paidMinor = event.amount?.amount ?? 0;
     const paidCurrency = (event.amount?.currency ?? "").toUpperCase();
     const expectedMinor = Number(order.amount_minor);
-    if (paidMinor !== expectedMinor || paidCurrency !== order.currency.toUpperCase()) {
+    const currencyMatches = paidCurrency === order.currency.toUpperCase();
+    if (!currencyMatches || paidMinor < expectedMinor) {
       const failed = canTransition(order.status, "failed");
       await withTransaction(db, async (tx) => {
         if (failed) {
@@ -188,6 +194,20 @@ export async function applyProviderEvent(db: pg.Pool, event: ProviderPaymentEven
         );
       });
       return false;
+    }
+    if (paidMinor > expectedMinor) {
+      await withTransaction(db, async (tx) => {
+        await tx.query(
+          `INSERT INTO money_audit (actor_id, action, entity_type, entity_id, amount_minor, currency, metadata)
+           VALUES (NULL, 'order.overpaid', 'order', $1, $2, $3, $4)`,
+          [
+            order.id,
+            paidMinor,
+            order.currency,
+            JSON.stringify({ expectedMinor, paidMinor, excessMinor: paidMinor - expectedMinor, currency: order.currency }),
+          ],
+        );
+      });
     }
   }
   // The order flip and its ledger entry are one transaction: a paid order can

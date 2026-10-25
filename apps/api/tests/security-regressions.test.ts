@@ -106,6 +106,51 @@ describe("order settlement is amount-checked", () => {
     });
     expect(res.statusCode).toBe(400);
   });
+
+  it("fulfils an order the provider reports as overpaid, and flags the excess", async () => {
+    // The money was really collected, so the goods must follow. The excess is
+    // recorded for an operator to refund rather than silently kept.
+    const merchant = await registerUser(h.app, "overmerchant");
+    const buyer = await registerUser(h.app, "overbuyer");
+    await makeAdmin(merchant);
+    const opened = await h.app.inject({
+      method: "POST", url: "/v1/merchants", headers: auth(merchant.token), payload: { name: "Shop", category: "retail" },
+    });
+    const merchantId = opened.json().id;
+    await h.app.inject({
+      method: "POST", url: `/v1/admin/merchants/${merchantId}/verify`, headers: auth(merchant.token),
+      payload: { verificationStatus: "verified" },
+    });
+    const product = await h.app.inject({
+      method: "POST", url: `/v1/merchants/${merchantId}/products`, headers: auth(merchant.token),
+      payload: { name: "Ankara", priceMinor: 500_000, currency: "NGN", status: "active" },
+    });
+    const productId = product.json().id;
+
+    const order = await h.app.inject({
+      method: "POST", url: "/v1/orders", headers: { ...auth(buyer.token), "idempotency-key": "ov-1" },
+      payload: { merchantId, items: [{ productId, quantity: 1 }] },
+    });
+    const orderId = order.json().id as string;
+    await h.app.inject({
+      method: "POST", url: `/v1/orders/${orderId}/checkout`,
+      headers: { ...auth(buyer.token), "idempotency-key": "ov-checkout-1" }, payload: {},
+    });
+    const detail = await h.app.inject({ method: "GET", url: `/v1/orders/${orderId}`, headers: auth(buyer.token) });
+    const reference = detail.json().reference as string;
+
+    const { raw, headers } = webhookPayload({ id: "evt_over", type: "collection.succeeded", reference, amountMinor: 600_000 });
+    const hook = await h.app.inject({ method: "POST", url: "/v1/webhooks/payments", payload: raw, headers });
+    expect(hook.statusCode).toBe(202);
+    expect(hook.json().orderUpdated).toBe(true);
+
+    const after = await h.app.inject({ method: "GET", url: `/v1/orders/${orderId}`, headers: auth(buyer.token) });
+    expect(after.json().status).toBe("paid");
+
+    const audit = await h.pool.query("SELECT metadata FROM money_audit WHERE action = 'order.overpaid'");
+    expect(audit.rows).toHaveLength(1);
+    expect(Number(audit.rows[0].metadata.excessMinor)).toBe(100_000);
+  });
 });
 
 describe("post visibility applies to the thread, not just the feed", () => {
