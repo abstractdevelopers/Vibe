@@ -13,6 +13,7 @@ import {
   postBattleBoost,
 } from "../money/ledger.js";
 import { trackSafe } from "./analytics.js";
+import { nameplatesFor } from "./identity-status.js";
 
 /**
  * Brand Battles.
@@ -284,6 +285,8 @@ async function battleView(ctx: AppContext, row: BattleRow, viewerId: string) {
     "SELECT kind FROM battle_boosts WHERE battle_id = $1 AND user_id = $2",
     [row.id, viewerId],
   );
+  // One read for every attacker in the feed, so each attack carries a nameplate.
+  const plates = await nameplatesFor(ctx, comments.map((c) => c.user_id));
   return {
     id: row.id,
     title: row.title,
@@ -326,6 +329,8 @@ async function battleView(ctx: AppContext, row: BattleRow, viewerId: string) {
       body: c.body,
       createdAt: c.created_at,
       author: publicUser({ id: c.user_id, handle: c.handle, display_name: c.display_name, avatar_url: c.avatar_url }),
+      // An attack is signed: who threw it, and what they carry.
+      nameplate: plates.get(c.user_id) ?? null,
     })),
     backers: backers.map((b) => ({
       side: b.side,

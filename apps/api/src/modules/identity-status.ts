@@ -246,6 +246,93 @@ export async function standingFor(ctx: AppContext, userId: string): Promise<Stan
   };
 }
 
+/** The public half of a nameplate: what anyone looking at you can see. */
+export interface PublicNameplate {
+  title: string | null;
+  rank: string | null;
+  /** The worn frame, with its edition number, if any. */
+  frame: WornCosmetic | null;
+}
+
+/**
+ * Nameplates for a whole page at once.
+ *
+ * `standingFor` costs four passes over every user, because the top tiers are
+ * positional ("a King has nobody ahead"). Calling it per author on a feed of
+ * twenty would be eighty scans. This computes every participant's weekly
+ * activity in one query, ranks them, and resolves the worn frame for the page in
+ * a second — so a nameplate on every row costs two queries, not eighty.
+ *
+ * Titles are deliberately the only thing published here. Privileges, holders and
+ * the next rung stay private to `/v1/me/standing`; a nameplate is a label, not a
+ * dossier.
+ */
+export async function nameplatesFor(ctx: AppContext, userIds: string[]): Promise<Map<string, PublicNameplate>> {
+  const ids = [...new Set(userIds)].filter(Boolean);
+  const out = new Map<string, PublicNameplate>();
+  if (ids.length === 0) return out;
+
+  const rows = await queryMany<{ user_id: string; activity: string }>(
+    ctx.pool,
+    `WITH activity AS (
+       SELECT u.id AS user_id,
+              (SELECT count(*) FROM posts p WHERE p.author_id = u.id AND p.created_at > now() - interval '7 days' AND p.status = 'published')
+            + (SELECT count(*) FROM activity_rooms r WHERE r.host_id = u.id AND r.created_at > now() - interval '7 days')
+            + (SELECT count(*) FROM battle_comments c WHERE c.user_id = u.id AND c.created_at > now() - interval '7 days')
+            + (SELECT count(*) FROM battle_gifts g WHERE g.user_id = u.id AND g.created_at > now() - interval '7 days')
+            + (SELECT count(*) FROM post_gifts pg WHERE pg.sender_id = u.id AND pg.created_at > now() - interval '7 days')
+              AS activity
+         FROM users u
+        WHERE u.deleted_at IS NULL
+     )
+     SELECT a.user_id, a.activity::text,
+            -- How many people are more active: the positional test, computed once.
+            (SELECT count(*) FROM activity b WHERE b.activity > a.activity)::text AS ahead
+       FROM activity a
+      WHERE a.user_id = ANY($1::uuid[])`,
+    [ids],
+  );
+
+  for (const row of rows) {
+    const activity = Number(row.activity);
+    const ahead = Number((row as unknown as { ahead: string }).ahead ?? 0);
+    const tiers = TIERS.filter((t) => activity >= t.min && ahead <= t.maxAhead);
+    const tier = tiers[0] ?? null;
+    out.set(row.user_id, { title: tier?.title ?? null, rank: tier?.rank ?? null, frame: null });
+  }
+
+  // Worn frames for everyone on the page, in one read.
+  const worn = await queryMany<{ user_id: string; kind: string; cosmetic_id: string; serial: number | null; edition_size: number | null }>(
+    ctx.pool,
+    `SELECT w.user_id, w.kind, w.cosmetic_id, p.serial, p.edition_size
+       FROM cosmetic_worn w
+       LEFT JOIN cosmetic_purchases p
+              ON p.user_id = w.user_id AND p.cosmetic_id = w.cosmetic_id
+      WHERE w.user_id = ANY($1::uuid[]) AND w.kind = 'frame'`,
+    [ids],
+  );
+  for (const row of worn) {
+    const c = cosmeticById(row.cosmetic_id);
+    const plate = out.get(row.user_id);
+    if (!c || !plate) continue;
+    plate.frame = {
+      id: c.id,
+      kind: c.kind,
+      label: c.label,
+      style: c.style,
+      serial: row.serial,
+      editionSize: row.edition_size,
+    };
+  }
+
+  // Anyone with no activity row still gets an entry, so callers never have to
+  // distinguish "no nameplate" from "no title".
+  for (const id of ids) {
+    if (!out.has(id)) out.set(id, { title: null, rank: null, frame: null });
+  }
+  return out;
+}
+
 /** Human-readable differences between two privilege sets. */
 function describeGains(from: Privileges, to: Privileges): string[] {
   const gains: string[] = [];

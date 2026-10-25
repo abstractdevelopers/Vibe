@@ -25,6 +25,7 @@ import { GiftSheet } from "../components/GiftSheet";
 import { PaidGiftSheet } from "../components/PaidGiftSheet";
 import { Avatar } from "../components/Avatar";
 import { MediaGrid } from "../components/MediaView";
+import { Nameplate } from "../components/Nameplate";
 import { Toast, type ToastState } from "../components/Toast";
 
 /** A paid placement appears after this many organic posts in the feed. */
@@ -402,8 +403,9 @@ function FeedCard({
           >
             {item.author.displayName}
           </button>
-          <div className="meta">
+          <div className="meta feed-meta-line">
             @{item.author.handle} · {relativeTime(item.createdAt)}
+            <Nameplate plate={item.nameplate} userId={item.author.id} />
           </div>
         </div>
         <span className="audience-tag">{audienceLabel(item.audience)}</span>
@@ -660,10 +662,11 @@ function CommentThread({
             {c.author.displayName.slice(0, 1).toUpperCase()}
           </button>
           <div className="grow">
-            <div className="meta">
+            <div className="meta feed-meta-line">
               <strong style={{ color: "var(--text-secondary)" }}>@{c.author.handle}</strong> ·{" "}
               {relativeTime(c.createdAt)}
               {c.editedAt && !c.deleted ? " · edited" : ""}
+              {!c.deleted && <Nameplate plate={c.nameplate} userId={c.author.id} />}
             </div>
             {c.deleted ? (
               <div className="comment-deleted">Comment deleted</div>

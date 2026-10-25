@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { api, ApiError, idempotencyKey, mediaSrc } from "../api";
+import { Nameplate } from "../components/Nameplate";
+import type { PublicNameplate } from "../types";
 import { uploadImageFile } from "../media";
 import { ScreenHeader } from "../components/ScreenHeader";
 import { PlaySegments } from "../components/PlaySegments";
@@ -87,6 +89,7 @@ interface Battle {
     body: string;
     createdAt: string;
     author: { id: string; handle: string; displayName: string; avatarUrl: string | null };
+    nameplate?: PublicNameplate | null;
   }>;
   backers: Array<{ side: "a" | "b"; staked: boolean; user: { id: string; handle: string; displayName: string; avatarUrl: string | null } }>;
 }
@@ -876,6 +879,7 @@ export function BattleScreen({ battleId, onBack }: { battleId: string; viewerId:
                 <span className="meta row" style={{ gap: 6 }}>
                   <strong>{c.author.displayName}</strong>
                   <span className={`battle-comment-tag tag-${c.side}`}>{battle.sides[c.side]}</span>
+                  <Nameplate plate={c.nameplate} userId={c.author.id} />
                 </span>
                 <p>{c.body}</p>
               </span>

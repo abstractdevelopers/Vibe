@@ -8,6 +8,7 @@ import { parse, publicUser, requireUser, type AppContext, type UserLike } from "
 import { requireCircleMember } from "./access.js";
 import { trackSafe } from "./analytics.js";
 import { notifyUsers } from "./notifications.js";
+import { nameplatesFor } from "./identity-status.js";
 import { selectAdForViewer } from "./ads.js";
 import { newToken } from "../ids.js";
 
@@ -347,7 +348,8 @@ function diversify<T extends { author_id: string }>(
   return kept;
 }
 
-async function attachActivities(db: Db, posts: PostRow[], viewerId: string) {
+async function attachActivities(ctx: AppContext, posts: PostRow[], viewerId: string) {
+  const db = ctx.pool;
   const pollPostIds = posts.filter((p) => p.type === "poll").map((p) => p.id);
   const byPost = new Map<string, unknown>();
   if (pollPostIds.length > 0) {
@@ -383,6 +385,9 @@ async function attachActivities(db: Db, posts: PostRow[], viewerId: string) {
       });
     }
   }
+  // One batched read for every author on the page: a title and a worn frame are
+  // what make a name worth reading, and doing it per row would be eighty scans.
+  const plates = await nameplatesFor(ctx, posts.map((p) => p.author_id));
   return posts.map((post) => ({
     id: post.id,
     type: post.type,
@@ -398,6 +403,7 @@ async function attachActivities(db: Db, posts: PostRow[], viewerId: string) {
       display_name: post.display_name,
       avatar_url: post.avatar_url,
     }),
+    nameplate: plates.get(post.author_id) ?? null,
     reactionCount: post.reaction_count,
     commentCount: post.comment_count,
     viewerReacted: post.viewer_reacted,
@@ -427,7 +433,7 @@ async function buildFeedPage(
     const page = rows.slice(0, limit);
     const last = page[page.length - 1];
     return {
-      items: await attachActivities(ctx.pool, page, viewerId),
+      items: await attachActivities(ctx, page, viewerId),
       nextCursor: hasMore && last ? encodeCursor(last.created_at, last.id) : null,
     };
   }
@@ -469,7 +475,7 @@ async function buildFeedPage(
   const kept = survivors.slice(0, target);
   const hasMore = kept.length > limit;
   const page = kept.slice(0, limit);
-  const items = await attachActivities(ctx.pool, page, viewerId);
+  const items = await attachActivities(ctx, page, viewerId);
   const last = page[page.length - 1] as (PostRow & { rank: number }) | undefined;
   return {
     items,
@@ -515,7 +521,7 @@ export function feedRoutes(ctx: AppContext) {
       const page = rows.slice(0, limit);
       const last = page[page.length - 1];
       return {
-        items: await attachActivities(ctx.pool, page, user.id),
+        items: await attachActivities(ctx, page, user.id),
         nextCursor: hasMore && last ? encodeCursor(last.created_at, last.id) : null,
       };
     });
@@ -727,8 +733,10 @@ export function feedRoutes(ctx: AppContext) {
       );
       const repliesByParent = new Map<string, CommentView[]>();
       const roots: CommentView[] = [];
+      // Nameplates for every commenter in the thread, in one read.
+      const plates = await nameplatesFor(ctx, rows.map((r) => r.user_id));
       for (const r of rows) {
-        const view = toCommentView(r, user.id);
+        const view = { ...toCommentView(r, user.id), nameplate: plates.get(r.user_id) ?? null };
         if (r.parent_id) {
           const list = repliesByParent.get(r.parent_id as string) ?? [];
           list.push(view);

@@ -3774,6 +3774,104 @@ select {
   transition: width var(--motion-slow) var(--ease-out);
 }
 
+/* The meta line, with a nameplate riding on it. Wraps rather than clipping, so
+   a long title and an edition number never push the handle off a narrow row. */
+.feed-meta-line {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 5px;
+  min-width: 0;
+}
+
+/* A nameplate: earned title plus a worn, numbered frame.
+   Read while scanning, so it is metadata-sized and never competes with the
+   name above it. */
+.nameplate {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+}
+
+.nameplate-title {
+  display: inline-flex;
+  align-items: center;
+  height: 18px;
+  padding: 0 6px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+  color: var(--text-secondary);
+  font-size: var(--text-caption);
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.nameplate-title.rank-king {
+  border-color: #f5c518;
+  background: color-mix(in srgb, #f5c518 16%, var(--surface-2));
+  color: #ffe9a8;
+}
+.nameplate-title.rank-queen {
+  border-color: #ec4899;
+  background: color-mix(in srgb, #ec4899 16%, var(--surface-2));
+  color: #ffc4e0;
+}
+.nameplate-title.rank-first_family {
+  border-color: #a855f7;
+  background: color-mix(in srgb, #a855f7 16%, var(--surface-2));
+  color: #ddc9ff;
+}
+
+/* A worn frame states its number: "No. 7 of 100" is a receipt, "No. 7" is a
+   count. */
+.nameplate-wear {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 18px;
+  padding: 0 6px 0 4px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--text-muted);
+  font-size: var(--text-caption);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  cursor: pointer;
+  position: relative;
+}
+
+/* The chip is 18px tall so it sits quietly on a meta line; the tappable area is
+   grown to 44px with an overlay, which costs the row no height. */
+.nameplate-wear::after {
+  content: "";
+  position: absolute;
+  left: -2px;
+  right: -2px;
+  top: 50%;
+  height: 44px;
+  transform: translateY(-50%);
+}
+
+.nameplate-wear:hover { border-color: var(--border-strong); color: var(--text-secondary); }
+
+.nameplate-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 999px;
+  border: 2px solid currentColor;
+  flex: none;
+}
+.nameplate-dot.style-ember { color: #ff7a45; }
+.nameplate-dot.style-tide { color: #38bdf8; }
+.nameplate-dot.style-gold { color: #f5c518; }
+.nameplate-dot.style-crown { color: #a855f7; }
+
 .cosmetic-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: var(--space-3); }
 .cosmetic-card {
   display: flex;

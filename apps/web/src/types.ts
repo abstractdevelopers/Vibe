@@ -37,6 +37,13 @@ export interface PollActivity {
   viewerOptionId: string | null;
 }
 
+/** The public half of a standing: a title and a worn frame, nothing private. */
+export interface PublicNameplate {
+  title: string | null;
+  rank: string | null;
+  frame: { id: string; label: string; style: string; serial: number | null; editionSize: number | null } | null;
+}
+
 export interface FeedItem {
   id: string;
   type: string;
@@ -47,6 +54,7 @@ export interface FeedItem {
   isSponsored: boolean;
   createdAt: string;
   author: PublicUser;
+  nameplate?: PublicNameplate | null;
   reactionCount: number;
   commentCount: number;
   viewerReacted: boolean;
@@ -103,6 +111,7 @@ export interface Comment {
   deleted: boolean;
   isMine: boolean;
   author: PublicUser;
+  nameplate?: PublicNameplate | null;
   replies?: Comment[];
 }
 
