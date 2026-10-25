@@ -57,6 +57,10 @@
   /* A softer companion to the accent. Themes overwrite both. */
   --accent-soft: var(--coral-soft);
   --interactive: var(--violet);
+  /* A filled surface that carries white text. #7968f5 gives white only 4.11:1;
+     this is the same hue darkened to 6.18:1, so a selected chip or a violet
+     button stays in the family and becomes readable. Tints keep --interactive. */
+  --interactive-ink: #5b46e0;
   --link: var(--blue);
   /* The focus ring. A token so a themed surface cannot end up with an invisible
      focus outline: it tracks the accent rather than a fixed colour. */

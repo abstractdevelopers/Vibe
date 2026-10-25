@@ -214,10 +214,16 @@ h4 {
    Layout
    ============================================================ */
 
+/* Bottom clearance for the fixed tab bar. The bar is 69px on a phone and grows
+   with the safe-area inset; a hardcoded 112px clipped the last control on the
+   Wallet screen at 320px, so the clearance is a token rather than three magic
+   numbers that drift apart. */
+:root { --shell-clearance: calc(69px + env(safe-area-inset-bottom, 0px) + var(--space-6)); }
+
 .app-shell {
   max-width: 620px;
   margin: 0 auto;
-  padding: var(--space-4) var(--space-5) 132px;
+  padding: var(--space-4) var(--space-5) var(--shell-clearance);
 }
 
 .stack > * + * {
@@ -663,7 +669,7 @@ h4 {
 
 .btn.violet {
   color: #fff;
-  background: var(--interactive);
+  background: var(--interactive-ink);
   border-color: transparent;
   box-shadow: var(--shadow-violet);
 }
@@ -964,7 +970,9 @@ select {
   padding: 2px 7px;
   border-radius: 999px;
   background: var(--surface-3);
-  color: var(--text-muted);
+  /* --text-muted is 4.45:1 on surface-3 — under the 4.5 floor for 10px bold.
+     A status label has to be readable, so it uses the secondary ink (8.8:1). */
+  color: var(--text-secondary);
 }
 
 .live-badge.on {
@@ -1171,7 +1179,7 @@ select {
 
 .pill[aria-pressed="true"] {
   color: #fff;
-  background: var(--interactive);
+  background: var(--interactive-ink);
   border-color: transparent;
   box-shadow: var(--shadow-violet);
 }
@@ -2516,7 +2524,7 @@ select {
   }
 
   .app-shell {
-    padding: var(--space-3) var(--space-4) 120px;
+    padding: var(--space-3) var(--space-4) var(--shell-clearance);
   }
 
   .topbar {
@@ -2531,7 +2539,7 @@ select {
   }
 
   .app-shell {
-    padding: var(--space-3) var(--space-3) 112px;
+    padding: var(--space-3) var(--space-3) var(--shell-clearance);
   }
 
   .topbar {
@@ -2670,7 +2678,11 @@ select {
 }
 .studio-title { font-weight: 700; letter-spacing: var(--tracking-display); }
 
-.live-badge {
+/* The room's own header badge. Scoped to the studio: the discovery rail uses
+   the same class for "LIVE"/"SOON", and an unscoped red rule here was painting
+   a scheduled room's "SOON" label white-on-red, overriding the muted chip
+   above and leaving it at 2.65:1. */
+.studio .live-badge {
   display: inline-flex;
   align-items: center;
   gap: 6px;
