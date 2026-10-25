@@ -465,6 +465,11 @@ export function GameCover({
       width={size}
       height={size}
       viewBox="0 0 96 96"
+      /* A poster crops the square tile to a wide frame by narrowing the viewBox
+         to the middle band, so the drawing fills a 16:10 panel without a CSS
+         transform. Scaling the element instead enlarged its layout box past the
+         container and every cover reported as page overflow. */
+      preserveAspectRatio={className?.includes("is-fill") ? "xMidYMid slice" : undefined}
       fill="none"
       className={className}
       role={name ? "img" : undefined}

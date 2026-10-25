@@ -247,71 +247,181 @@
 
 /* ---- The featured band ------------------------------------------------- */
 
-.games-hero {
+/* --------------------------------------------------------------------------
+   Feature banner — a cover, not a colour wash.
+
+   The old band was a gradient with a small icon and grew to 59% of a 320px
+   screen. This is capped, cover-led, and always leaves the shelf visible:
+   the art fills the frame, the copy sits on a scrim, and the blurb lives
+   below the art rather than over it.
+   -------------------------------------------------------------------------- */
+
+.feature-banner {
+  display: flex;
+  flex-direction: column;
+  border-radius: var(--radius-card);
+  overflow: hidden;
+  background: var(--surface-1);
+  border: 1px solid var(--border);
+  margin-bottom: var(--space-4);
+}
+
+.feature-art {
   position: relative;
-  display: grid;
-  grid-template-columns: 1fr auto;
-  align-items: center;
-  gap: var(--space-5);
-  padding: var(--space-6) var(--space-5);
-  margin: 0 0 var(--space-1);
-  border-radius: var(--radius-lg);
-  border: 1px solid color-mix(in srgb, var(--accent) 32%, var(--border));
+  display: block;
+  width: 100%;
+  /* 26vh on a 640px phone gave a 166px sliver; the art is the point, so the
+     floor is taller than the vh-based term at small heights. */
+  height: clamp(180px, 30vh, 240px);
+  padding: 0;
+  border: 0;
+  background: var(--surface-0);
+  cursor: pointer;
   overflow: hidden;
   isolation: isolate;
-  background: linear-gradient(160deg, color-mix(in srgb, var(--surface-2) 94%, transparent), var(--surface-0) 82%);
 }
-.games-hero-glow {
+
+/* The cover is drawn as tile art, so it is scaled to fill and cropped like a
+   key-art panel instead of sitting as a floating icon. */
+.feature-cover,
+.feature-art svg {
   position: absolute;
   inset: 0;
-  z-index: -1;
-  pointer-events: none;
+  width: 100%;
+  height: 100%;
+  opacity: 0.95;
+  transition: transform 600ms var(--ease-out);
+}
+
+.feature-art:hover .feature-cover,
+.feature-art:hover svg { filter: brightness(1.08); }
+
+.feature-scrim {
+  position: absolute;
+  inset: 0;
   background:
-    radial-gradient(105% 130% at 90% -25%, color-mix(in srgb, var(--accent) 40%, transparent), transparent 58%),
-    radial-gradient(80% 100% at -5% 120%, color-mix(in srgb, var(--accent) 16%, transparent), transparent 60%);
+    linear-gradient(to top, rgba(8, 9, 14, 0.92) 0%, rgba(8, 9, 14, 0.55) 38%, transparent 72%),
+    linear-gradient(to bottom, rgba(8, 9, 14, 0.45) 0%, transparent 30%);
+  pointer-events: none;
 }
-.games-hero-copy { display: flex; flex-direction: column; align-items: flex-start; gap: var(--space-3); min-width: 0; }
-.games-hero-eyebrow {
-  font-size: var(--text-meta);
+
+.feature-tags {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  display: flex;
+  gap: 6px;
+  z-index: 2;
+}
+
+.feature-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 24px;
+  padding: 0 9px;
+  border-radius: var(--radius-pill);
+  background: rgba(8, 9, 14, 0.62);
+  border: 1px solid var(--border);
+  color: var(--text-secondary);
+  font-size: var(--text-caption);
   font-weight: 800;
-  letter-spacing: var(--tracking-wide);
+  letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: var(--accent);
+  backdrop-filter: blur(8px);
 }
-.games-hero-title {
-  margin: 0;
+
+.feature-tag.is-live {
+  background: color-mix(in srgb, var(--danger) 82%, transparent);
+  border-color: transparent;
+  color: #fff;
+  text-transform: none;
+  letter-spacing: 0.02em;
+}
+
+.feature-copy {
+  position: absolute;
+  left: 14px;
+  right: 64px;
+  bottom: 12px;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  text-align: left;
+}
+
+.feature-world {
+  font-size: var(--text-meta);
+  font-weight: 700;
+  color: var(--text-secondary);
+  letter-spacing: 0.01em;
+}
+
+/* Display type on an image: it needs weight and a shadow, not a bigger size. */
+.feature-name {
   font-family: var(--font-display);
-  font-size: clamp(30px, 8vw, 42px);
+  font-size: clamp(26px, 7vw, 34px);
   font-weight: 800;
   letter-spacing: var(--tracking-display);
   line-height: var(--leading-tight);
+  color: #fff;
+  text-shadow: 0 2px 18px rgba(0, 0, 0, 0.65);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
-.games-hero-blurb { margin: 0; color: var(--text-secondary); max-width: 40ch; line-height: var(--leading-body); }
-.games-hero-meta { display: flex; flex-wrap: wrap; gap: var(--space-2); }
-/* The hub's size, stated plainly: a shelf that says how full it is. */
-.games-hero-stats {
+
+.feature-play {
+  position: absolute;
+  right: 12px;
+  bottom: 12px;
+  z-index: 2;
+  width: 46px;
+  height: 46px;
+  border-radius: 999px;
+  display: grid;
+  place-items: center;
+  background: var(--accent);
+  color: var(--accent-ink);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+}
+
+.feature-foot {
   display: flex;
   align-items: center;
   gap: var(--space-3);
-  font-size: var(--text-meta);
-  color: var(--text-muted);
-  font-variant-numeric: tabular-nums;
+  padding: var(--space-3) var(--space-4);
 }
-.games-hero-stats b { color: var(--text); font-size: var(--text-body); font-weight: 800; }
-.games-hero-stats-sep { width: 1px; height: 14px; background: var(--border-strong); }
-.games-hero-cta { margin-top: var(--space-2); }
-.games-hero-art { display: grid; place-items: center; filter: drop-shadow(0 28px 46px rgba(0, 0, 0, 0.62)); }
-.games-hero-art svg { animation: games-hero-breathe 6s var(--ease-out) infinite; }
-@keyframes games-hero-breathe {
-  0%, 100% { transform: translateY(-5px) scale(1); }
-  50% { transform: translateY(5px) scale(1.015); }
+
+.feature-blurb {
+  flex: 1 1 auto;
+  min-width: 0;
+  margin: 0;
+  font-size: var(--text-supporting);
+  color: var(--text-secondary);
+  line-height: 1.4;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
 }
-@media (max-width: 560px) {
-  .games-hero { gap: var(--space-3); padding: var(--space-6) var(--space-5); }
-  .games-hero-art svg { width: 108px; height: 108px; }
+
+.feature-actions {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
 }
-@media (prefers-reduced-motion: reduce) {
-  .games-hero-art svg { animation: none; }
+
+.feature-cta { white-space: nowrap; }
+
+/* On a phone the blurb is the first thing to go: the art and the button carry
+   the decision, and the shelf should start sooner. */
+@media (max-width: 480px) {
+  .feature-blurb { display: none; }
+  .feature-foot { padding: var(--space-2) var(--space-3); }
+  .feature-actions { margin-left: auto; }
 }
 
 /* ---- Search ------------------------------------------------------------ */
@@ -502,6 +612,9 @@
   width: 100%;
   min-height: 116px;
   margin-bottom: var(--space-2);
+  overflow: hidden;
+  /* The cover is cropped to fill this panel, so the panel's own gradient is the
+     backdrop it sits on rather than a frame around a floating icon. */
   background:
     radial-gradient(90% 120% at 50% 0%, color-mix(in srgb, var(--world, var(--accent)) 30%, transparent), transparent 68%),
     linear-gradient(160deg, var(--world-from, var(--surface-2)), var(--world-to, var(--surface-0)) 88%);
@@ -514,13 +627,18 @@
   pointer-events: none;
 }
 .game-tile-cover {
-  position: relative;
-  z-index: 1;
-  border-radius: 18px;
-  box-shadow: 0 16px 30px -16px rgba(0, 0, 0, 0.85);
-  transition: transform var(--motion-base) var(--ease-out);
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  /* The cover is a 96-unit tile drawing. Floating it at 72px in a 294x116
+     panel left a wide empty band, so it is cropped to fill the art the way a
+     poster fills a frame. The crop is `preserveAspectRatio: slice` set by the
+     `is-fill` class in GameCover, so the element's box stays exactly the
+     panel's size and nothing reports as page overflow. */
+  border-radius: 0;
+  box-shadow: none;
 }
-.game-tile:hover .game-tile-cover { transform: scale(1.06) translateY(-2px); }
 .game-tile-soon {
   position: absolute;
   bottom: 8px;
@@ -600,7 +718,7 @@
 .games-flow > * + *,
 .games-flow > section + section { margin-top: var(--space-4); }
 .games-flow > .shelf + .shelf { margin-top: var(--space-8); }
-.games-flow > .games-hero + * { margin-top: var(--space-5); }
+.games-flow > .feature-banner + * { margin-top: var(--space-5); }
 .chip-quiet {
   background: color-mix(in srgb, var(--surface-3) 80%, transparent);
   color: var(--text-muted);
@@ -610,16 +728,23 @@
 .link-button {
   background: none;
   border: none;
-  padding: 0;
+  /* A text link is still a tap target. 36x18 was below the 44px minimum on
+     every width, so "See all" was hard to hit on a phone. */
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  min-width: 44px;
+  padding: 0 var(--space-1);
+  margin: calc((44px - 1.4em) / -2) 0;
   color: var(--accent);
   font-weight: 700;
   font-size: var(--text-meta);
   cursor: pointer;
 }
 .link-button:hover { text-decoration: underline; }
+.link-button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 6px; }
 
 @media (prefers-reduced-motion: reduce) {
-  .games-hero-art svg,
   .live-dot.playing { animation: none; }
   .table-card:hover,
   .world-chip:hover,

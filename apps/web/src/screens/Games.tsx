@@ -193,33 +193,50 @@ export function GamesScreen({ onBack, viewerId, onOpenBattles }: { onBack?: () =
 
       {error && <div className="notice danger" role="alert">{error}</div>}
 
-      {/* The featured band. One game at a time, given the whole width, with the
-          room lit behind it — the arcade's window. */}
+      {/* The feature banner: a cover, not a gradient.
+          The previous band was a colour wash with a 108px icon in it, and on a
+          320px phone it took 59% of the screen before the first game. This is a
+          short, cover-led card: the art fills the frame, the copy sits on a
+          scrim at the foot, and the whole thing is capped so the shelf below is
+          still visible above the fold. */}
       {featured && (
-        <section className="games-hero" aria-label="Featured game">
-          <div className="games-hero-glow" aria-hidden="true" />
-          <div className="games-hero-copy">
-            <span className="games-hero-eyebrow">Now featuring</span>
-            <h2 className="games-hero-title">{featured.name}</h2>
-            <p className="games-hero-blurb">{featured.blurb}</p>
-            <div className="games-hero-meta">
-              <span className="chip"><UsersIcon width={12} height={12} /> {featured.minPlayers}–{featured.maxPlayers} players</span>
+        <section className="feature-banner" aria-label={`Featured: ${featured.name}`}>
+          <button className="feature-art" onClick={() => setPicked(featured)} aria-label={`Open ${featured.name}`}>
+            <GameCover
+              gameId={featured.id}
+              category={featured.category}
+              name=""
+              size={520}
+              className="feature-cover is-fill"
+            />
+            <span className="feature-scrim" aria-hidden="true" />
+            <span className="feature-tags">
+              <span className="feature-tag">Featured</span>
+              {sessions.length > 0 && (
+                <span className="feature-tag is-live"><span className="live-dot" /> {sessions.length} open</span>
+              )}
+            </span>
+            <span className="feature-copy">
+              <span className="feature-world">
+                {worldFor(featured.category).label} · {featured.minPlayers}–{featured.maxPlayers} players
+              </span>
+              <span className="feature-name">{featured.name}</span>
+            </span>
+            <span className="feature-play" aria-hidden="true"><PlayIcon width={20} height={20} /></span>
+          </button>
+          <div className="feature-foot">
+            <p className="feature-blurb">{featured.blurb}</p>
+            <div className="feature-actions">
               {featured.stakeEnabled && <span className="chip chip-gold">Stakes</span>}
-              <span className="chip">{worldFor(featured.category).label}</span>
+              <span className="chip chip-quiet">{playable.length} playable</span>
+              <button
+                className="btn primary feature-cta"
+                onClick={() => setPicked(featured)}
+                disabled={featured.availability !== "playable"}
+              >
+                {featured.availability === "playable" ? "Start a table" : "Coming soon"}
+              </button>
             </div>
-            {/* The shelf's own numbers: how much is actually playable, and how
-                many tables are open right now. A hub should state its size. */}
-            <div className="games-hero-stats">
-              <span><b>{playable.length}</b> playable</span>
-              <span className="games-hero-stats-sep" aria-hidden="true" />
-              <span><b>{sessions.length}</b> {sessions.length === 1 ? "table" : "tables"} open</span>
-            </div>
-            <button className="btn primary games-hero-cta" onClick={() => setPicked(featured)}>
-              <PlayIcon width={17} height={17} /> {featured.availability === "playable" ? "Start a table" : "Coming soon"}
-            </button>
-          </div>
-          <div className="games-hero-art" aria-hidden="true">
-            <GameCover gameId={featured.id} category={featured.category} name="" size={196} />
           </div>
         </section>
       )}
@@ -454,7 +471,7 @@ function GameGrid({
             aria-label={`${g.name}${g.availability === "planned" ? " (coming soon)" : ""}${live ? `, ${live} playing now` : ""}`}
           >
             <span className="game-tile-art">
-              <GameCover gameId={g.id} category={g.category} name={g.name} size={72} className="game-tile-cover" />
+              <GameCover gameId={g.id} category={g.category} name={g.name} size={72} className="game-tile-cover is-fill" />
               {live > 0 && (
                 <span className="game-tile-live"><span className="live-dot" aria-hidden="true" />{live}</span>
               )}
