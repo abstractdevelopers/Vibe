@@ -1578,7 +1578,11 @@ select {
   max-width: 620px;
   max-height: 90vh;
   overflow-y: auto;
-  padding: var(--space-3) var(--space-5) calc(var(--space-8) + env(safe-area-inset-bottom));
+  /* Clear the fixed tab bar. The sheet is above it in z-order, but the bar is
+     still painted over the sheet's bottom padding, so a 32px pad left the final
+     button sitting under it — reachable only by scrolling a sheet that already
+     looked finished. */
+  padding: var(--space-3) var(--space-5) calc(var(--space-8) + 69px + env(safe-area-inset-bottom));
   background: var(--surface-1);
   border: 1px solid var(--border);
   border-bottom: none;

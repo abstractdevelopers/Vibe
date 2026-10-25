@@ -28,6 +28,8 @@ import "../game-boards.css";
 interface Player {
   id: string; displayName: string; handle: string; avatarUrl: string | null;
   seat: number; status: string; stakedMinor: number;
+  /** A house seat: labelled so a person knows who they are playing. */
+  isBot?: boolean;
 }
 interface Session {
   id: string; gameId: string; gameName: string; category: string; status: string;
@@ -92,6 +94,22 @@ export function GameTableScreen({ sessionId, viewerId, onBack }: { sessionId: st
       setBusy(false);
     }
   }
+
+  // A table already filled to its minimum with the house is not waiting for
+  // anyone, so it should not sit in a lobby showing a start button. Declared
+  // before the loading return because hooks may not follow an early exit.
+  const houseTable = Boolean(session?.players.some((p) => p.isBot))
+    && (session?.players.length ?? 0) >= (session?.minPlayers ?? 2);
+  const houseLobby = Boolean(session)
+    && session!.hostId === viewerId
+    && session!.status === "lobby"
+    && houseTable;
+  useEffect(() => {
+    if (!houseLobby) return;
+    void act("/start");
+    // The status guard means this runs once: starting flips status to active.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [houseLobby]);
 
   if (!session) {
     return (
@@ -182,13 +200,14 @@ export function GameTableScreen({ sessionId, viewerId, onBack }: { sessionId: st
           {session.players.map((p) => {
             const turn = turnUserId === p.id && session.status === "active";
             return (
-              <div key={p.id} className={`seat${turn ? " is-turn" : ""}${p.id === viewerId ? " is-you" : ""}`}>
+              <div key={p.id} className={`seat${turn ? " is-turn" : ""}${p.id === viewerId ? " is-you" : ""}${p.isBot ? " is-bot" : ""}`}>
                 <span className="seat-face" aria-hidden>
                   <Avatar name={p.displayName} url={p.avatarUrl} seed={p.id} size="sm" />
                 </span>
                 <span className="seat-name truncate">{p.id === viewerId ? "You" : p.displayName}</span>
                 <span className="seat-meta">
                   {turn ? "Turn" : `#${p.seat + 1}`}
+                  {p.isBot && <em> · House</em>}
                   {p.stakedMinor > 0 && <em> · {formatMoney(p.stakedMinor, session.currency)}</em>}
                 </span>
               </div>

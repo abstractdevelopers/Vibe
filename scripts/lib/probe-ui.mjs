@@ -167,11 +167,21 @@ export function probeUi() {
     if (cs.position !== "fixed" && cs.position !== "sticky") continue;
     const r = el.getBoundingClientRect();
     if (r.height < 20) continue;
-    // Look for content behind the element's band.
-    const hit = document.elementsFromPoint(Math.round(r.left + r.width / 2), Math.round(r.top + Math.min(r.height / 2, 24)))
-      .filter((n) => !el.contains(n) && n !== el && n !== document.body && n !== document.documentElement);
-    const interactive = hit.find((n) => n.matches("button, a[href], input, select, textarea, [role=button]"));
-    if (interactive && !el.contains(interactive)) {
+    // Look at the whole stack under the element's band, not just what is on
+    // top. An element painted ABOVE the bar (a sheet at z-60 over a nav at
+    // z-40) is not covered by it, so only entries that come after the bar in
+    // the stack — i.e. are painted underneath it — count.
+    const stack = document.elementsFromPoint(
+      Math.round(r.left + r.width / 2),
+      Math.round(r.top + Math.min(r.height / 2, 24)),
+    );
+    const ownIndex = stack.indexOf(el);
+    const beneath = ownIndex >= 0 ? stack.slice(ownIndex + 1) : stack;
+    const interactive = beneath.find(
+      (n) => !el.contains(n) && n !== document.body && n !== document.documentElement
+        && n.matches("button, a[href], input, select, textarea, [role=button]"),
+    );
+    if (interactive) {
       findings.push({ kind: "covered-control", el: desc(el), detail: `covers ${desc(interactive)}` });
     }
   }

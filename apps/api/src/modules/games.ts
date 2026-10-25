@@ -8,7 +8,7 @@ import { requireCircleMember } from "./access.js";
 import { trackSafe } from "./analytics.js";
 import { notifyUsers } from "./notifications.js";
 import { walletBalance, lockWalletAccount, postGameStake, postGamePayout, postGameRefund } from "../money/ledger.js";
-import { getEngine, type EngineContext } from "../games/engine.js";
+import { getEngine, type EngineContext, type EngineResult, type GameEngine } from "../games/engine.js";
 import { registerAllEngines } from "../games/registry.js";
 import { GAME_RAKE_BPS as SHARED_GAME_RAKE_BPS } from "@vibe/shared";
 
@@ -39,6 +39,12 @@ const createSessionSchema = z.object({
   scope: z.enum(["circle", "followers", "friends", "strangers", "invite"]).default("invite"),
   circleId: z.string().uuid().optional(),
   stakeMinor: z.number().int().nonnegative().max(100_000_000).default(0),
+  /**
+   * Fill the empty seats with house players, so a table can start without
+   * waiting for strangers. Bots never stake; see migration 0036.
+   */
+  bots: z.number().int().min(0).max(7).default(0),
+  botLevel: z.enum(["easy", "steady", "sharp"]).default("steady"),
 });
 
 // A move is opaque to the route: the engine validates it. We only bound its
@@ -104,6 +110,94 @@ async function requireGameAccess(ctx: AppContext, session: SessionRow, userId: s
   }
 }
 
+/**
+ * Let the house take its turns.
+ *
+ * Called inside the transaction that just applied a human move, and again right
+ * after a game starts (the host may not be first). It keeps applying legal bot
+ * moves until the turn belongs to a person or the game ends, so a player never
+ * taps "your move" and stares at a table waiting for the house.
+ *
+ * Bounded on purpose: a buggy engine that returns the same state forever would
+ * otherwise hang the request. The cap is generous against any real board and
+ * tight enough to fail fast.
+ */
+async function playBotTurns(
+  tx: import("pg").PoolClient,
+  session: SessionRow,
+  engine: GameEngine<any>,
+  state: unknown,
+): Promise<{ state: unknown; finished: boolean; winnerId: string | null; moves: Array<{ userId: string; move: unknown }> }> {
+  const MAX_BOT_MOVES = 200;
+  let current = state;
+  let seeds = await queryMany<{ user_id: string; bot_level: string | null; seat: number }>(
+    tx as unknown as AppContext["pool"],
+    "SELECT user_id, bot_level, seat FROM game_players WHERE session_id = $1 AND status != 'left' ORDER BY seat",
+    [session.id],
+  );
+  const ctxForMove = engineContext(session, seeds.map((s) => s.user_id));
+  const bots = new Set(seeds.filter((s) => s.bot_level).map((s) => s.user_id));
+  const applied: Array<{ userId: string; move: unknown }> = [];
+
+  for (let guard = 0; guard < MAX_BOT_MOVES; guard += 1) {
+    const turn = engine.turnUserId(current, ctxForMove);
+    if (!turn || !bots.has(turn)) break;
+    if (engine.finished(current)) break;
+    let move: unknown;
+    try {
+      move = engine.autoMove(current, turn, ctxForMove);
+    } catch {
+      break;
+    }
+    if (move === null || move === undefined) break;
+    let outcome: EngineResult<unknown>;
+    try {
+      outcome = engine.apply(current, turn, move, ctxForMove);
+    } catch {
+      // An engine that cannot play its own autoMove is a bug, but it must not
+      // wedge a live game: stop the house and leave the table to the people.
+      break;
+    }
+    current = outcome.state;
+    applied.push({ userId: turn, move });
+    if (outcome.finished) {
+      return { state: current, finished: true, winnerId: outcome.winnerId, moves: applied };
+    }
+  }
+
+  // Re-read the seats: a bot cannot join or leave, but a person whose turn it
+  // became may have left while the house was thinking.
+  seeds = await queryMany<{ user_id: string; bot_level: string | null; seat: number }>(
+    tx as unknown as AppContext["pool"],
+    "SELECT user_id, bot_level, seat FROM game_players WHERE session_id = $1 AND status != 'left' ORDER BY seat",
+    [session.id],
+  );
+  return { state: current, finished: engine.finished(current), winnerId: engine.winnerId(current), moves: applied };
+}
+
+/**
+ * Make sure the house has accounts to sit down with.
+ *
+ * The accounts are created here rather than in the migration on purpose: any
+ * reset that truncates `users` would leave migration-created bots behind with
+ * nothing to recreate them, and bot tables would silently seat nobody. This
+ * runs inside the creating transaction and is idempotent, so the cost is seven
+ * `ON CONFLICT DO NOTHING` inserts the first time and nothing after.
+ *
+ * Each bot needs its own row because the seat key is (session_id, user_id).
+ */
+async function ensureBotUsers(tx: import("pg").PoolClient, level: "easy" | "steady" | "sharp"): Promise<void> {
+  const label = level === "easy" ? "Rookie" : level === "sharp" ? "Maestro" : "Steady";
+  for (let i = 1; i <= 7; i += 1) {
+    await tx.query(
+      `INSERT INTO users (email, handle, display_name, password_hash, host_kind, discoverable, is_admin)
+       VALUES ($1, $2, $3, 'x', 'automated', false, false)
+       ON CONFLICT (email) DO NOTHING`,
+      [`bot-${level}-${i}@bots.vibe.invalid`, `house_${level}_${i}`, `${label} ${i}`],
+    );
+  }
+}
+
 function engineContext(session: SessionRow, players: string[]): EngineContext {
   return { gameId: session.game_id, players, seed: 0, stakeMinor: Number(session.stake_minor) };
 }
@@ -111,11 +205,11 @@ function engineContext(session: SessionRow, players: string[]): EngineContext {
 /** The public shape of a session, with the viewer's own slice of the state. */
 async function sessionView(ctx: AppContext, session: SessionRow, viewerId: string) {
   const players = await queryMany<{
-    user_id: string; seat: number; status: string; staked_minor: string;
+    user_id: string; seat: number; status: string; staked_minor: string; bot_level: string | null;
     handle: string; display_name: string; avatar_url: string | null;
   }>(
     ctx.pool,
-    `SELECT p.user_id, p.seat, p.status, p.staked_minor, u.handle, u.display_name, u.avatar_url
+    `SELECT p.user_id, p.seat, p.status, p.staked_minor, p.bot_level, u.handle, u.display_name, u.avatar_url
        FROM game_players p JOIN users u ON u.id = p.user_id
       WHERE p.session_id = $1 ORDER BY p.seat`,
     [session.id],
@@ -151,11 +245,15 @@ async function sessionView(ctx: AppContext, session: SessionRow, viewerId: strin
       seat: p.seat,
       status: p.status,
       stakedMinor: Number(p.staked_minor),
+      /** True for a house seat, so the table can label it and not wait on it. */
+      isBot: Boolean((p as { bot_level?: string | null }).bot_level),
     })),
     // Only a player sees the engine state, and the engine decides how much.
     state: session.state && engine && isPlayer
       ? engine.view(session.state, viewerId, engineContext(session, seated))
       : null,
+    /** Whose turn it is, so the table can say "your move" or "the house is". */
+    turnUserId: session.state && engine ? engine.turnUserId(session.state, engineContext(session, seated)) : null,
   };
 }
 
@@ -279,6 +377,11 @@ export function gameRoutes(ctx: AppContext) {
       if (input.stakeMinor > 0 && !game.stake_enabled) {
         throw ApiError.badRequest("This game cannot be played for stakes");
       }
+      // A house seat has no wallet, so a staked bot table would take the
+      // person's money and have nothing to pay back to on a bot win.
+      if (input.stakeMinor > 0 && input.bots > 0) {
+        throw ApiError.badRequest("A table against the house cannot be played for stakes");
+      }
       if (input.circleId) await requireCircleMember(ctx.pool, input.circleId, user.id);
       const id = newId();
       await withTransaction(ctx.pool, async (tx) => {
@@ -305,6 +408,35 @@ export function gameRoutes(ctx: AppContext) {
             amountMinor: input.stakeMinor,
             currency: "NGN",
           });
+        }
+        // House seats. They sit after the host in turn order, hold no stake,
+        // and are capped to the game's maximum so a table is never over-filled.
+        if (input.bots > 0) {
+          const max = await queryOne<{ max_players: number }>(
+            tx as unknown as AppContext["pool"],
+            "SELECT max_players FROM game_catalog WHERE id = $1",
+            [input.gameId],
+          );
+          const room = Math.max(0, Math.min(input.bots, (max?.max_players ?? 2) - 1));
+          await ensureBotUsers(tx, input.botLevel);
+          // Each bot is its own account, because the seat key is
+          // (session_id, user_id). They are picked deterministically so the
+          // same table seed produces the same opponents.
+          const bots = await queryMany<{ id: string }>(
+            tx as unknown as AppContext["pool"],
+            `SELECT id FROM users
+              WHERE host_kind = 'automated' AND handle LIKE $1
+              ORDER BY handle LIMIT $2`,
+            [`house_${input.botLevel}_%`, room],
+          );
+          for (let i = 0; i < bots.length; i += 1) {
+            await tx.query(
+              `INSERT INTO game_players (session_id, user_id, seat, status, staked_minor, bot_level)
+               VALUES ($1,$2,$3,'ready',0,$4)
+               ON CONFLICT (session_id, user_id) DO NOTHING`,
+              [id, bots[i]!.id, i + 1, input.botLevel],
+            );
+          }
         }
       });
       trackSafe(ctx.pool, { name: "game_created", userId: user.id, properties: { entityType: "game_session", entityId: id, gameId: input.gameId } });
@@ -398,10 +530,15 @@ export function gameRoutes(ctx: AppContext) {
       const order = players.map((p) => p.user_id);
       const seed = Math.floor(Date.now() % 2147483647) + order.length;
       const state = engine.create({ gameId: session.game_id, players: order, seed, stakeMinor: Number(session.stake_minor) });
-      await ctx.pool.query(
-        "UPDATE game_sessions SET status = 'active', state = $2, updated_at = now() WHERE id = $1",
-        [id, JSON.stringify(state)],
-      );
+      // The house may open: Whot deals to the host first, but a game whose first
+      // turn belongs to a bot would otherwise sit waiting for nobody.
+      await withTransaction(ctx.pool, async (tx) => {
+        const opening = await playBotTurns(tx, session, engine, state);
+        await tx.query(
+          "UPDATE game_sessions SET status = 'active', state = $2, winner_id = $3, updated_at = now() WHERE id = $1",
+          [id, JSON.stringify(opening.state), opening.finished ? opening.winnerId : null],
+        );
+      });
       trackSafe(ctx.pool, { name: "game_started", userId: user.id, properties: { entityType: "game_session", entityId: id } });
       return { session: await sessionView(ctx, (await loadSession(ctx.pool, id))!, user.id) };
     });
@@ -453,18 +590,39 @@ export function gameRoutes(ctx: AppContext) {
           "INSERT INTO game_moves (session_id, seq, user_id, move) VALUES ($1,$2,$3,$4)",
           [id, seq, user.id, JSON.stringify(input.move)],
         );
-        if (outcome.finished) {
+        // The house answers in the same transaction, so the state the player
+        // reads back has already had every bot reply applied.
+        let finalState = outcome.state;
+        let finished = outcome.finished;
+        let winnerId = outcome.winnerId;
+        if (!finished) {
+          const house = await playBotTurns(tx, session, engine, finalState);
+          if (house.moves.length > 0) {
+            let nextSeq = seq + 1;
+            for (const played of house.moves) {
+              await tx.query(
+                "INSERT INTO game_moves (session_id, seq, user_id, move) VALUES ($1,$2,$3,$4)",
+                [id, nextSeq, played.userId, JSON.stringify(played.move)],
+              );
+              nextSeq += 1;
+            }
+            finalState = house.state;
+            finished = house.finished;
+            winnerId = house.winnerId;
+          }
+        }
+        if (finished) {
           // A draw has no winner, so the stakes go back rather than sitting in
           // escrow forever.
-          await settleGame(tx, session, { winnerId: outcome.winnerId, refund: !outcome.winnerId });
+          await settleGame(tx, session, { winnerId, refund: !winnerId });
           await tx.query(
             "UPDATE game_sessions SET status = 'finished', state = $2, winner_id = $3, ended_at = now(), updated_at = now() WHERE id = $1",
-            [id, JSON.stringify(outcome.state), outcome.winnerId],
+            [id, JSON.stringify(finalState), winnerId],
           );
         } else {
-          await tx.query("UPDATE game_sessions SET state = $2, updated_at = now() WHERE id = $1", [id, JSON.stringify(outcome.state)]);
+          await tx.query("UPDATE game_sessions SET state = $2, updated_at = now() WHERE id = $1", [id, JSON.stringify(finalState)]);
         }
-        return { finished: outcome.finished, winnerId: outcome.winnerId, draw: outcome.draw ?? false };
+        return { finished, winnerId, draw: outcome.draw ?? false };
       });
       ctx.hub.publishToRoom(id, { type: "game.updated", entityId: id, payload: { finished: result.finished } });
       trackSafe(ctx.pool, { name: "game_move", userId: user.id, properties: { entityType: "game_session", entityId: id } });

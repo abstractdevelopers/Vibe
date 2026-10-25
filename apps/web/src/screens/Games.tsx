@@ -82,6 +82,14 @@ interface ExternalGame {
 
 const STAKES = [0, 5_000, 10_000, 20_000, 50_000];
 
+/** How many house seats a new table can fill (stays under the 8-seat max). */
+const BOT_SEATS = [1, 3];
+const BOT_LEVELS: Array<{ id: "easy" | "steady" | "sharp"; label: string }> = [
+  { id: "easy", label: "Easy" },
+  { id: "steady", label: "Steady" },
+  { id: "sharp", label: "Sharp" },
+];
+
 export function GamesScreen({ onBack, viewerId, onOpenBattles }: { onBack?: () => void; viewerId?: string; onOpenBattles?: () => void }) {
   const nav = useNav();
   const [games, setGames] = useState<Game[] | null>(null);
@@ -499,17 +507,24 @@ function CreateGameSheet({
   onCreated: (sessionId: string) => void;
 }) {
   const [stake, setStake] = useState(0);
+  /** 0 = wait for people, otherwise fill the empty seats with the house. */
+  const [bots, setBots] = useState(0);
+  const [botLevel, setBotLevel] = useState<"easy" | "steady" | "sharp">("steady");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const playable = game.availability === "playable";
+  // Stakes and the house cannot mix: a bot has no wallet to lose or win with,
+  // and the API refuses it. The sheet stops offering the impossible pairing
+  // instead of letting the request fail.
+  const canStake = game.stakeEnabled && bots === 0;
 
   async function create() {
     setBusy(true);
     setError(null);
     try {
       const res = await api<{ session: Session }>("/v1/games/sessions", {
-        body: { gameId: game.id, stakeMinor: stake },
+        body: { gameId: game.id, stakeMinor: canStake ? stake : 0, bots, botLevel },
         idempotencyKey: idempotencyKey("game"),
       });
       onCreated(res.session.id);
@@ -555,7 +570,45 @@ function CreateGameSheet({
           </>
         ) : (
           <>
-            {game.stakeEnabled && (
+            {/* Who you are playing. A table nobody joins is a dead end, so the
+                house is offered up front rather than as a fallback nobody
+                finds. Choosing it replaces the stake controls, because a bot
+                table cannot be staked. */}
+            <div className="stack">
+              <span className="meta">Opponent</span>
+              <div className="pill-row">
+                <button className="pill" aria-pressed={bots === 0} onClick={() => setBots(0)}>
+                  Wait for people
+                </button>
+                {BOT_SEATS.map((n) => (
+                  <button
+                    key={n}
+                    className="pill"
+                    aria-pressed={bots === n}
+                    onClick={() => { setBots(n); setStake(0); }}
+                  >
+                    {n === 1 ? "Play the house" : `House × ${n}`}
+                  </button>
+                ))}
+              </div>
+              {bots > 0 && (
+                <>
+                  <div className="pill-row">
+                    {BOT_LEVELS.map((l) => (
+                      <button key={l.id} className="pill" aria-pressed={botLevel === l.id} onClick={() => setBotLevel(l.id)}>
+                        {l.label}
+                      </button>
+                    ))}
+                  </div>
+                  <p className="meta">
+                    {botLevel === "easy" ? "Plays fast, misses things." : botLevel === "sharp" ? "Takes its time and rarely slips." : "A fair opponent."}
+                    {" "}No stake: the house has no wallet.
+                  </p>
+                </>
+              )}
+            </div>
+
+            {canStake && (
               <div className="stack">
                 <span className="meta">Stake per player (Vibe Yens)</span>
                 <div className="pill-row">
