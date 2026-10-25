@@ -93,6 +93,7 @@ export function useRoomChannel(
   const viewerRef = useRef(viewerId);
   viewerRef.current = viewerId;
   const socketRef = useRef<WebSocket | null>(null);
+  const outbox = useRef<string[]>([]);
   const [status, setStatus] = useState<"connecting" | "open" | "closed">("connecting");
 
   useEffect(() => {
@@ -115,6 +116,11 @@ export function useRoomChannel(
         retry = 0;
         setStatus("open");
         socket?.send(JSON.stringify({ type: "room.join", roomId }));
+        // Anything the room tried to signal before the socket was up. They are
+        // held in order, and the join above is already queued ahead of them.
+        const held = outbox.current;
+        outbox.current = [];
+        for (const frame of held) socket?.send(frame);
       };
 
       socket.onmessage = (event) => {
@@ -159,7 +165,19 @@ export function useRoomChannel(
 
   const send = useCallback((msg: Record<string, unknown>) => {
     const socket = socketRef.current;
-    if (socket && socket.readyState === WebSocket.OPEN) socket.send(JSON.stringify({ roomId, ...msg }));
+    const frame = JSON.stringify({ roomId, ...msg });
+    if (socket && socket.readyState === WebSocket.OPEN) {
+      socket.send(frame);
+      return;
+    }
+    // The room mounts before the socket finishes connecting, and the mesh
+    // offers as soon as the roster arrives. Dropping a frame here loses the
+    // offer and the pair never connects, so hold it briefly and send it when
+    // the socket opens. A closed socket is a different matter: the reconnect
+    // re-joins the room and the mesh effect re-runs, so those frames are dropped.
+    if (socket && socket.readyState === WebSocket.CONNECTING) {
+      outbox.current.push(frame);
+    }
   }, [roomId]);
 
   return { send, status };

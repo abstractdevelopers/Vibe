@@ -23,9 +23,18 @@ describe("peers to offer to", () => {
     expect(peersToOfferTo({ viewerId: "aaa", peerIds: ["aaa"], layout: "open", isHost: true })).toEqual([]);
   });
 
-  it("lets only the host offer in a broadcast room", () => {
-    expect(peersToOfferTo({ viewerId: "host", peerIds: ["l1", "l2"], layout: "broadcast", isHost: true })).toEqual(["l1", "l2"]);
-    // A listener answers, it does not offer.
-    expect(peersToOfferTo({ viewerId: "l1", peerIds: ["host"], layout: "broadcast", isHost: false })).toEqual([]);
+  it("lets a listener offer in a broadcast room, so it can hear the host", () => {
+    // Only the host publishes, so the host does not offer downward; if the
+    // listener did not offer either, the pair would never connect.
+    expect(peersToOfferTo({ viewerId: "host", peerIds: ["l1", "zzz"], layout: "broadcast", isHost: true })).toEqual([]);
+    expect(peersToOfferTo({ viewerId: "l1", peerIds: ["host"], layout: "broadcast", isHost: false })).toEqual(["host"]);
+    expect(peersToOfferTo({ viewerId: "zzz", peerIds: ["host"], layout: "broadcast", isHost: false })).toEqual(["host"]);
+  });
+
+  it("connects a listener to every stage speaker, so an audience member can hear", () => {
+    // An audience member is never on the stage themselves. They must still be
+    // handed every speaker to connect to — the connection is what carries the
+    // audio, and a listener publishes nothing.
+    expect(peersToOfferTo({ viewerId: "aaa", peerIds: ["bbb", "ccc"], layout: "stage", isHost: false })).toEqual(["bbb", "ccc"]);
   });
 });
