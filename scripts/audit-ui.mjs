@@ -16,6 +16,14 @@ import { probeUi } from "./lib/probe-ui.mjs";
 
 const BASE = process.argv[2] ?? "http://localhost:12001";
 const TOKEN = process.env.AUDIT_TOKEN ?? "";
+if (!TOKEN) {
+  console.error(
+    "AUDIT_TOKEN is empty. The audit walks signed-in screens; without a token it would\n" +
+      "measure the sign-in page and report it clean. Pass a real session token:\n" +
+      "  AUDIT_TOKEN=$(node scripts/get-audit-token.mjs) node scripts/audit-ui.mjs",
+  );
+  process.exit(2);
+}
 const OUT = "artifacts/ui-audit";
 const WIDTHS = [
   { name: "mobile", width: 390, height: 844 },
@@ -87,6 +95,27 @@ for (const vp of WIDTHS) {
     await sleep(1100);
   };
 
+  /**
+   * Fail loudly when the session did not take.
+   *
+   * Without this the audit walked the *signed-out* landing page, reported it
+   * clean, and said nothing — the most misleading result a visual audit can
+   * produce. A missing or expired token has to stop the run, not quieten it.
+   */
+  const assertSignedIn = async (label) => {
+    const state = await page.evaluate(() => ({
+      hasAuthForm: !!document.querySelector("#email"),
+      hasTabBar: !!document.querySelector(".bottom-nav"),
+      title: document.title,
+    }));
+    if (state.hasAuthForm || !state.hasTabBar) {
+      throw new Error(
+        `audit is not signed in at ${label} (auth form: ${state.hasAuthForm}, tab bar: ${state.hasTabBar}). ` +
+          "Refresh AUDIT_TOKEN from a valid session before trusting any result.",
+      );
+    }
+  };
+
   const shot = async (name) => {
     await page.screenshot({ path: `${dir}/${name}.png` }).catch(() => {});
     const result = await page.evaluate(probeUi).catch(() => null);
@@ -137,6 +166,7 @@ for (const vp of WIDTHS) {
 
   for (const [name, drive] of surfaces) {
     await home();
+    await assertSignedIn(vp.name + "/" + name);
     if (drive) { await drive().catch(() => {}); }
     await sleep(1500);
     await shot(name);

@@ -23,3 +23,7 @@ artifacts/visual-audit/deep/
 # at four widths; ~25 MB per run and fully regenerable, so they stay out.
 artifacts/screens/
 artifacts/ui-audit/
+artifacts/ui-audit-sub/
+artifacts/room-after/
+artifacts/design-audit/
+artifacts/review/
