@@ -38,7 +38,11 @@
   display: flex;
   flex-direction: column;
   height: calc(100dvh - var(--shell-top) - var(--nav-bottom) - var(--space-2));
-  min-height: 460px;
+  /* A floor keeps the room usable on a tablet, but it must not exceed the
+     viewport: at 460px on a 640px phone the studio was pushed taller than the
+     space it had, the dock spilled past the bottom, and the "Live on stage"
+     line collided with the crowd text underneath it. */
+  min-height: min(420px, calc(100dvh - var(--shell-top) - var(--nav-bottom)));
   padding: 0;
   isolation: isolate;
   color: var(--text);
@@ -440,7 +444,9 @@
   min-height: 0;
   overflow-y: auto;
   overscroll-behavior: contain;
-  padding: 0 var(--space-3) var(--space-2);
+  /* Room to scroll past the last line: without it the final block sits flush
+     against the dock and, on a short screen, reads as overlapping it. */
+  padding: 0 var(--space-3) var(--space-5);
   display: flex;
   flex-direction: column;
   gap: var(--space-3);
@@ -704,6 +710,11 @@
   font-size: var(--text-meta);
   color: var(--text-muted);
   text-align: center;
+  /* One line, always. As a free-flowing block this wrapped to 65px on a narrow
+     phone and pushed the dock past the bottom of the room. */
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .studio-unmute {
@@ -765,9 +776,15 @@
   .studio .studio-title { font-size: 17px; }
 }
 
+/* Short screens: the stage gives up height first.
+   At 640px tall the stage plus the dock left the facts area 14px, so its
+   content rendered outside its own scroll box and appeared to paint over the
+   dock. The stage is the thing that can shrink; the facts must keep a floor. */
 @media (max-height: 700px) {
-  .studio { --stage-h: 190px; }
+  .studio { --stage-h: 150px; }
 }
+
+.room-facts { min-height: 72px; }
 
 @media (prefers-reduced-motion: reduce) {
   .stage-person.is-speaking .ring { animation: none !important; }

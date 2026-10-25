@@ -11,6 +11,7 @@ import { creatorBalance, lockEarningsAccount, postPayout, postPayoutReversal, MI
 import { ProviderError } from "../payments/payouts.js";
 import { requirePostVisible } from "./feed.js";
 import { canAccessRoom } from "./activities-live.js";
+import { privilegesFor, standingFor } from "./identity-status.js";
 
 /**
  * Money routes: paid gifts, creator balance, bank accounts and payouts.
@@ -159,6 +160,14 @@ export function moneyRoutes(ctx: AppContext) {
 
           const unitPrice = Number(gift.price_minor);
           const amountMinor = unitPrice * input.quantity;
+          // How loud you can be is part of standing: a rank raises the ceiling
+          // on a single gift, so status buys reach rather than a badge.
+          const privileges = privilegesFor((await standingFor(ctx, user.id)).rank);
+          if (amountMinor > privileges.giftCapMinor) {
+            throw ApiError.badRequest(
+              `A single gift is capped at ${(privileges.giftCapMinor / 100).toLocaleString()} for your standing`,
+            );
+          }
           const { feeMinor, recipientMinor } = splitGift(amountMinor, gift.fee_bps);
           const reference = `GIFT-${newId()}`;
           const purchaseId = newId();

@@ -25,12 +25,22 @@ export function probeUi() {
 
   const style = (el) => getComputedStyle(el);
 
-  /** Inside a deliberate horizontal scroller. */
+  /**
+   * Inside a scroll container — either axis.
+   *
+   * This used to check only the horizontal axis, so content in a vertical
+   * scroller (the room's facts column) was tested for overlap even when it had
+   * scrolled out of view, and reported as sitting on top of the dock below it.
+   * Overflow on either axis is the same situation: the element may simply not
+   * be on screen.
+   */
   const inScroller = (el) => {
     let n = el.parentElement;
     while (n && n !== document.body) {
       const cs = style(n);
-      if ((cs.overflowX === "auto" || cs.overflowX === "scroll") && n.scrollWidth > n.clientWidth + 1) return true;
+      const scrollsY = (cs.overflowY === "auto" || cs.overflowY === "scroll") && n.scrollHeight > n.clientHeight + 1;
+      const scrollsX = (cs.overflowX === "auto" || cs.overflowX === "scroll") && n.scrollWidth > n.clientWidth + 1;
+      if (scrollsX || scrollsY) return true;
       n = n.parentElement;
     }
     return false;

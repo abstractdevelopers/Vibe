@@ -83,6 +83,10 @@ export interface Standing {
   activity: number;
   /** A rank token for styling, e.g. "king". Null when there is no title. */
   rank: string | null;
+  /** What the rank actually unlocks. Shown on the status screen. */
+  privileges: Privileges;
+  /** What the next rank would add, so the ladder has a visible next step. */
+  next: { title: string; at: number; gains: string[] } | null;
 }
 
 /**
@@ -91,6 +95,11 @@ export interface Standing {
  * one ahead, a Queen has at most one, and so on. That makes each tier positional
  * and distinct, so there is exactly one King and one Queen, and the tiers below
  * read as belonging rather than as winning.
+ *
+ * A title is not decoration: each tier carries privileges that the product
+ * actually enforces (`PRIVILEGES`), so climbing the ladder changes what you can
+ * do, not just what you are called. That is the difference between a status
+ * system and a leaderboard.
  */
 const TIERS: Array<{ rank: string; title: string; min: number; maxAhead: number; reason: string }> = [
   { rank: "king", title: "Vibe King", min: 50, maxAhead: 0, reason: "Most active this week" },
@@ -99,6 +108,56 @@ const TIERS: Array<{ rank: string; title: string; min: number; maxAhead: number;
   { rank: "class", title: "Vibe Class", min: 10, maxAhead: 50, reason: "Showing up, week after week" },
   { rank: "warrior", title: "Vibe Warrior", min: 3, maxAhead: Number.MAX_SAFE_INTEGER, reason: "Out here every week" },
 ];
+
+/**
+ * What a rank unlocks.
+ *
+ * Every field is read by a route that enforces it, never trusted from the
+ * client. The baseline has to clear the whole catalogue — the top gift is
+ * 5,000.00 — or standing would silently break ordinary gifting. The ladder then
+ * adds reach on top of "normal", never takes it away.
+ */
+export interface Privileges {
+  /** Posts per day. */
+  postsPerDay: number;
+  /** Attendees a hosted Circle plan or room may have. */
+  groupCap: number;
+  /** Paid gifts can be sent up to this many Vibe Yens per gift. */
+  giftCapMinor: number;
+  /** The rake kept on a staked game the user hosts, in basis points. */
+  rakeBps: number;
+  /** Highlight the profile in discovery and the status board. */
+  featuredProfile: boolean;
+  /** A gold nameplate, wherever the name is shown. */
+  goldNameplate: boolean;
+  /** Included room theme, so a high rank's room looks like a high rank's room. */
+  roomTheme: "default" | "accent" | "luxe";
+}
+
+const BASE: Privileges = {
+  postsPerDay: 10,
+  groupCap: 25,
+  // The top of the gift catalogue, so no rank is punished
+  // for sending what everyone else can send.
+  giftCapMinor: 500_000,
+  rakeBps: 500,
+  featuredProfile: false,
+  goldNameplate: false,
+  roomTheme: "default",
+};
+
+const PRIVILEGES: Record<string, Partial<Privileges>> = {
+  warrior: { postsPerDay: 15, groupCap: 40 },
+  class: { postsPerDay: 20, groupCap: 75, giftCapMinor: 1_000_000, roomTheme: "accent" },
+  first_family: { postsPerDay: 30, groupCap: 150, giftCapMinor: 2_000_000, rakeBps: 400, featuredProfile: true },
+  queen: { postsPerDay: 40, groupCap: 300, giftCapMinor: 5_000_000, rakeBps: 300, featuredProfile: true, goldNameplate: true, roomTheme: "luxe" },
+  king: { postsPerDay: 50, groupCap: 500, giftCapMinor: 10_000_000, rakeBps: 250, featuredProfile: true, goldNameplate: true, roomTheme: "luxe" },
+};
+
+/** The privileges a rank grants, falling back to the base ladder. */
+export function privilegesFor(rank: string | null): Privileges {
+  return { ...BASE, ...(rank ? PRIVILEGES[rank] ?? {} : {}) };
+}
 
 /**
  * Activity is what you did this week: posts you wrote, rooms you hosted, votes
@@ -147,14 +206,57 @@ async function countAtLeast(ctx: AppContext, min: number): Promise<number> {
  */
 export async function standingFor(ctx: AppContext, userId: string): Promise<Standing> {
   const activity = await weeklyActivity(ctx, userId);
-  for (const tier of TIERS) {
+  for (let i = 0; i < TIERS.length; i += 1) {
+    const tier = TIERS[i]!;
     if (activity < tier.min) continue;
     const ahead = await countAhead(ctx, activity);
     if (ahead <= tier.maxAhead) {
-      return { title: tier.title, reason: tier.reason, holders: await countAtLeast(ctx, tier.min), activity, rank: tier.rank };
+      const mine = privilegesFor(tier.rank);
+      const above = TIERS[i - 1];
+      // The next step up, with only the things it would actually add. Saying
+      // "keep going" without saying what for is how a ladder loses people.
+      const next = above
+        ? {
+            title: above.title,
+            at: above.min,
+            gains: describeGains(mine, privilegesFor(above.rank)),
+          }
+        : null;
+      return {
+        title: tier.title,
+        reason: tier.reason,
+        holders: await countAtLeast(ctx, tier.min),
+        activity,
+        rank: tier.rank,
+        privileges: mine,
+        next: next && next.gains.length > 0 ? next : null,
+      };
     }
   }
-  return { title: null, reason: "Post, host or cheer this week to earn a title", holders: 0, activity, rank: null };
+  // Nothing yet: the first rung is the next step.
+  const first = TIERS[TIERS.length - 1]!;
+  return {
+    title: null,
+    reason: "Post, host or cheer this week to earn a title",
+    holders: 0,
+    activity,
+    rank: null,
+    privileges: privilegesFor(null),
+    next: { title: first.title, at: first.min, gains: describeGains(privilegesFor(null), privilegesFor(first.rank)) },
+  };
+}
+
+/** Human-readable differences between two privilege sets. */
+function describeGains(from: Privileges, to: Privileges): string[] {
+  const gains: string[] = [];
+  if (to.postsPerDay > from.postsPerDay) gains.push(`${to.postsPerDay} posts a day`);
+  if (to.groupCap > from.groupCap) gains.push(`rooms of ${to.groupCap}`);
+  if (to.giftCapMinor > from.giftCapMinor) gains.push(`gifts up to ${(to.giftCapMinor / 100).toLocaleString()}`);
+  if (to.rakeBps < from.rakeBps) gains.push(`${(to.rakeBps / 100).toFixed(1)}% rake instead of ${(from.rakeBps / 100).toFixed(1)}%`);
+  if (to.featuredProfile && !from.featuredProfile) gains.push("featured in discovery");
+  if (to.goldNameplate && !from.goldNameplate) gains.push("a gold nameplate");
+  if (to.roomTheme !== from.roomTheme) gains.push(`the ${to.roomTheme} room theme`);
+  return gains;
 }
 
 /** How many users have more activity than `activity` this week. */

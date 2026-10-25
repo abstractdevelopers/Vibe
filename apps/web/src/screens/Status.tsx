@@ -3,7 +3,7 @@ import { api, ApiError } from "../api";
 import { ScreenHeader } from "../components/ScreenHeader";
 import { Avatar } from "../components/Avatar";
 import { useNav } from "../nav";
-import { ArrowLeftIcon, CheckIcon, TrophyIcon } from "../components/Icons";
+import { ArrowLeftIcon, CheckIcon, FlameIcon, SparklesIcon, TrophyIcon } from "../components/Icons";
 import { formatMoney } from "../money";
 
 /**
@@ -21,6 +21,16 @@ interface Standing {
   holders: number;
   activity: number;
   rank: string | null;
+  privileges: {
+    postsPerDay: number;
+    groupCap: number;
+    giftCapMinor: number;
+    rakeBps: number;
+    featuredProfile: boolean;
+    goldNameplate: boolean;
+    roomTheme: "default" | "accent" | "luxe";
+  };
+  next: { title: string; at: number; gains: string[] } | null;
 }
 
 interface Cosmetic {
@@ -168,6 +178,66 @@ export function StatusScreen({ onBack }: { onBack: () => void }) {
           })()}
         </div>
       </section>
+
+      {/* What the rank actually gets you. A title with no consequences is a
+          word; this is the part that makes the ladder worth climbing. */}
+      {standing && (
+        <section className="shelf">
+          <div className="shelf-head">
+            <h2 className="section-title"><FlameIcon width={16} height={16} /> What your standing unlocks</h2>
+          </div>
+          <div className="privilege-grid">
+            <div className="privilege">
+              <span className="privilege-value">{standing.privileges.postsPerDay}</span>
+              <span className="privilege-label">posts a day</span>
+            </div>
+            <div className="privilege">
+              <span className="privilege-value">{standing.privileges.groupCap}</span>
+              <span className="privilege-label">people per room</span>
+            </div>
+            <div className="privilege">
+              <span className="privilege-value">{formatMoney(standing.privileges.giftCapMinor, "NGN")}</span>
+              <span className="privilege-label">largest single gift</span>
+            </div>
+            <div className="privilege">
+              <span className="privilege-value">{(standing.privileges.rakeBps / 100).toFixed(1)}%</span>
+              <span className="privilege-label">take on hosted games</span>
+            </div>
+            {standing.privileges.featuredProfile && (
+              <div className="privilege is-on">
+                <span className="privilege-value"><SparklesIcon width={16} height={16} /></span>
+                <span className="privilege-label">featured in discovery</span>
+              </div>
+            )}
+            {standing.privileges.goldNameplate && (
+              <div className="privilege is-on">
+                <span className="privilege-value privilege-gold">Aa</span>
+                <span className="privilege-label">gold nameplate</span>
+              </div>
+            )}
+            {standing.privileges.roomTheme !== "default" && (
+              <div className="privilege is-on">
+                <span className="privilege-value" style={{ textTransform: "capitalize" }}>{standing.privileges.roomTheme}</span>
+                <span className="privilege-label">room theme</span>
+              </div>
+            )}
+          </div>
+          {standing.next && (
+            <div className="privilege-next">
+              <span className="privilege-next-title">
+                Next: <b>{standing.next.title}</b> at {standing.next.at} this week
+              </span>
+              <span className="meta">{standing.next.gains.join(" · ")}</span>
+              <span className="privilege-progress" aria-hidden="true">
+                <span
+                  className="privilege-progress-fill"
+                  style={{ width: `${Math.min(100, Math.round((standing.activity / Math.max(1, standing.next.at)) * 100))}%` }}
+                />
+              </span>
+            </div>
+          )}
+        </section>
+      )}
 
       <section className="shelf">
         <div className="shelf-head">
